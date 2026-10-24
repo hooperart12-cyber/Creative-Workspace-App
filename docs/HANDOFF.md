@@ -53,29 +53,32 @@ RULES:
 > Outgoing agent: replace this section each session. Keep it short and factual.
 
 **Last updated:** 2026-10-24
-**Branch:** `feat/m0-scaffold` (PR open → merge into `main`)
-**Phase:** M0 (Scaffold) complete; M1 (Projects, Boards & Folders) not started.
+**Branch:** `feat/m1-boards-folders` (PR open → merge into `main`)
+**Phase:** M1 (Projects, Boards & Folders) complete; M2 (Canvas) not started.
 
 **Done**
-- Planning docs merged (PR #1): REQUIREMENTS, DECISIONS, ROADMAP, HANDOFF.
-- M0 scaffold: Electron + electron-vite + React 19 + TS 6 + Tailwind 4 + Zustand.
-- SQLite per project (better-sqlite3 + Drizzle), schema v1 + first migration (`drizzle/0000_init.sql`).
-- Start screen (create / open / recent projects) and project view placeholder.
-- Multi-window: "Open in new window" shares the project; renames sync across windows.
-- 10 unit tests (`src/main/project/project.test.ts`); CI workflow for Windows + macOS + Windows installer artifact.
-- `docs/SETUP.md`: prerequisites, commands, dependency list, troubleshooting.
+- M0 scaffold (PR #2): Electron + React 19 + TS 6 + Tailwind 4, SQLite per project, multi-window, CI.
+- M1:
+  - `BoardRepository` / `FolderRepository` in `src/main/project/` (nesting, breadcrumb, move with cycle checks, soft-delete cascade, main board protected; the main board's title follows the project name).
+  - Each nested board is also a `board` card in `board_objects`, auto-placed on a 4-column grid (`CARD_GRID`). M2 should render these cards on the canvas.
+  - UI: sidebar (Boards + Library folders trees), breadcrumb with Back/Forward/Up, temporary card grid (`BoardGrid.tsx`), right-click menus (Radix), Move/Delete dialogs.
+  - Per-window navigation state in `workspaceStore`; current board kept in the URL hash (reload keeps it; "Open in new window" passes it).
+  - 25 unit tests.
+- ADR-011: boards and folders are separate hierarchies, **pending team discussion**.
 
 **In progress**
 - Nothing.
 
 **Next steps**
-1. Merge the M0 PR once CI is green. Download the `windows-installer` artifact and try it on a real Windows PC.
-2. Start **M1 — Projects, Boards & Folders** (see ROADMAP). Write a plan first and confirm it with the project owner. Likely pieces: board/folder repository functions in `src/main/project/`, new IPC channels, sidebar tree + breadcrumb UI (add Radix UI here), nested-board cards (temporary list/grid view until the M2 canvas).
+1. Merge the M1 PR once CI is green.
+2. Discuss ADR-011 (separate vs. unified tree) with the team before M4.
+3. Start **M2 — Canvas** (see ROADMAP). Write a plan first and confirm it with the project owner. Replace `BoardGrid` with a react-konva canvas that renders `board_objects` using their x/y/width/height, and persist moves/resizes.
 
 **Known issues / open questions**
-- The Windows installer is not code-signed, so Windows SmartScreen will warn on first run. That's fine for personal use; signing can come later.
-- No app icon yet (`build/` folder is empty). electron-builder uses the default Electron icon.
-- Detailed UI styling is not yet decided (to be settled during M1).
+- Trashed boards and folders can't be restored from the UI yet (Trash view is planned for M4); they remain in the database with `deleted_at` set.
+- The Windows installer is not code-signed (SmartScreen warning on first run).
+- No app icon yet.
+- **Testing tip:** when driving the app over DevTools (`--remoteDebuggingPort`), a window without OS focus won't fire blur events. Use `Emulation.setFocusEmulationEnabled`. The newest window is listed first in `/json/list`.
 
 **How to run**
 - See `docs/SETUP.md`. Short version: `npm install`, then `npm run dev`. Tests: `npm test`.

@@ -108,10 +108,15 @@ src/
     windows.ts     Window creation + security settings
     ipc.ts         Handlers for every request the UI can make
     db/            SQLite schema (Drizzle) and connection setup
-    project/       Project create/open, multi-window registry, recent projects (+ tests)
+    project/       Project create/open, board + folder repositories, multi-window registry,
+                   recent projects (+ tests)
   preload/         Safe bridge that exposes `window.api` to the UI
   shared/          Types and the IPC contract shared by main + UI
-  renderer/        React UI (index.html, components, Zustand stores)
+  renderer/        React UI
+    src/components/  Screens and UI pieces (sidebar, breadcrumb, board grid, dialogs)
+    src/store/       Zustand stores: projectStore (open project), workspaceStore (per-window
+                     navigation, tree, current board)
+    src/lib/         Small pure helpers (tree building, error messages) (+ tests)
 drizzle/           Generated SQL migrations (committed; shipped with the app)
 scripts/           Helper scripts (test runner)
 docs/              Requirements, decisions, roadmap, handoff, this guide
@@ -148,6 +153,7 @@ docs/              Requirements, decisions, roadmap, handoff, this guide
 | `@vitejs/plugin-react` | ^6 | React support for Vite |
 | `typescript` | ~6.0 | Type checking (held at 6.0 until typescript-eslint supports 7) |
 | `tailwindcss`, `@tailwindcss/vite` | ^4 | Utility-first CSS styling |
+| `radix-ui` | ^1.8 | Accessible context menus and dialogs (bundled into the renderer) |
 | `drizzle-kit` | ^0.31 | Generates SQL migrations from the schema (`npm run db:generate`) |
 | `vitest` | ^5 | Unit test runner |
 | `eslint`, `@eslint/js`, `typescript-eslint`, `eslint-plugin-react-hooks`, `globals` | ^10 / ^8 / ^7 | Linting |
@@ -161,7 +167,6 @@ docs/              Requirements, decisions, roadmap, handoff, this guide
 | `konva`, `react-konva` | M2 | Canvas rendering and object manipulation |
 | `sharp` | M3 | Image metadata and thumbnail generation |
 | `pdfjs-dist` | M3 | PDF viewing, search and outline |
-| `@radix-ui/*` | M1+ | Accessible menus, dialogs and context menus |
 | `cmdk` | M5 | Command palette |
 
 ---

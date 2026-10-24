@@ -23,14 +23,15 @@ This is the living progress tracker. **Tick boxes as work is completed** and kee
 - [x] `npm run dev` documented in README + `docs/SETUP.md`; `npm run build:win` configured (installer built by CI on Windows)
 - [x] CI: GitHub Action that runs typecheck, lint, format check and tests on Windows + macOS, and uploads a Windows installer
 
-## M1 — Projects, Boards & Folders (§3) — *Milanote-style*
-- [ ] Project home: main board created automatically
-- [ ] Create nested board as a canvas card (title + optional cover)
-- [ ] Double-click a board card to open it; breadcrumb trail shows the path; back/up navigation
-- [ ] Unlimited nesting depth; prevent cycles
-- [ ] Left sidebar tree: boards hierarchy + library folders (nested), collapsible
-- [ ] Rename, move, and delete (to trash) boards and folders
-- [ ] Open a board in a new window (§2)
+## M1 — Projects, Boards & Folders (§3) — *Milanote-style* ✅
+- [x] Project home: main board created automatically
+- [x] Create nested board as a card on its parent (stored as a `board_objects` card so the M2 canvas can render it); shown in a temporary grid until M2
+- [x] Double-click a board card to open it; breadcrumb trail shows the path; Back/Forward/Up (Alt+←/→/↑, mouse buttons)
+- [x] Unlimited nesting depth; prevent cycles
+- [x] Left sidebar: boards tree + library folders tree (nested), collapsible (Ctrl/Cmd+\)
+- [x] Rename (inline, F2, context menu), move ("Move to…" dialog), and delete (to trash, with confirmation) for boards and folders
+- [x] Open a board in a new window (§2); windows stay in sync and fall back gracefully if their board is deleted elsewhere
+- [x] Decision recorded: boards and folders are separate hierarchies (ADR-011, pending team discussion)
 
 ## M2 — Canvas Navigation & Manipulation (§4) — *Figma-style*
 - [ ] Pan: Space+drag, middle-mouse drag, scroll/trackpad, arrow keys
@@ -55,7 +56,7 @@ This is the living progress tracker. **Tick boxes as work is completed** and kee
 - [ ] Image object: proportional resize only, rotate, no cropping/distortion
 - [ ] Full-size image viewer: zoom, pan, fit-to-window, download original
 - [ ] Text note object: place, resize, rotate, basic formatting, font size, text/background color
-- [ ] Nested board card: custom cover image
+- [ ] Nested board card: custom cover image (moved from M1; needs image import)
 - [ ] PDF import → document card with first-page cover
 - [ ] PDF viewer (pdf.js): page navigation, thumbnails, text search, outline/TOC jump, download original
 - [ ] Generic file card for unsupported types + "attach preview image"

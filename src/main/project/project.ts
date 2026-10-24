@@ -6,6 +6,8 @@ import type Database from 'better-sqlite3'
 import type { ProjectSummary } from '@shared/types'
 import { openDatabase, type ProjectDb } from '../db/client'
 import { assets, boards, projectMeta } from '../db/schema'
+import { BoardRepository } from './boards'
+import { FolderRepository } from './folders'
 
 export const PROJECT_EXTENSION = '.cwproj'
 export const PROJECT_DB_FILE = 'project.db'
@@ -17,11 +19,21 @@ export const PROJECT_SUBDIRS = ['assets', 'thumbs', 'backups'] as const
  * This module must not import `electron`, so it can be unit-tested.
  */
 export class Project {
+  readonly mainBoardId: string
+  readonly boards: BoardRepository
+  readonly folders: FolderRepository
+
   private constructor(
     readonly path: string,
     private readonly sqlite: Database.Database,
     readonly db: ProjectDb
-  ) {}
+  ) {
+    const meta = db.select({ mainBoardId: projectMeta.mainBoardId }).from(projectMeta).get()
+    if (!meta) throw new Error(`Project database is missing its metadata: ${path}`)
+    this.mainBoardId = meta.mainBoardId
+    this.boards = new BoardRepository(db, meta.mainBoardId)
+    this.folders = new FolderRepository(db)
+  }
 
   static create(parentDir: string, name: string, migrationsFolder: string): Project {
     const cleanName = sanitizeProjectName(name)
@@ -59,14 +71,12 @@ export class Project {
     for (const dir of PROJECT_SUBDIRS) mkdirSync(join(path, dir), { recursive: true })
 
     const { sqlite, db } = openDatabase(dbFile, migrationsFolder)
-    const project = new Project(path, sqlite, db)
     try {
-      project.summary()
+      return new Project(path, sqlite, db)
     } catch (error) {
-      project.close()
+      sqlite.close()
       throw error
     }
-    return project
   }
 
   summary(): ProjectSummary {
@@ -94,16 +104,25 @@ export class Project {
     }
   }
 
-  /** Renames the project in its metadata. The folder on disk keeps its name. */
+  /**
+   * Renames the project in its metadata; the main board's title follows it.
+   * The folder on disk keeps its name.
+   */
   rename(name: string): ProjectSummary {
     const trimmed = name.trim()
     if (!trimmed) throw new Error('Project name cannot be empty.')
     const meta = this.db.select({ id: projectMeta.id }).from(projectMeta).get()!
-    this.db
-      .update(projectMeta)
-      .set({ name: trimmed, updatedAt: new Date() })
-      .where(eq(projectMeta.id, meta.id))
-      .run()
+    const now = new Date()
+    this.db.transaction((tx) => {
+      tx.update(projectMeta)
+        .set({ name: trimmed, updatedAt: now })
+        .where(eq(projectMeta.id, meta.id))
+        .run()
+      tx.update(boards)
+        .set({ title: trimmed, updatedAt: now })
+        .where(eq(boards.id, this.mainBoardId))
+        .run()
+    })
     return this.summary()
   }
 
