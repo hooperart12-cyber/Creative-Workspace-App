@@ -13,15 +13,15 @@ This is the living progress tracker. **Tick boxes as work is completed** and kee
 - [x] Define MVP scope and build order
 - [x] Create handoff prompt → `HANDOFF.md`
 
-## M0 — Scaffold
-- [ ] Scaffold electron-vite React + TypeScript app at the repo root
-- [ ] Add Tailwind, Radix UI, Zustand, ESLint + Prettier, Vitest
-- [ ] Main ↔ renderer **typed IPC** layer (preload with `contextBridge`, `contextIsolation: true`)
-- [ ] better-sqlite3 + Drizzle: schema v1 + migrations (UUIDs, timestamps, soft delete per ADR-004)
-- [ ] Create / open / list recent projects (`.cwproj` folder layout per ADR-005)
-- [ ] Multi-window: "Open in new window"; main process broadcasts `changed` events to all windows
-- [ ] `npm run dev` documented in README; `npm run build:win` produces an installer
-- [ ] CI: GitHub Action that runs typecheck, lint and tests
+## M0 — Scaffold ✅
+- [x] Scaffold electron-vite React + TypeScript app at the repo root
+- [x] Add Tailwind, Zustand, ESLint + Prettier, Vitest (Radix UI deferred to first use in M1)
+- [x] Main ↔ renderer **typed IPC** layer (preload with `contextBridge`, `contextIsolation: true`)
+- [x] better-sqlite3 + Drizzle: schema v1 + migrations (UUIDs, timestamps, soft delete per ADR-004)
+- [x] Create / open / list recent projects (`.cwproj` folder layout per ADR-005)
+- [x] Multi-window: "Open in new window"; main process broadcasts `changed` events to all windows
+- [x] `npm run dev` documented in README + `docs/SETUP.md`; `npm run build:win` configured (installer built by CI on Windows)
+- [x] CI: GitHub Action that runs typecheck, lint, format check and tests on Windows + macOS, and uploads a Windows installer
 
 ## M1 — Projects, Boards & Folders (§3) — *Milanote-style*
 - [ ] Project home: main board created automatically

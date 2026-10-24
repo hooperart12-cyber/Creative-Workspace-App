@@ -4,7 +4,7 @@ A PC desktop creative workspace, inspired by Milanote (boards and organization) 
 
 It combines infinite visual canvases, interconnected boards, notes, reference images, document viewing, artwork management, and project organization in one flexible environment. The goal is to support the whole creative process, from brainstorming and research through planning, review, and organizing finished work, without forcing a rigid workflow.
 
-> **Status:** Architecture decided. MVP development (milestone M0 — Scaffold) is next. No app code yet.
+> **Status:** M0 (scaffold) complete: the app runs and can create, open and share projects across windows. Next up is M1 (nested boards and folders).
 > This README summarizes the full feature vision. The complete, **living** specification is [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md). The original PDF (v1.0) is archived at [`docs/archive/`](docs/archive/Creative%20Workspace%20App%20v1.0.pdf).
 
 ## Project Docs
@@ -14,6 +14,7 @@ It combines infinite visual canvases, interconnected boards, notes, reference im
 | [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md) | Living requirements: the full feature inventory with MVP/Later status per section |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | Architecture decisions with pros and cons (frameworks, database, storage, local vs. cloud) |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Milestones and progress checklist |
+| [`docs/SETUP.md`](docs/SETUP.md) | **Install prerequisites, run, test and build the app**; full dependency list |
 | [`docs/HANDOFF.md`](docs/HANDOFF.md) | Prompt and current-state notes for continuing work in a new AI/dev session |
 
 **Working process:** plan first, then build. Each milestone starts with a written plan that the project owner confirms. Every PR that makes or changes a decision updates `REQUIREMENTS.md`, `DECISIONS.md` and `ROADMAP.md` in the same PR. Before a session ends, update the "Current state" section of `HANDOFF.md`.
@@ -159,7 +160,7 @@ The open questions from the spec (§23) have been answered. The full reasoning, 
 | Area | Choice |
 |---|---|
 | Desktop shell | Electron (electron-vite, electron-builder) |
-| UI | React 18 + TypeScript, Zustand, Tailwind CSS, Radix UI, cmdk |
+| UI | React 19 + TypeScript, Zustand, Tailwind CSS v4 (Radix UI and cmdk added in later milestones) |
 | Canvas | Konva via react-konva |
 | Database | One SQLite file per project: better-sqlite3 + Drizzle ORM (FTS5 for search) |
 | Files | Originals copied into the project, content-addressed (SHA-256), never modified |
@@ -178,7 +179,7 @@ Spec stages 1–4 (inventory, feasibility, scope, architecture) are **done**. St
 
 **MVP priorities:**
 
-1. **M0 — Scaffold.** Electron + React app, database, project create/open.
+1. ~~**M0 — Scaffold.** Electron + React app, database, project create/open.~~ ✅ Done
 2. **M1 — Nested boards and folders** (§3).
 3. **M2 — Canvas navigation and manipulation** (§4).
 4. **M3 — Board objects, images first**, then text notes and PDFs (§5, §7: JPEG/JPG, PNG, PDF).
@@ -187,13 +188,16 @@ Spec stages 1–4 (inventory, feasibility, scope, architecture) are **done**. St
 
 ## Running Locally
 
-_Coming in milestone M0._ The expected workflow is:
+You need **Git** and **Node.js 22.12+** (24 LTS recommended). Everything else installs with npm. Step-by-step instructions for Windows and macOS, every command, the dependency list and troubleshooting are in **[`docs/SETUP.md`](docs/SETUP.md)**.
 
 ```bash
+git clone https://github.com/hooperart12-cyber/Creative-Workspace-App.git
+cd Creative-Workspace-App
 npm install
-npm run dev        # launches the desktop app with hot reload
-npm run build:win  # builds a Windows installer
+npm run dev        # opens the desktop app with hot reload
 ```
+
+Other useful commands: `npm test`, `npm run typecheck`, `npm run lint`, and `npm run build:win` (Windows installer; CI also builds one on every push to `main`).
 
 ---
 

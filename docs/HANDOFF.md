@@ -53,24 +53,29 @@ RULES:
 > Outgoing agent: replace this section each session. Keep it short and factual.
 
 **Last updated:** 2026-10-24
-**Branch:** `docs/planning`
-**Phase:** Phase 0 (Planning) complete; M0 (Scaffold) not started.
+**Branch:** `feat/m0-scaffold` (PR open → merge into `main`)
+**Phase:** M0 (Scaffold) complete; M1 (Projects, Boards & Folders) not started.
 
 **Done**
-- Requirements converted from PDF to `docs/REQUIREMENTS.md` (original archived in `docs/archive/`).
-- All §23 architecture decisions recorded in `docs/DECISIONS.md` (ADR-001 to ADR-009).
-- MVP scope and milestones defined in `docs/ROADMAP.md`.
+- Planning docs merged (PR #1): REQUIREMENTS, DECISIONS, ROADMAP, HANDOFF.
+- M0 scaffold: Electron + electron-vite + React 19 + TS 6 + Tailwind 4 + Zustand.
+- SQLite per project (better-sqlite3 + Drizzle), schema v1 + first migration (`drizzle/0000_init.sql`).
+- Start screen (create / open / recent projects) and project view placeholder.
+- Multi-window: "Open in new window" shares the project; renames sync across windows.
+- 10 unit tests (`src/main/project/project.test.ts`); CI workflow for Windows + macOS + Windows installer artifact.
+- `docs/SETUP.md`: prerequisites, commands, dependency list, troubleshooting.
 
 **In progress**
 - Nothing.
 
 **Next steps**
-1. Merge the `docs/planning` PR.
-2. Start **M0 — Scaffold** (see ROADMAP). Write a plan first and confirm it with the project owner.
+1. Merge the M0 PR once CI is green. Download the `windows-installer` artifact and try it on a real Windows PC.
+2. Start **M1 — Projects, Boards & Folders** (see ROADMAP). Write a plan first and confirm it with the project owner. Likely pieces: board/folder repository functions in `src/main/project/`, new IPC channels, sidebar tree + breadcrumb UI (add Radix UI here), nested-board cards (temporary list/grid view until the M2 canvas).
 
 **Known issues / open questions**
-- None blocking.
+- The Windows installer is not code-signed, so Windows SmartScreen will warn on first run. That's fine for personal use; signing can come later.
+- No app icon yet (`build/` folder is empty). electron-builder uses the default Electron icon.
 - Detailed UI styling is not yet decided (to be settled during M1).
 
 **How to run**
-- No application code yet. After M0: `npm install` then `npm run dev`.
+- See `docs/SETUP.md`. Short version: `npm install`, then `npm run dev`. Tests: `npm test`.

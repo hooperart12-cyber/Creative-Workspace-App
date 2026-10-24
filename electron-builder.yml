@@ -1,0 +1,22 @@
+appId: com.creativeworkspace.app
+productName: Creative Workspace
+directories:
+  buildResources: build
+  output: dist
+files:
+  - out/**
+  - package.json
+extraResources:
+  - from: drizzle
+    to: drizzle
+asarUnpack:
+  - node_modules/better-sqlite3/**
+win:
+  target: nsis
+  artifactName: ${productName}-Setup-${version}.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+mac:
+  target: dmg
+npmRebuild: true

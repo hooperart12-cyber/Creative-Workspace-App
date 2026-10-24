@@ -1,0 +1,11 @@
+# Keep LF line endings in the repo and working tree on every OS
+# (Prettier and the CI format check expect LF; Windows Git would otherwise convert to CRLF).
+* text=auto eol=lf
+
+# Binary files
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.icns binary
