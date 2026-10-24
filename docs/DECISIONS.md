@@ -17,6 +17,7 @@ Statuses: ✅ Accepted · 🟡 Tentative (will be confirmed when the feature is 
 | [009](#adr-009--saving-backup-and-recovery) | Saving, backup and recovery | ✅ |
 | [010](#adr-010--m0-toolchain-versions-and-implementation-choices) | M0 toolchain versions & implementation choices | ✅ |
 | [011](#adr-011--boards-and-folders-are-separate-hierarchies) | Boards and folders are separate hierarchies | 🟡 Pending team discussion |
+| [012](#adr-012--canvas-interaction-model-and-undo) | Canvas interaction model and undo | ✅ |
 
 ---
 
@@ -269,3 +270,30 @@ MyProject.cwproj/
 **Keeping the door open.** Switching to Unified later is additive: add an optional `folder_id` to `boards` and show boards in the folder tree. No existing data would need restructuring. Going from Unified back to Separate would be much harder, which is another reason to start here.
 
 **Next step:** discuss with the team before M4 (asset library), when folders get their real content.
+
+---
+
+## ADR-012 — Canvas interaction model and undo
+
+**Date:** 2026-10-24 · **Status:** ✅ Accepted · **Requirements:** §4, §19, §20
+
+**Decisions.**
+- **Figma-style navigation.**
+  - The wheel or two-finger scroll **pans**.
+  - Ctrl/Cmd+wheel or pinch **zooms toward the cursor**.
+  - Space+drag and middle-drag pan.
+  - Shift+1 / Shift+2 fit all / fit the selection; Ctrl+0 goes to 100%.
+  - Zoom range 5%–800%.
+- **Camera per board, per window.** Each window has its own camera (§2). Each board's last camera is saved in `boards.viewport_*` (not broadcast), and boards never viewed fit their content on first open.
+- **One pointer state machine** (pan / drag / marquee) instead of Konva's built-in dragging. This gives full control over multi-select drags, snapping and drop targets. Resizing uses Konva's `Transformer`.
+- **Snapping.** Smart guides by default: edges and centres within 6 screen px. An optional snap-to-grid (20 world units) replaces the guides. Holding **Alt** disables snapping. The visible grid is display-only.
+- **Drop to nest (Milanote-style).** Dropping cards on a board card, a breadcrumb item or a sidebar row moves them into that board. DOM drop targets are marked with `data-drop-board-id`.
+- **New boards never cover existing content.** "Board" clicks place the card at the view centre and shift it right until there's room. This prevents accidental nesting when dragging overlapping cards.
+- **Clipboard.** It lives in the main process (shared by all windows) and holds object ids only.
+  - **Copy** of a board card deep-copies the board and everything inside it, sharing assets (ADR-005).
+  - **Cut** is Explorer-style: items fade and are *moved* on paste, so nothing is lost if you never paste.
+- **Delete on the canvas has no confirmation dialog**, because every action is undoable. The sidebar "Move to trash" keeps its dialog.
+- **Undo/redo** is a per-window command stack (`src/renderer/src/canvas/history.ts`). Every edit goes through `canvas/actions.ts`, which records how to undo and redo it. Trash undo uses `objects:restore`, which restores everything trashed in the same operation (matched by a strictly increasing deletion timestamp).
+- **Optimistic updates.** Moves and resizes update the screen immediately, then save. Other windows refresh from the broadcast.
+- **App menu.** Electron's default menu is replaced: no page zoom (it would scale the whole UI) and no Reload in packaged builds. Edit roles stay for text fields.
+- **Test hook.** `window.__cw` exposes the stores read-only, because the canvas draws to `<canvas>` and end-to-end tests need object positions.

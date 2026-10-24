@@ -1,4 +1,5 @@
 import { Fragment } from 'react'
+import { useCanvasStore } from '../store/canvasStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { ArrowLeft, ArrowRight, ArrowUp, ChevronRight } from './icons'
 
@@ -9,6 +10,8 @@ export function Breadcrumb() {
   const board = useWorkspaceStore((s) => s.board)
   const canBack = useWorkspaceStore((s) => s.back.length > 0)
   const canForward = useWorkspaceStore((s) => s.forward.length > 0)
+  // Canvas cards dragged over a crumb move into that board on drop.
+  const dropBoardId = useCanvasStore((s) => s.drag?.dropBoardId)
   const { goBack, goForward, goUp, openBoard } = useWorkspaceStore.getState()
 
   if (!board) return null
@@ -58,7 +61,13 @@ export function Breadcrumb() {
                 ) : (
                   <button
                     onClick={() => void openBoard(crumb.id)}
-                    className="block max-w-48 truncate rounded px-1 text-muted hover:bg-canvas hover:text-ink"
+                    data-drop-board-id={crumb.id}
+                    title={`Open ${crumb.title} (drop cards here to move them into it)`}
+                    className={`block max-w-48 truncate rounded px-1 ${
+                      dropBoardId === crumb.id
+                        ? 'bg-accent/15 text-accent ring-2 ring-accent'
+                        : 'text-muted hover:bg-canvas hover:text-ink'
+                    }`}
                   >
                     {crumb.title}
                   </button>

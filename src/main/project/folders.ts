@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import type { FolderListItem } from '@shared/types'
 import type { ProjectDb } from '../db/client'
+import { deletionTime } from './boards'
 import { folders } from '../db/schema'
 
 export const DEFAULT_FOLDER_NAME = 'New folder'
@@ -62,7 +63,7 @@ export class FolderRepository {
   delete(id: string): { deletedFolderIds: string[] } {
     this.require(id)
     const ids = [id, ...this.descendantIds(id)]
-    const now = new Date()
+    const now = deletionTime()
     this.db
       .update(folders)
       .set({ deletedAt: now, updatedAt: now })

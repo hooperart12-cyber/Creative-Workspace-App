@@ -1,16 +1,79 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import type { BoardListItem, FolderListItem } from '@shared/types'
-import { buildTree, type TreeNode } from '../lib/tree'
+import * as actions from '../canvas/actions'
+import { buildTree, descendantIds, type TreeNode } from '../lib/tree'
+import { useCanvasStore } from '../store/canvasStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { EditableTitle } from './EditableTitle'
 import { BoardIcon, ChevronRight, FolderIcon, Plus } from './icons'
 import { ItemMenu } from './ItemMenu'
 
+const BOARD_MIME = 'application/x-cw-board'
+const FOLDER_MIME = 'application/x-cw-folder'
+
+/** The tree item being dragged in the sidebar (dataTransfer can't be read during dragover). */
+let dragging: { type: 'board' | 'folder'; id: string } | null = null
+
+/** Can the item being dragged be dropped onto this board/folder (or the library root, null)? */
+function canDrop(type: 'board' | 'folder', targetId: string | null): boolean {
+  const tree = useWorkspaceStore.getState().tree
+  if (!dragging || dragging.type !== type || !tree) return false
+  if (dragging.id === targetId) return false
+  if (type === 'board') {
+    if (!targetId) return false
+    const below = descendantIds(tree.boards, (b) => b.parentBoardId, dragging.id)
+    const current = tree.boards.find((b) => b.id === dragging!.id)?.parentBoardId
+    return !below.has(targetId) && current !== targetId
+  }
+  const below = descendantIds(tree.folders, (f) => f.parentId, dragging.id)
+  const current = tree.folders.find((f) => f.id === dragging!.id)?.parentId ?? null
+  return (targetId === null || !below.has(targetId)) && current !== targetId
+}
+
+/** Drag-and-drop handlers for a sidebar row (or the library header when `targetId` is null). */
+function useTreeDrop(type: 'board' | 'folder', targetId: string | null) {
+  const [over, setOver] = useState(false)
+  return {
+    over,
+    handlers: {
+      onDragOver: (e: React.DragEvent) => {
+        if (!canDrop(type, targetId)) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+        setOver(true)
+      },
+      onDragLeave: () => setOver(false),
+      onDrop: (e: React.DragEvent) => {
+        setOver(false)
+        if (!canDrop(type, targetId)) return
+        e.preventDefault()
+        const id = dragging!.id
+        dragging = null
+        if (type === 'board') void actions.moveBoard(id, targetId!)
+        else void useWorkspaceStore.getState().moveFolder(id, targetId)
+      }
+    }
+  }
+}
+
+function dragSource(type: 'board' | 'folder', id: string) {
+  return {
+    draggable: true,
+    onDragStart: (e: React.DragEvent) => {
+      dragging = { type, id }
+      e.dataTransfer.setData(type === 'board' ? BOARD_MIME : FOLDER_MIME, id)
+      e.dataTransfer.effectAllowed = 'move'
+    },
+    onDragEnd: () => {
+      dragging = null
+    }
+  }
+}
+
 export function Sidebar() {
   const tree = useWorkspaceStore((s) => s.tree)
   const createFolder = useWorkspaceStore((s) => s.createFolder)
-  const createBoard = useWorkspaceStore((s) => s.createBoard)
-  const currentBoardId = useWorkspaceStore((s) => s.board?.id)
+  const libraryDrop = useTreeDrop('folder', null)
 
   const boardRoots = useMemo(
     () => buildTree(tree?.boards ?? [], (b) => b.parentBoardId),
@@ -29,7 +92,7 @@ export function Sidebar() {
       <Section
         title="Boards"
         addLabel="New board on the current board"
-        onAdd={() => currentBoardId && void createBoard(currentBoardId)}
+        onAdd={() => void actions.createBoardOnCanvas()}
       >
         {boardRoots.map((node) => (
           <BoardRow key={node.item.id} node={node} depth={0} />
@@ -40,6 +103,8 @@ export function Sidebar() {
         title="Library folders"
         addLabel="New library folder"
         onAdd={() => void createFolder(null)}
+        dropHighlight={libraryDrop.over}
+        dropHandlers={libraryDrop.handlers}
       >
         {folderRoots.length === 0 ? (
           <p className="px-4 py-1 text-xs text-muted">
@@ -57,16 +122,24 @@ function Section({
   title,
   addLabel,
   onAdd,
-  children
+  children,
+  dropHighlight,
+  dropHandlers
 }: {
   title: string
   addLabel: string
   onAdd: () => void
   children: ReactNode
+  dropHighlight?: boolean
+  dropHandlers?: React.HTMLAttributes<HTMLElement>
 }) {
   return (
     <section className="mb-4">
-      <header className="flex items-center justify-between px-4 pb-1">
+      <header
+        {...dropHandlers}
+        title={dropHandlers ? 'Drop a folder here to move it to the top level' : undefined}
+        className={`flex items-center justify-between px-4 pb-1 ${dropHighlight ? 'bg-accent/10' : ''}`}
+      >
         <h2 className="text-xs font-semibold tracking-wide text-muted uppercase">{title}</h2>
         <button
           onClick={onAdd}
@@ -88,18 +161,22 @@ function Row({
   expanded,
   onToggle,
   active,
+  dropHighlight,
   onClick,
   icon,
-  label
+  label,
+  extra
 }: {
   depth: number
   hasChildren: boolean
   expanded: boolean
   onToggle: () => void
   active: boolean
+  dropHighlight?: boolean
   onClick: () => void
   icon: ReactNode
   label: ReactNode
+  extra?: React.HTMLAttributes<HTMLDivElement> & Record<string, unknown>
 }) {
   return (
     <div
@@ -108,8 +185,13 @@ function Row({
       aria-expanded={hasChildren ? expanded : undefined}
       onClick={onClick}
       style={{ paddingLeft: 8 + depth * 14 }}
+      {...extra}
       className={`flex cursor-default items-center gap-1 py-1 pr-3 ${
-        active ? 'bg-accent/10 text-accent' : 'hover:bg-canvas'
+        dropHighlight
+          ? 'bg-accent/15 text-accent ring-2 ring-accent ring-inset'
+          : active
+            ? 'bg-accent/10 text-accent'
+            : 'hover:bg-canvas'
       }`}
     >
       <button
@@ -143,8 +225,12 @@ function BoardRow({ node, depth }: { node: TreeNode<BoardListItem>; depth: numbe
       s.renaming.source === 'sidebar'
   )
   const openBoard = useWorkspaceStore((s) => s.openBoard)
-  const renameBoard = useWorkspaceStore((s) => s.renameBoard)
   const setRenaming = useWorkspaceStore((s) => s.setRenaming)
+  const isMain = useWorkspaceStore((s) => s.tree?.mainBoardId === node.item.id)
+  // Canvas cards dragged over this row (data-drop-board-id), or a sidebar board dragged here.
+  const canvasDropHere = useCanvasStore((s) => s.drag?.dropBoardId === node.item.id)
+  const treeDrop = useTreeDrop('board', node.item.id)
+  const renameBoard = actions.renameBoard
 
   return (
     <li>
@@ -156,6 +242,12 @@ function BoardRow({ node, depth }: { node: TreeNode<BoardListItem>; depth: numbe
             expanded={expanded}
             onToggle={() => setExpanded(!expanded)}
             active={active}
+            dropHighlight={canvasDropHere || treeDrop.over}
+            extra={{
+              'data-drop-board-id': node.item.id,
+              ...treeDrop.handlers,
+              ...(isMain || renaming ? {} : dragSource('board', node.item.id))
+            }}
             onClick={() => void openBoard(node.item.id)}
             icon={<BoardIcon width={14} height={14} />}
             label={
@@ -193,6 +285,7 @@ function FolderRow({ node, depth }: { node: TreeNode<FolderListItem>; depth: num
   const selectFolder = useWorkspaceStore((s) => s.selectFolder)
   const renameFolder = useWorkspaceStore((s) => s.renameFolder)
   const setRenaming = useWorkspaceStore((s) => s.setRenaming)
+  const treeDrop = useTreeDrop('folder', node.item.id)
 
   return (
     <li>
@@ -204,6 +297,11 @@ function FolderRow({ node, depth }: { node: TreeNode<FolderListItem>; depth: num
             expanded={expanded}
             onToggle={() => setExpanded(!expanded)}
             active={active}
+            dropHighlight={treeDrop.over}
+            extra={{
+              ...treeDrop.handlers,
+              ...(renaming ? {} : dragSource('folder', node.item.id))
+            }}
             onClick={() => selectFolder(node.item.id)}
             icon={<FolderIcon width={14} height={14} />}
             label={

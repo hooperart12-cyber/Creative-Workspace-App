@@ -43,16 +43,49 @@ export interface ProjectTree {
   folders: FolderListItem[]
 }
 
-/** A nested-board card placed on a board. */
-export interface BoardCard {
-  /** The board_objects row id (the card itself). */
-  objectId: string
-  /** The board the card opens. */
-  boardId: string
-  title: string
-  childBoardCount: number
+export interface Point {
   x: number
   y: number
+}
+
+/** A board's camera: screen = world * zoom + (x, y). */
+export interface Viewport {
+  x: number
+  y: number
+  zoom: number
+}
+
+/** Anything placed on a board canvas (§4, §5). M2 only has `board` cards; M3 adds images, notes, documents. */
+export interface CanvasObject {
+  id: string
+  boardId: string
+  type: string
+  x: number
+  y: number
+  width: number
+  height: number
+  rotation: number
+  zIndex: number
+  locked: boolean
+  groupId: string | null
+  linkedBoardId: string | null
+  assetId: string | null
+  data: Record<string, unknown>
+  /** Present for `board` cards: details of the board the card opens. */
+  board?: { title: string; childBoardCount: number }
+}
+
+/** Changes to an object's placement or arrangement (undoable). */
+export interface ObjectPatch {
+  id: string
+  x?: number
+  y?: number
+  width?: number
+  height?: number
+  rotation?: number
+  zIndex?: number
+  locked?: boolean
+  groupId?: string | null
 }
 
 export interface BoardDetail {
@@ -62,12 +95,22 @@ export interface BoardDetail {
   isMain: boolean
   /** From the main board down to (and including) this board. */
   breadcrumb: { id: string; title: string }[]
-  cards: BoardCard[]
+  objects: CanvasObject[]
+  /** Last saved camera position for this board. */
+  viewport: Viewport
+}
+
+export interface ClipboardContents {
+  mode: 'copy' | 'cut'
+  objectIds: string[]
+  sourceBoardId: string
 }
 
 export interface CreateBoardInput {
   parentId: string
   title?: string
+  /** Where to place the new board's card (top-left, world coordinates). Defaults to below existing content. */
+  at?: Point
 }
 
 export interface CreateFolderInput {

@@ -4,7 +4,7 @@ A PC desktop creative workspace, inspired by Milanote (boards and organization) 
 
 It combines infinite visual canvases, interconnected boards, notes, reference images, document viewing, artwork management, and project organization in one flexible environment. The goal is to support the whole creative process, from brainstorming and research through planning, review, and organizing finished work, without forcing a rigid workflow.
 
-> **Status:** M1 complete: nested boards, library folders, sidebar trees and breadcrumb navigation work across multiple windows. Next up is M2 (the canvas).
+> **Status:** M2 complete: a Figma-style canvas with drag-and-drop, arranging tools and undo, on top of M1's nested boards and folders. Next up is M3 (images, text notes, PDFs).
 > This README summarizes the full feature vision. The complete, **living** specification is [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md). The original PDF (v1.0) is archived at [`docs/archive/`](docs/archive/Creative%20Workspace%20App%20v1.0.pdf).
 
 ## Project Docs
@@ -14,6 +14,7 @@ It combines infinite visual canvases, interconnected boards, notes, reference im
 | [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md) | Living requirements: the full feature inventory with MVP/Later status per section |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | Architecture decisions with pros and cons (frameworks, database, storage, local vs. cloud) |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Milestones and progress checklist |
+| [`docs/TESTING.md`](docs/TESTING.md) | **How to test the app by hand** (installer download, step-by-step checklists per milestone, reporting bugs) |
 | [`docs/SETUP.md`](docs/SETUP.md) | **Install prerequisites, run, test and build the app**; full dependency list |
 | [`docs/HANDOFF.md`](docs/HANDOFF.md) | Prompt and current-state notes for continuing work in a new AI/dev session |
 
@@ -181,7 +182,7 @@ Spec stages 1–4 (inventory, feasibility, scope, architecture) are **done**. St
 
 1. ~~**M0 — Scaffold.** Electron + React app, database, project create/open.~~ ✅ Done
 2. ~~**M1 — Nested boards and folders** (§3).~~ ✅ Done
-3. **M2 — Canvas navigation and manipulation** (§4).
+3. ~~**M2 — Canvas navigation and manipulation** (§4).~~ ✅ Done
 4. **M3 — Board objects, images first**, then text notes and PDFs (§5, §7: JPEG/JPG, PNG, PDF).
 5. **M4 — Project asset library** (§8).
 6. **M5 — Reliability polish.** Autosave status, backups, command palette, search.
@@ -197,7 +198,7 @@ npm install
 npm run dev        # opens the desktop app with hot reload
 ```
 
-Other useful commands: `npm test`, `npm run typecheck`, `npm run lint`, and `npm run build:win` (Windows installer; CI also builds one on every push to `main`).
+Other useful commands: `npm test` (unit), `npm run test:e2e` (end-to-end UI), `npm run typecheck`, `npm run lint`, and `npm run build:win` (Windows installer; CI also builds one on every push to `main`).
 
 ---
 

@@ -82,6 +82,7 @@ To quit, close the window (on macOS, press `Cmd+Q`) or press `Ctrl+C` in the ter
 |---|---|
 | `npm run dev` | Start the app in development mode with hot reload |
 | `npm test` | Run unit tests (Vitest, run inside Electron's Node) |
+| `npm run test:e2e` | Build the app, then run end-to-end UI tests (Playwright drives the real app; uses a temporary settings folder) |
 | `npm run typecheck` | TypeScript type checking for main, preload and renderer |
 | `npm run lint` | ESLint |
 | `npm run format` / `npm run format:check` | Format code with Prettier, or only check formatting |
@@ -91,7 +92,7 @@ To quit, close the window (on macOS, press `Cmd+Q`) or press `Ctrl+C` in the ter
 | `npm run build:mac` | Build a macOS `.dmg` (run on a Mac) |
 | `npm run db:generate` | After editing `src/main/db/schema.ts`, generate a new SQL migration in `drizzle/` |
 
-Before opening a PR, run: `npm run typecheck && npm run lint && npm run format:check && npm test`
+Before opening a PR, run: `npm run typecheck && npm run lint && npm run format:check && npm test && npm run test:e2e`
 
 ### Getting the Windows installer without a Windows build machine
 
@@ -113,11 +114,14 @@ src/
   preload/         Safe bridge that exposes `window.api` to the UI
   shared/          Types and the IPC contract shared by main + UI
   renderer/        React UI
-    src/components/  Screens and UI pieces (sidebar, breadcrumb, board grid, dialogs)
+    src/canvas/      The board canvas: CanvasView (Konva stage + pointer handling), actions (every
+                     undoable edit), arrange/geometry/history (pure logic + tests), toolbar & menus
+    src/components/  Screens and UI pieces (sidebar, breadcrumb, dialogs)
     src/store/       Zustand stores: projectStore (open project), workspaceStore (per-window
-                     navigation, tree, current board)
+                     navigation, tree, current board), canvasStore (camera, selection, drag, undo)
     src/lib/         Small pure helpers (tree building, error messages) (+ tests)
 drizzle/           Generated SQL migrations (committed; shipped with the app)
+e2e/               Playwright end-to-end tests (helpers in e2e/app.ts)
 scripts/           Helper scripts (test runner)
 docs/              Requirements, decisions, roadmap, handoff, this guide
 ```
@@ -154,6 +158,8 @@ docs/              Requirements, decisions, roadmap, handoff, this guide
 | `typescript` | ~6.0 | Type checking (held at 6.0 until typescript-eslint supports 7) |
 | `tailwindcss`, `@tailwindcss/vite` | ^4 | Utility-first CSS styling |
 | `radix-ui` | ^1.8 | Accessible context menus and dialogs (bundled into the renderer) |
+| `konva`, `react-konva` | ^10 / ^19 | Canvas rendering, hit detection and resize handles (bundled into the renderer) |
+| `@playwright/test` | ^1.64 | End-to-end UI tests that drive the Electron app |
 | `drizzle-kit` | ^0.31 | Generates SQL migrations from the schema (`npm run db:generate`) |
 | `vitest` | ^5 | Unit test runner |
 | `eslint`, `@eslint/js`, `typescript-eslint`, `eslint-plugin-react-hooks`, `globals` | ^10 / ^8 / ^7 | Linting |
@@ -164,7 +170,6 @@ docs/              Requirements, decisions, roadmap, handoff, this guide
 
 | Package | Milestone | Purpose |
 |---|---|---|
-| `konva`, `react-konva` | M2 | Canvas rendering and object manipulation |
 | `sharp` | M3 | Image metadata and thumbnail generation |
 | `pdfjs-dist` | M3 | PDF viewing, search and outline |
 | `cmdk` | M5 | Command palette |

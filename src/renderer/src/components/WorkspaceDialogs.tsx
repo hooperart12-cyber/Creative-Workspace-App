@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { AlertDialog, Dialog } from 'radix-ui'
+import * as actions from '../canvas/actions'
 import { buildTree, descendantIds, flattenTree } from '../lib/tree'
 import { useWorkspaceStore, type ItemRef } from '../store/workspaceStore'
 import { BoardIcon, FolderIcon } from './icons'
@@ -36,7 +37,7 @@ function useItemName(target: ItemRef): string {
 
 function MoveDialog({ target }: { target: ItemRef }) {
   const tree = useWorkspaceStore((s) => s.tree)
-  const { moveBoard, moveFolder } = useWorkspaceStore.getState()
+  const { moveFolder } = useWorkspaceStore.getState()
   const name = useItemName(target)
   const [destination, setDestination] = useState<string | null | undefined>(undefined)
 
@@ -69,7 +70,7 @@ function MoveDialog({ target }: { target: ItemRef }) {
 
   const confirm = () => {
     if (destination === undefined) return
-    if (target.type === 'board' && destination) void moveBoard(target.id, destination)
+    if (target.type === 'board' && destination) void actions.moveBoard(target.id, destination)
     if (target.type === 'folder') void moveFolder(target.id, destination)
   }
 
@@ -125,7 +126,7 @@ function MoveDialog({ target }: { target: ItemRef }) {
 
 function DeleteDialog({ target }: { target: ItemRef }) {
   const tree = useWorkspaceStore((s) => s.tree)
-  const { deleteBoard, deleteFolder } = useWorkspaceStore.getState()
+  const { deleteFolder } = useWorkspaceStore.getState()
   const name = useItemName(target)
 
   const nestedCount = useMemo(() => {
@@ -147,14 +148,16 @@ function DeleteDialog({ target }: { target: ItemRef }) {
           {nestedCount > 0
             ? `This also moves the ${nestedCount} ${noun}${nestedCount === 1 ? '' : 's'} inside it. `
             : ''}
-          Trashed items stay in the project file. A Trash view for restoring them is coming in a
-          later update.
+          You can undo this with Ctrl+Z. Trashed items stay in the project file; a Trash view for
+          restoring them later is coming in a future update.
         </AlertDialog.Description>
         <div className="mt-5 flex justify-end gap-2">
           <AlertDialog.Cancel className={button}>Cancel</AlertDialog.Cancel>
           <AlertDialog.Action
             onClick={() =>
-              void (target.type === 'board' ? deleteBoard(target.id) : deleteFolder(target.id))
+              void (target.type === 'board'
+                ? actions.deleteBoard(target.id)
+                : deleteFolder(target.id))
             }
             className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
           >

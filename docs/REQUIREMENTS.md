@@ -28,7 +28,7 @@
 | 1 | Project Overview | — | Guiding principles |
 | 2 | Platform and Multi-Window Support | 🟢 MVP (basic) | Electron `BrowserWindow`s; changes broadcast from the main process |
 | 3 | Projects and Organizational Structure | 🟢 **MVP – priority** (✅ core done in M1) | Nested boards + folders; Collections ⚪ Later; ADR-011 pending team review |
-| 4 | Infinite Canvas | 🟢 **MVP – priority** | Focus on manipulation, flexibility and navigation |
+| 4 | Infinite Canvas | 🟢 **MVP – priority** (✅ done in M2) | Navigation, selection, move/resize, group, lock, layers, align/distribute, grid/snap, smart guides |
 | 5 | Board Object Types | 🟢 **MVP – priority** | Images first, then text and documents. Checklists, headers/dividers and containers 🟡 deprioritized |
 | 6 | Document Viewing and Review | 🟢 MVP (PDF only) | Other formats ⚪ Later |
 | 7 | Artwork and Image Handling | 🟢 **MVP – priority** | JPEG/JPG, PNG and PDF first; other formats ⚪ Later |
@@ -43,8 +43,8 @@
 | 16 | Plot Roadmaps | 🔵 Optional | |
 | 17 | Covers, Typography, and Appearance | ⚪ Later | Board covers may land with §3 |
 | 18 | Quick Capture and Importing | 🟢 MVP (images/PDF) | Paste and drag-drop of images; URL link cards ⚪ Later |
-| 19 | Keyboard Shortcuts and Quick Commands | 🟢 MVP | Core shortcuts + command palette |
-| 20 | Board History and Recovery | 🟢 MVP (undo/redo, trash) | Snapshots ⚪ Later |
+| 19 | Keyboard Shortcuts and Quick Commands | 🟢 MVP | ✅ Canvas shortcuts done in M2; command palette in M5 |
+| 20 | Board History and Recovery | 🟢 MVP (undo/redo, trash) | ✅ Undo/redo done in M2; Trash view M4; snapshots ⚪ Later |
 | 21 | Essential Quality-of-Life Features | 🟢 MVP | Autosave, save status, backups, project search |
 | 22 | Features Explicitly Outside the Planned Scope | ⛔ | |
 | 23 | Decisions Still to Be Made | ✅ Mostly decided | See [`DECISIONS.md`](DECISIONS.md) |
@@ -172,8 +172,8 @@ A collection can appear as an object on a board.
 
 ## 4. Infinite Canvas
 
-> **Status:** 🟢 **MVP – priority** (Milestone M2). The emphasis is on **flexibility, object manipulation, and navigation** more than literally unlimited space.
-> **Decision:** Built on react-konva (ADR-003). Interaction model follows Figma conventions.
+> **Status:** 🟢 **MVP – priority**. ✅ **Implemented in M2**: everything in this section except free rotation, which arrives with text notes and images in M3 (board cards don't rotate).
+> **Decisions:** Built on react-konva (ADR-003). Interaction model follows Figma conventions (ADR-012).
 
 The infinite canvas is the primary application interface.
 
@@ -1023,3 +1023,4 @@ The overarching goal is a **flexible, PC-based visual creative workspace that ca
 | 1.0 | — | Original feature inventory (PDF) |
 | 1.1 | 2026-10-24 | Converted to Markdown; added status badges; recorded architecture decisions (§2, §3, §4, §5, §7, §8, §15, §23, §24) |
 | 1.2 | 2026-10-24 | M1 implemented (§3); boards/folders relationship decided as separate hierarchies, pending team review (ADR-011) |
+| 1.3 | 2026-10-24 | M2 implemented (§4 canvas, canvas shortcuts §19, undo/redo §20); interaction model recorded (ADR-012) |

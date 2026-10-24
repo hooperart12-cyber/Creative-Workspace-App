@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path'
 import { and, eq, isNull } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { boardObjects } from '../db/schema'
-import { CARD_GRID, DEFAULT_BOARD_TITLE } from './boards'
+import { BOARD_CARD_SIZE, DEFAULT_BOARD_TITLE, PLACEMENT_GAP } from './boards'
 import { Project } from './project'
 
 const migrations = resolve('drizzle')
@@ -19,6 +19,13 @@ afterEach(() => {
   project.close()
   rmSync(dir, { recursive: true, force: true })
 })
+
+/** Board cards on a board, as the canvas sees them. */
+const cards = (boardId: string) =>
+  project.boards
+    .get(boardId)
+    .objects.filter((o) => o.type === 'board')
+    .map((o) => ({ ...o, title: o.board!.title, childBoardCount: o.board!.childBoardCount }))
 
 const cardsOn = (boardId: string) =>
   project.db
@@ -35,31 +42,47 @@ describe('BoardRepository', () => {
 
     const mainView = project.boards.get(main)
     expect(mainView.isMain).toBe(true)
-    expect(mainView.cards).toHaveLength(1)
-    expect(mainView.cards[0]).toMatchObject({
-      boardId: characters.id,
+    expect(cards(main)).toHaveLength(1)
+    expect(cards(main)[0]).toMatchObject({
+      linkedBoardId: characters.id,
       title: 'Characters',
-      childBoardCount: 1
+      childBoardCount: 1,
+      ...BOARD_CARD_SIZE
     })
+    expect(mainView.viewport).toEqual({ x: 0, y: 0, zoom: 1 })
 
     const heroView = project.boards.get(hero.id)
     expect(heroView.breadcrumb.map((b) => b.title)).toEqual(['Manga', 'Characters', 'Hero'])
     expect(heroView.isMain).toBe(false)
   })
 
-  it('defaults the title and lays new cards out on a grid', () => {
+  it('defaults the title and places new cards below existing content', () => {
     const main = project.mainBoardId
-    const created = Array.from({ length: 5 }, () => project.boards.create(main))
-    expect(created[0].title).toBe(DEFAULT_BOARD_TITLE)
+    const first = project.boards.create(main)
+    expect(first.title).toBe(DEFAULT_BOARD_TITLE)
+    project.boards.create(main, 'Placed', { x: 500, y: 300 })
+    project.boards.create(main, 'Auto')
 
-    const cards = project.boards.get(main).cards
-    expect(cards.map((c) => [c.x, c.y])).toEqual([
-      [0, 0],
-      [CARD_GRID.width + CARD_GRID.gap, 0],
-      [2 * (CARD_GRID.width + CARD_GRID.gap), 0],
-      [3 * (CARD_GRID.width + CARD_GRID.gap), 0],
-      [0, CARD_GRID.height + CARD_GRID.gap]
+    const positions = cards(main).map((c) => [c.title, c.x, c.y])
+    expect(positions).toEqual([
+      [DEFAULT_BOARD_TITLE, 0, 0],
+      ['Placed', 500, 300],
+      // Left edge of all content, below the lowest bottom edge (300 + card height).
+      ['Auto', 0, 300 + BOARD_CARD_SIZE.height + PLACEMENT_GAP]
     ])
+  })
+
+  it('stacks new cards on top (z-order)', () => {
+    const main = project.mainBoardId
+    project.boards.create(main, 'A')
+    project.boards.create(main, 'B')
+    const [a, b] = cards(main)
+    expect(b.zIndex).toBeGreaterThan(a.zIndex)
+  })
+
+  it('saves the viewport per board', () => {
+    project.boards.setViewport(project.mainBoardId, { x: -120, y: 40, zoom: 0.5 })
+    expect(project.boards.get(project.mainBoardId).viewport).toEqual({ x: -120, y: 40, zoom: 0.5 })
   })
 
   it('renames boards and rejects empty names', () => {
@@ -80,8 +103,8 @@ describe('BoardRepository', () => {
     const b = project.boards.create(main, 'B')
     project.boards.move(b.id, a.id)
 
-    expect(project.boards.get(main).cards.map((c) => c.title)).toEqual(['A'])
-    expect(project.boards.get(a.id).cards.map((c) => c.title)).toEqual(['B'])
+    expect(cards(main).map((c) => c.title)).toEqual(['A'])
+    expect(cards(a.id).map((c) => c.title)).toEqual(['B'])
     expect(project.boards.get(b.id).breadcrumb.map((x) => x.title)).toEqual(['Manga', 'A', 'B'])
   })
 
@@ -105,10 +128,61 @@ describe('BoardRepository', () => {
     const { deletedBoardIds } = project.boards.delete(a.id)
     expect(deletedBoardIds).toHaveLength(3)
     expect(project.boards.list().map((x) => x.title)).toEqual(['Manga', 'Keep'])
-    expect(project.boards.get(main).cards.map((c) => c.boardId)).toEqual([keep.id])
+    expect(cards(main).map((c) => c.linkedBoardId)).toEqual([keep.id])
     expect(cardsOn(a.id)).toHaveLength(0)
     expect(() => project.boards.get(b.id)).toThrow(/not found/)
     expect(project.summary().boardCount).toBe(2)
+  })
+
+  it('restores a trashed board with everything trashed alongside it', () => {
+    const main = project.mainBoardId
+    const a = project.boards.create(main, 'A', { x: 10, y: 20 })
+    const b = project.boards.create(a.id, 'B')
+    const c = project.boards.create(b.id, 'C')
+    // C trashed separately, earlier: must stay trashed when A is restored.
+    project.boards.delete(c.id)
+    project.boards.delete(a.id)
+
+    project.boards.restore(a.id)
+    expect(project.boards.list().map((x) => x.title)).toEqual(['Manga', 'A', 'B'])
+    expect(cards(main)[0]).toMatchObject({ title: 'A', x: 10, y: 20 })
+    expect(cards(a.id).map((x) => x.title)).toEqual(['B'])
+    expect(cards(b.id)).toHaveLength(0)
+  })
+
+  it('refuses to restore a board whose parent is still trashed', () => {
+    const a = project.boards.create(project.mainBoardId, 'A')
+    const b = project.boards.create(a.id, 'B')
+    project.boards.delete(b.id)
+    project.boards.delete(a.id)
+    expect(() => project.boards.restore(b.id)).toThrow(/Restore the board it was inside first/)
+  })
+
+  it('deep-copies a board with its nested boards', () => {
+    const main = project.mainBoardId
+    const a = project.boards.create(main, 'A')
+    const b = project.boards.create(a.id, 'B', { x: 50, y: 60 })
+    project.boards.create(b.id, 'C')
+    const target = project.boards.create(main, 'Target')
+
+    const cardId = project.boards.duplicate(a.id, target.id, { x: 5, y: 5 })
+    const copy = cards(target.id)
+    expect(copy).toHaveLength(1)
+    expect(copy[0]).toMatchObject({ id: cardId, title: 'A', x: 5, y: 5 })
+    const copyA = copy[0].linkedBoardId!
+    expect(copyA).not.toBe(a.id)
+    expect(cards(copyA)[0]).toMatchObject({ title: 'B', x: 50, y: 60 })
+    expect(cards(cards(copyA)[0].linkedBoardId!).map((x) => x.title)).toEqual(['C'])
+    // The original is untouched.
+    expect(cards(a.id).map((x) => x.linkedBoardId)).toEqual([b.id])
+    expect(project.boards.list()).toHaveLength(8)
+    expect(() => project.boards.duplicate(a.id, b.id, { x: 0, y: 0 })).toThrow(/inside itself/)
+  })
+
+  it('finds the card that represents a board', () => {
+    const a = project.boards.create(project.mainBoardId, 'A')
+    expect(project.boards.cardIdOf(a.id)).toBe(a.objectId)
+    expect(project.boards.cardIdOf(project.mainBoardId)).toBeNull()
   })
 
   it('refuses to delete the main board', () => {

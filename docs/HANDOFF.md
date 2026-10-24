@@ -39,6 +39,8 @@ RULES:
   and Figma for canvas interaction and shortcuts.
 - Keep docs current in the same commit/PR as the code: tick boxes in docs/ROADMAP.md,
   record new decisions in docs/DECISIONS.md, update status badges in docs/REQUIREMENTS.md.
+- Testing: every feature PR adds unit tests for its logic, adds/updates its manual
+  checklist in docs/TESTING.md, and includes a "How to test" section in the PR.
 - Work on feature branches and open PRs; don't push directly to main.
 - Verify your work: run typecheck, lint and tests, and launch the app (`npm run dev`)
   to check the feature actually works before calling it done.
@@ -53,32 +55,44 @@ RULES:
 > Outgoing agent: replace this section each session. Keep it short and factual.
 
 **Last updated:** 2026-10-24
-**Branch:** `feat/m1-boards-folders` (PR open → merge into `main`)
-**Phase:** M1 (Projects, Boards & Folders) complete; M2 (Canvas) not started.
+**Branch:** `feat/m2-canvas` (PR open → merge into `main`; it includes the testing-guide commits from PR #4)
+**Phase:** M2 (Canvas) complete; M3 (Images, text notes, PDFs) not started.
 
 **Done**
-- M0 scaffold (PR #2): Electron + React 19 + TS 6 + Tailwind 4, SQLite per project, multi-window, CI.
-- M1:
-  - `BoardRepository` / `FolderRepository` in `src/main/project/` (nesting, breadcrumb, move with cycle checks, soft-delete cascade, main board protected; the main board's title follows the project name).
-  - Each nested board is also a `board` card in `board_objects`, auto-placed on a 4-column grid (`CARD_GRID`). M2 should render these cards on the canvas.
-  - UI: sidebar (Boards + Library folders trees), breadcrumb with Back/Forward/Up, temporary card grid (`BoardGrid.tsx`), right-click menus (Radix), Move/Delete dialogs.
-  - Per-window navigation state in `workspaceStore`; current board kept in the URL hash (reload keeps it; "Open in new window" passes it).
-  - 25 unit tests.
-- ADR-011: boards and folders are separate hierarchies, **pending team discussion**.
+- M0 scaffold, M1 boards/folders (PRs #2, #3), testing guide (PR #4).
+- M2 canvas (react-konva), see ADR-012:
+  - Figma-style pan/zoom, per-board camera memory, selection (click/shift/marquee), move, resize.
+  - Smart guides + optional snap-to-grid.
+  - Group, lock, layer order, align/distribute/match size.
+  - Copy/cut/paste/duplicate (deep board copies), undo/redo for every edit.
+  - Drag-and-drop: toolbar tile onto the canvas; cards onto board cards, breadcrumb items or sidebar rows to nest; sidebar tree drag for boards and folders.
+- Backend: `ObjectRepository` (`src/main/project/objects.ts`) for batch updates, trash/restore, move-to-board and copy. `BoardRepository` gained restore, duplicate, setViewport and cardIdOf. Deletion timestamps are strictly increasing (`deletionTime()`).
+- Tests: 64 unit tests; 6 Playwright end-to-end tests (`e2e/`) run in CI on Windows + macOS.
+- `docs/TESTING.md` has an M2 checklist (33 steps); the M1 checklist was updated for the canvas.
 
 **In progress**
 - Nothing.
 
 **Next steps**
-1. Merge the M1 PR once CI is green.
+1. Merge the M2 PR once CI is green. The project owner should run the M2 checklist; how the canvas *feels* is the key feedback.
 2. Discuss ADR-011 (separate vs. unified tree) with the team before M4.
-3. Start **M2 — Canvas** (see ROADMAP). Write a plan first and confirm it with the project owner. Replace `BoardGrid` with a react-konva canvas that renders `board_objects` using their x/y/width/height, and persist moves/resizes.
+3. Start **M3 — Images, text notes, PDFs** (see ROADMAP). Plan first. Likely pieces:
+   - an asset import pipeline (copy + SHA-256 + `sharp` thumbnails, ADR-005)
+   - image objects with aspect-locked resize and rotation (enable the Transformer's `rotateEnabled` / `keepRatio` per type)
+   - text notes (DOM overlay editor)
+   - PDF cards and viewer (pdf.js)
+   - double-click on empty canvas creates a text note (Milanote)
+   - add a renderer for each new `type` alongside `BoardCardNode`
 
 **Known issues / open questions**
-- Trashed boards and folders can't be restored from the UI yet (Trash view is planned for M4); they remain in the database with `deleted_at` set.
-- The Windows installer is not code-signed (SmartScreen warning on first run).
-- No app icon yet.
-- **Testing tip:** when driving the app over DevTools (`--remoteDebuggingPort`), a window without OS focus won't fire blur events. Use `Emulation.setFocusEmulationEnabled`. The newest window is listed first in `/json/list`.
+- Trashed items can only be restored with undo (in the same session) until the Trash view (M4).
+- Undo history is per window and not saved across restarts (by design for now).
+- Windows installer not code-signed; no app icon yet.
+- **Dev-only:** after hot-reloading `useCanvasShortcuts.ts`, Space+drag may stop working until the page reloads (duplicate module state). Not an issue in builds.
+- **Testing tips:**
+  - Drive the canvas with real input events; positions come from `window.__cw` (see `e2e/app.ts`).
+  - New windows are listed first in DevTools `/json/list`.
+  - Windows without OS focus don't fire blur, so use `Emulation.setFocusEmulationEnabled`.
 
 **How to run**
-- See `docs/SETUP.md`. Short version: `npm install`, then `npm run dev`. Tests: `npm test`.
+- See `docs/SETUP.md`. Short version: `npm install`, `npm run dev`. Tests: `npm test`, `npm run test:e2e`.

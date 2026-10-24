@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { BoardDetail, ProjectTree } from '@shared/types'
+import type { BoardDetail, ObjectPatch, ProjectTree } from '@shared/types'
 import { reportError } from './projectStore'
 
 export type ItemRef = { type: 'board' | 'folder'; id: string }
@@ -20,7 +20,6 @@ interface WorkspaceState {
   forward: string[]
   /** Item currently being renamed inline, and where (sidebar row or board card). */
   renaming: RenameTarget | null
-  selectedCardId: string | null
   selectedFolderId: string | null
   dialog: WorkspaceDialog | null
   sidebarCollapsed: boolean
@@ -31,11 +30,8 @@ interface WorkspaceState {
   goBack: () => Promise<void>
   goForward: () => Promise<void>
   goUp: () => Promise<void>
-
-  createBoard: (parentId: string) => Promise<void>
-  renameBoard: (id: string, title: string) => Promise<void>
-  moveBoard: (id: string, newParentId: string) => Promise<void>
-  deleteBoard: (id: string) => Promise<void>
+  /** Applies changes to the open board's objects immediately, before the save round-trip. */
+  patchObjects: (patches: ObjectPatch[]) => void
 
   createFolder: (parentId: string | null) => Promise<void>
   renameFolder: (id: string, name: string) => Promise<void>
@@ -43,7 +39,6 @@ interface WorkspaceState {
   deleteFolder: (id: string) => Promise<void>
 
   setRenaming: (item: RenameTarget | null) => void
-  selectCard: (boardId: string | null) => void
   selectFolder: (folderId: string | null) => void
   setDialog: (dialog: WorkspaceDialog | null) => void
   toggleSidebar: () => void
@@ -82,7 +77,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
   /** Shows a board without touching history. */
   const show = async (id: string): Promise<void> => {
     const board = await window.api.invoke('board:get', id)
-    set({ board, selectedCardId: null })
+    set({ board })
     rememberBoard(board.id)
   }
 
@@ -92,7 +87,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
     back: [],
     forward: [],
     renaming: null,
-    selectedCardId: null,
     selectedFolderId: null,
     dialog: null,
     sidebarCollapsed: readSidebarCollapsed(),
@@ -154,35 +148,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
       if (parent) await get().openBoard(parent)
     },
 
-    createBoard: (parentId) =>
-      guard(async () => {
-        const board = await window.api.invoke('board:create', { parentId })
-        // New boards appear as a card on their parent; rename the card if it's the open board,
-        // otherwise rename the row in the sidebar.
-        const source: ItemSource = get().board?.id === parentId ? 'board' : 'sidebar'
-        set({ renaming: { type: 'board', id: board.id, source }, selectedCardId: board.id })
-      }),
-
-    renameBoard: (id, title) =>
-      guard(async () => {
-        set({ renaming: null })
-        const current = get().tree?.boards.find((b) => b.id === id)?.title
-        if (title.trim() && title.trim() !== current) {
-          await window.api.invoke('board:rename', id, title)
+    patchObjects: (patches) => {
+      const board = get().board
+      if (!board || patches.length === 0) return
+      const byId = new Map(patches.map((p) => [p.id, p]))
+      set({
+        board: {
+          ...board,
+          objects: board.objects.map((o) => (byId.has(o.id) ? { ...o, ...byId.get(o.id) } : o))
         }
-      }),
-
-    moveBoard: (id, newParentId) =>
-      guard(async () => {
-        set({ dialog: null })
-        await window.api.invoke('board:move', id, newParentId)
-      }),
-
-    deleteBoard: (id) =>
-      guard(async () => {
-        set({ dialog: null })
-        await window.api.invoke('board:delete', id)
-      }),
+      })
+    },
 
     createFolder: (parentId) =>
       guard(async () => {
@@ -215,7 +191,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
       }),
 
     setRenaming: (renaming) => set({ renaming }),
-    selectCard: (selectedCardId) => set({ selectedCardId }),
     selectFolder: (selectedFolderId) => set({ selectedFolderId }),
     setDialog: (dialog) => set({ dialog }),
     toggleSidebar: () => {
