@@ -1,11 +1,22 @@
 # Creative Workspace App
 
-A PC desktop creative workspace, inspired by Milanote, for artists, illustrators, comic and manga creators, writers, and other visual storytellers.
+A PC desktop creative workspace, inspired by Milanote (boards and organization) and Figma (canvas feel), for artists, illustrators, comic and manga creators, writers, and other visual storytellers.
 
 It combines infinite visual canvases, interconnected boards, notes, reference images, document viewing, artwork management, and project organization in one flexible environment. The goal is to support the whole creative process, from brainstorming and research through planning, review, and organizing finished work, without forcing a rigid workflow.
 
-> **Status:** Brainstorming / predevelopment. Nothing has been built yet.
-> This README summarizes the full feature vision. The complete specification is in [`Creative Workspace App.pdf`](./Creative%20Workspace%20App.pdf) (Feature Inventory, Version 1.0).
+> **Status:** Architecture decided. MVP development (milestone M0 — Scaffold) is next. No app code yet.
+> This README summarizes the full feature vision. The complete, **living** specification is [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md). The original PDF (v1.0) is archived at [`docs/archive/`](docs/archive/Creative%20Workspace%20App%20v1.0.pdf).
+
+## Project Docs
+
+| Document | What it's for |
+|---|---|
+| [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md) | Living requirements: the full feature inventory with MVP/Later status per section |
+| [`docs/DECISIONS.md`](docs/DECISIONS.md) | Architecture decisions with pros and cons (frameworks, database, storage, local vs. cloud) |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | Milestones and progress checklist |
+| [`docs/HANDOFF.md`](docs/HANDOFF.md) | Prompt and current-state notes for continuing work in a new AI/dev session |
+
+**Working process:** plan first, then build. Each milestone starts with a written plan that the project owner confirms. Every PR that makes or changes a decision updates `REQUIREMENTS.md`, `DECISIONS.md` and `ROADMAP.md` in the same PR. Before a session ends, update the "Current state" section of `HANDOFF.md`.
 
 | | |
 |---|---|
@@ -141,29 +152,48 @@ Lower priority. A visual map of plot-event cards with branching, converging, and
 
 ---
 
-## Open Decisions
+## Decisions (Tech Stack)
 
-These will be worked out with the developer before implementation:
+The open questions from the spec (§23) have been answered. The full reasoning, with pros and cons, is in [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
-- Programming languages, desktop framework, and database architecture
-- Local, cloud, or hybrid storage, the storage provider, and how shared projects are hosted
-- How backup and recovery are implemented
-- Supported document formats, and preview generation for specialized art formats
-- Custom font handling
-- Interface styling and the navigation interface
-- Storage limits and operating costs
-- Performance strategies for very large boards
-- Feature development order and initial MVP scope
+| Area | Choice |
+|---|---|
+| Desktop shell | Electron (electron-vite, electron-builder) |
+| UI | React 18 + TypeScript, Zustand, Tailwind CSS, Radix UI, cmdk |
+| Canvas | Konva via react-konva |
+| Database | One SQLite file per project: better-sqlite3 + Drizzle ORM (FTS5 for search) |
+| Files | Originals copied into the project, content-addressed (SHA-256), never modified |
+| Images / PDF | sharp (thumbnails, metadata), pdf.js (viewer, search, outline) |
+| Cloud (later, for collaboration only) | Supabase (Postgres, Auth, Realtime) + Cloudflare R2 |
+
+**Local-first.** Everything in the MVP runs on your own computer, with no server, account or internet connection needed. A project is a folder you can keep anywhere, including a OneDrive or Dropbox folder for backup. A cloud backend is added only when shared projects (collaboration) are built.
+
+Still open: detailed interface styling, custom fonts, and preview generation for PSD, `.clip` and `.procreate` files.
 
 ---
 
 ## Roadmap
 
-1. **Feature inventory.** Collect desired features without limiting ideas. *(Current stage)*
-2. **Feasibility review.** Evaluate each feature for complexity, effort, cost, ongoing cost, dependencies, and importance.
-3. **Scope selection.** Classify each feature as essential, later, optional, or impractical.
-4. **Architecture planning.** Choose a maintainable architecture and technologies.
-5. **MVP development.** Build the core systems first, then expand step by step.
+Spec stages 1–4 (inventory, feasibility, scope, architecture) are **done**. Stage 5, MVP development, is next. The detailed checklist is in [`docs/ROADMAP.md`](docs/ROADMAP.md).
+
+**MVP priorities:**
+
+1. **M0 — Scaffold.** Electron + React app, database, project create/open.
+2. **M1 — Nested boards and folders** (§3).
+3. **M2 — Canvas navigation and manipulation** (§4).
+4. **M3 — Board objects, images first**, then text notes and PDFs (§5, §7: JPEG/JPG, PNG, PDF).
+5. **M4 — Project asset library** (§8).
+6. **M5 — Reliability polish.** Autosave status, backups, command palette, search.
+
+## Running Locally
+
+_Coming in milestone M0._ The expected workflow is:
+
+```bash
+npm install
+npm run dev        # launches the desktop app with hot reload
+npm run build:win  # builds a Windows installer
+```
 
 ---
 
