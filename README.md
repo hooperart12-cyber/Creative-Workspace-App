@@ -4,7 +4,7 @@ A PC desktop creative workspace, inspired by Milanote (boards and organization) 
 
 It combines infinite visual canvases, interconnected boards, notes, reference images, document viewing, artwork management, and project organization in one flexible environment. The goal is to support the whole creative process, from brainstorming and research through planning, review, and organizing finished work, without forcing a rigid workflow.
 
-> **Status:** M0 (scaffold) complete: the app runs and can create, open and share projects across windows. Next up is M1 (nested boards and folders).
+> **Status:** M1 complete: nested boards, library folders, sidebar trees and breadcrumb navigation work across multiple windows. Next up is M2 (the canvas).
 > This README summarizes the full feature vision. The complete, **living** specification is [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md). The original PDF (v1.0) is archived at [`docs/archive/`](docs/archive/Creative%20Workspace%20App%20v1.0.pdf).
 
 ## Project Docs
@@ -180,7 +180,7 @@ Spec stages 1–4 (inventory, feasibility, scope, architecture) are **done**. St
 **MVP priorities:**
 
 1. ~~**M0 — Scaffold.** Electron + React app, database, project create/open.~~ ✅ Done
-2. **M1 — Nested boards and folders** (§3).
+2. ~~**M1 — Nested boards and folders** (§3).~~ ✅ Done
 3. **M2 — Canvas navigation and manipulation** (§4).
 4. **M3 — Board objects, images first**, then text notes and PDFs (§5, §7: JPEG/JPG, PNG, PDF).
 5. **M4 — Project asset library** (§8).

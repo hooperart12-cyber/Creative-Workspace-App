@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { ProjectSummary, RecentProject } from '@shared/types'
+import { messageOf } from '../lib/errors'
 
 interface ProjectState {
   status: 'loading' | 'ready'
@@ -12,14 +13,8 @@ interface ProjectState {
   closeProject: () => Promise<void>
   renameProject: (name: string) => Promise<void>
   removeRecent: (path: string) => Promise<void>
-  openNewWindow: () => Promise<void>
+  openNewWindow: (boardId?: string) => Promise<void>
   clearError: () => void
-}
-
-/** Electron wraps errors from the main process; show only the original message. */
-function messageOf(error: unknown): string {
-  const raw = error instanceof Error ? error.message : String(error)
-  return raw.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => {
@@ -80,7 +75,7 @@ export const useProjectStore = create<ProjectState>((set, get) => {
         set({ recent: await window.api.invoke('recent:remove', path) })
       }),
 
-    openNewWindow: () => run(() => window.api.invoke('window:openNew')),
+    openNewWindow: (boardId) => run(() => window.api.invoke('window:openNew', { boardId })),
 
     clearError: () => set({ error: null })
   }
@@ -92,3 +87,8 @@ window.api.on('project:changed', (project) => {
     useProjectStore.setState({ project })
   }
 })
+
+/** Shows an error in the app's error banner. */
+export function reportError(error: unknown): void {
+  useProjectStore.setState({ error: messageOf(error) })
+}

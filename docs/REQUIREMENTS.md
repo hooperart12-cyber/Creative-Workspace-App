@@ -27,7 +27,7 @@
 |---|---|---|---|
 | 1 | Project Overview | — | Guiding principles |
 | 2 | Platform and Multi-Window Support | 🟢 MVP (basic) | Electron `BrowserWindow`s; changes broadcast from the main process |
-| 3 | Projects and Organizational Structure | 🟢 **MVP – priority** | Nested boards + folders first; Collections ⚪ Later |
+| 3 | Projects and Organizational Structure | 🟢 **MVP – priority** (✅ core done in M1) | Nested boards + folders; Collections ⚪ Later; ADR-011 pending team review |
 | 4 | Infinite Canvas | 🟢 **MVP – priority** | Focus on manipulation, flexibility and navigation |
 | 5 | Board Object Types | 🟢 **MVP – priority** | Images first, then text and documents. Checklists, headers/dividers and containers 🟡 deprioritized |
 | 6 | Document Viewing and Review | 🟢 MVP (PDF only) | Other formats ⚪ Later |
@@ -114,8 +114,8 @@ Advanced docking, complex window management, and dragging tabs between windows a
 
 ## 3. Projects and Organizational Structure
 
-> **Status:** 🟢 **MVP – priority** (Milestone M1). Projects, the main board, nested boards, and folders come first. Collections are ⚪ Later.
-> **Decision:** Each project is a self-contained folder on disk with its own SQLite database and asset store (ADR-004, ADR-005).
+> **Status:** 🟢 **MVP – priority**. ✅ **Implemented in M1:** projects, main board, unlimited nested boards, library folders, sidebar trees, breadcrumb navigation. Board cover images arrive in M3. Collections are ⚪ Later.
+> **Decisions:** Each project is a self-contained folder on disk with its own SQLite database and asset store (ADR-004, ADR-005). **Boards and folders are separate hierarchies:** boards nest inside boards, and folders organize the file library (ADR-011, 🟡 tentative, pending team discussion; we may return to a unified tree).
 
 ### Independent Projects
 
@@ -967,7 +967,7 @@ The goal is to avoid duplicating functions better handled by dedicated creative 
 | Automatic preview generation for specialized art formats | ⏳ Deferred | Manual preview attachment in v1; PSD (ag-psd), .procreate/.clip embedded thumbnails later (ADR-007) |
 | Custom font handling | ⏳ Deferred | Later: TTF/OTF copied into project, loaded via the FontFace API |
 | Detailed interface styling | ⏳ Open | Milanote-like low-chrome UI; decided during M1 |
-| Exact project and folder navigation interface | 🟡 Tentative | Left sidebar tree (folders + boards) + breadcrumb above the canvas |
+| Exact project and folder navigation interface | ✅ Decided (M1) | Left sidebar with a Boards tree and a Library folders tree + breadcrumb with Back/Forward/Up above the board (ADR-011, pending team review) |
 | Storage limits and anticipated operating costs | ✅ Decided (for now) | $0 while local-only; roughly $0–25/month once cloud collaboration exists |
 | Performance strategies for very large boards | ✅ Decided | Thumbnails by zoom level, viewport culling, Konva layer caching, lazy board loading (ADR-003) |
 | Feature development order | ✅ Decided | See [`ROADMAP.md`](ROADMAP.md) (ADR-008) |
@@ -1022,3 +1022,4 @@ The overarching goal is a **flexible, PC-based visual creative workspace that ca
 |---|---|---|
 | 1.0 | — | Original feature inventory (PDF) |
 | 1.1 | 2026-10-24 | Converted to Markdown; added status badges; recorded architecture decisions (§2, §3, §4, §5, §7, §8, §15, §23, §24) |
+| 1.2 | 2026-10-24 | M1 implemented (§3); boards/folders relationship decided as separate hierarchies, pending team review (ADR-011) |

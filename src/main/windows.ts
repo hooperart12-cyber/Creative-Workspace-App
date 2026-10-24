@@ -1,8 +1,13 @@
 import { join } from 'node:path'
 import { BrowserWindow, shell } from 'electron'
 
+export interface WindowOptions {
+  /** Board to show first (passed to the renderer in the URL hash). */
+  boardId?: string
+}
+
 /** Creates an app window. Each window navigates, zooms and scrolls independently (§2). */
-export function createWindow(): BrowserWindow {
+export function createWindow(options: WindowOptions = {}): BrowserWindow {
   const window = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -29,15 +34,18 @@ export function createWindow(): BrowserWindow {
     if (/^https?:\/\//.test(url)) void shell.openExternal(url)
     return { action: 'deny' }
   })
+  // Block navigation away from the app page (hash changes are allowed).
   window.webContents.on('will-navigate', (event, url) => {
-    if (url !== window.webContents.getURL()) event.preventDefault()
+    const strip = (u: string) => u.split('#')[0]
+    if (strip(url) !== strip(window.webContents.getURL())) event.preventDefault()
   })
 
+  const hash = options.boardId ? `board=${encodeURIComponent(options.boardId)}` : ''
   const devServerUrl = process.env['ELECTRON_RENDERER_URL']
   if (devServerUrl) {
-    void window.loadURL(devServerUrl)
+    void window.loadURL(hash ? `${devServerUrl}#${hash}` : devServerUrl)
   } else {
-    void window.loadFile(join(import.meta.dirname, '../renderer/index.html'))
+    void window.loadFile(join(import.meta.dirname, '../renderer/index.html'), { hash })
   }
   return window
 }
