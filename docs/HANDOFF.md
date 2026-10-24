@@ -69,7 +69,7 @@ RULES:
 2. Start **M0 — Scaffold** (see ROADMAP). Write a plan first and confirm it with the project owner.
 
 **Known issues / open questions**
-- The `random` file at the repo root looks like a placeholder; confirm with the owner before deleting.
+- None blocking.
 - Detailed UI styling is not yet decided (to be settled during M1).
 
 **How to run**
