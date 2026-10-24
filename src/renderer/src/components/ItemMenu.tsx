@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { ContextMenu } from 'radix-ui'
 import { useProjectStore } from '../store/projectStore'
+import * as actions from '../canvas/actions'
 import { useWorkspaceStore, type ItemRef, type ItemSource } from '../store/workspaceStore'
 
 const itemClass =
@@ -37,7 +38,7 @@ export function ItemMenu({
 }) {
   const isMain = useWorkspaceStore((s) => s.tree?.mainBoardId === target.id)
   const openBoard = useWorkspaceStore((s) => s.openBoard)
-  const createBoard = useWorkspaceStore((s) => s.createBoard)
+  const currentBoardId = useWorkspaceStore((s) => s.board?.id)
   const createFolder = useWorkspaceStore((s) => s.createFolder)
   const setRenaming = useWorkspaceStore((s) => s.setRenaming)
   const setDialog = useWorkspaceStore((s) => s.setDialog)
@@ -57,7 +58,15 @@ export function ItemMenu({
               <Item onSelect={() => void openBoard(target.id)}>Open</Item>
               <Item onSelect={() => void openNewWindow(target.id)}>Open in new window</Item>
               <ContextMenu.Separator className="my-1 h-px bg-line" />
-              <Item onSelect={() => void createBoard(target.id)}>New board inside</Item>
+              <Item
+                onSelect={() =>
+                  void (target.id === currentBoardId
+                    ? actions.createBoardOnCanvas()
+                    : actions.createBoard(target.id))
+                }
+              >
+                New board inside
+              </Item>
               <Item onSelect={() => setRenaming({ ...target, source })}>Rename</Item>
               {!isMain && (
                 <>

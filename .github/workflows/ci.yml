@@ -24,6 +24,17 @@ jobs:
       - run: npm run lint
       - run: npm run format:check
       - run: npm test
+      - name: End-to-end UI tests (Playwright drives the built app)
+        run: npm run test:e2e
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.os }}
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
 
   build-windows:
     name: Windows installer

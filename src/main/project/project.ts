@@ -8,6 +8,7 @@ import { openDatabase, type ProjectDb } from '../db/client'
 import { assets, boards, projectMeta } from '../db/schema'
 import { BoardRepository } from './boards'
 import { FolderRepository } from './folders'
+import { ObjectRepository } from './objects'
 
 export const PROJECT_EXTENSION = '.cwproj'
 export const PROJECT_DB_FILE = 'project.db'
@@ -22,6 +23,7 @@ export class Project {
   readonly mainBoardId: string
   readonly boards: BoardRepository
   readonly folders: FolderRepository
+  readonly objects: ObjectRepository
 
   private constructor(
     readonly path: string,
@@ -33,6 +35,7 @@ export class Project {
     this.mainBoardId = meta.mainBoardId
     this.boards = new BoardRepository(db, meta.mainBoardId)
     this.folders = new FolderRepository(db)
+    this.objects = new ObjectRepository(db, this.boards)
   }
 
   static create(parentDir: string, name: string, migrationsFolder: string): Project {

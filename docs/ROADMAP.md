@@ -35,26 +35,30 @@ This is the living progress tracker. **Tick boxes as work is completed** and kee
 
 ## Testing infrastructure (ongoing)
 - [x] Manual test guide with per-milestone checklists (`docs/TESTING.md`), bug/feedback issue templates, PR template
-- [ ] End-to-end UI tests: Playwright driving the real Electron app, automating the TESTING.md checklists, run in CI
+- [x] End-to-end UI tests: Playwright driving the real Electron app (`e2e/`), run in CI on Windows + macOS (expand as features land)
 - [ ] Renderer store tests (navigation history, rename flow, cross-window refresh)
 - [ ] Coverage report with a minimum threshold for main-process logic
 
-## M2 — Canvas Navigation & Manipulation (§4) — *Figma-style*
-- [ ] Pan: Space+drag, middle-mouse drag, scroll/trackpad, arrow keys
-- [ ] Zoom: Ctrl/Cmd+scroll to cursor, +/- keys, zoom % indicator, Shift+1 fit-all, Shift+2 fit-selection, Ctrl+0 to 100%
-- [ ] Select: click, Shift+click, marquee drag-select, Ctrl+A
-- [ ] Move by dragging and with arrow keys (Shift = 10 px)
-- [ ] Resize and rotate via Konva Transformer (aspect lock for images; rotate snaps 15° with Shift)
-- [ ] Copy / cut / paste / duplicate (Ctrl+D) / delete
-- [ ] Group / ungroup (Ctrl+G / Ctrl+Shift+G); grouped objects move together
-- [ ] Lock / unlock objects
-- [ ] Layer order: bring forward/back, to front/back (Ctrl+] / Ctrl+[ …)
-- [ ] Align (left/center/right/top/middle/bottom), distribute horizontally/vertically, match width/height
-- [ ] Optional grid display + snap-to-grid toggle (display never moves objects)
-- [ ] Smart alignment guides when dragging (edges/centers of nearby objects)
-- [ ] Undo / redo command stack (Ctrl+Z / Ctrl+Shift+Z)
-- [ ] Viewport culling + per-board viewport memory
-- [ ] Persist all object changes (debounced autosave)
+## M2 — Canvas Navigation & Manipulation (§4) — *Figma-style* ✅
+- [x] react-konva canvas replaces the temporary grid; renders `board_objects` by position/size, with viewport culling
+- [x] Pan: wheel/trackpad scroll (Shift = horizontal), Space+drag, middle-mouse drag, arrow keys
+- [x] Zoom: Ctrl/Cmd+wheel or pinch toward the cursor, +/−, Shift+1 fit all, Shift+2 fit selection, Ctrl+0 to 100%, zoom % control
+- [x] Each board remembers its camera; each window has its own
+- [x] Select: click, Shift+click, marquee, Ctrl+A, Esc
+- [x] Move by dragging and with arrow keys (Shift = 10 px)
+- [x] Resize via handles (minimum size); rotation deferred to images/notes in M3
+- [x] Copy / cut / paste / duplicate (deep copy of boards; cut = move on paste; works across boards and windows)
+- [x] Group / ungroup; grouped objects select and move together
+- [x] Lock / unlock
+- [x] Layer order: forward/backward, front/back
+- [x] Align (6 ways), distribute, match width/height (floating bar for 2+ selected)
+- [x] Optional dot grid + snap-to-grid toggle (display never moves objects)
+- [x] Smart alignment guides when dragging (Alt disables snapping)
+- [x] Undo / redo for every canvas and board edit (Ctrl+Z / Ctrl+Shift+Z, toolbar buttons)
+- [x] **Drag & drop:** Board tile from toolbar onto the canvas; drop cards onto a board card, breadcrumb item or sidebar row to move them inside; drag boards/folders within the sidebar
+- [x] Right-click menus for canvas and cards with shortcut hints
+- [x] Persist all object changes; changes sync to other windows
+- [x] Custom app menu without page zoom (so Ctrl+=/− zoom the canvas, not the window)
 
 ## M3 — Object Types: Images → Text → PDF (§5, §7)
 - [ ] Import images via drag-drop from Explorer/Finder, paste from browser/clipboard, file picker

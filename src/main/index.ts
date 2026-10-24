@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { app, BrowserWindow } from 'electron'
 import { registerIpcHandlers, trackWindow } from './ipc'
+import { installAppMenu } from './menu'
 import { ProjectRegistry } from './project/projectRegistry'
 import { RecentProjects } from './project/recentProjects'
 import { createWindow } from './windows'
@@ -11,6 +12,10 @@ const migrationsFolder = app.isPackaged
   : join(app.getAppPath(), 'drizzle')
 
 const registry = new ProjectRegistry(migrationsFolder)
+
+// Automated UI tests run with their own settings folder so they never touch real
+// recent-projects lists (must happen before the single-instance lock, which is per folder).
+if (process.env['CW_USER_DATA_DIR']) app.setPath('userData', process.env['CW_USER_DATA_DIR'])
 
 // Only one app instance; a second launch focuses the existing window.
 if (!app.requestSingleInstanceLock()) {
@@ -26,6 +31,7 @@ if (!app.requestSingleInstanceLock()) {
 
   void app.whenReady().then(() => {
     const recent = new RecentProjects(join(app.getPath('userData'), 'recent-projects.json'))
+    installAppMenu()
     registerIpcHandlers(registry, recent)
     trackWindow(createWindow(), registry)
 

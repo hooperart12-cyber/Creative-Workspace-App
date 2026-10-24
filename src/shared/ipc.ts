@@ -1,13 +1,17 @@
 import type {
   BoardDetail,
   BoardListItem,
+  ClipboardContents,
   CreateBoardInput,
   CreateFolderInput,
   CreateProjectInput,
   FolderListItem,
+  ObjectPatch,
+  Point,
   ProjectSummary,
   ProjectTree,
-  RecentProject
+  RecentProject,
+  Viewport
 } from './types'
 
 /**
@@ -27,10 +31,19 @@ export interface IpcRequests {
   'recent:remove': { args: [path: string]; result: RecentProject[] }
   'tree:get': { args: []; result: ProjectTree }
   'board:get': { args: [id: string]; result: BoardDetail }
-  'board:create': { args: [input: CreateBoardInput]; result: BoardListItem }
+  'board:create': { args: [input: CreateBoardInput]; result: BoardListItem & { objectId: string } }
   'board:rename': { args: [id: string, title: string]; result: void }
   'board:move': { args: [id: string, newParentId: string]; result: void }
-  'board:delete': { args: [id: string]; result: void }
+  /** Returns the board's card id, so the delete can be undone with `objects:restore`. */
+  'board:delete': { args: [id: string]; result: { cardId: string | null } }
+  'board:setViewport': { args: [id: string, viewport: Viewport]; result: void }
+  'objects:update': { args: [patches: ObjectPatch[]]; result: void }
+  'objects:delete': { args: [ids: string[]]; result: void }
+  'objects:restore': { args: [ids: string[]]; result: void }
+  'objects:moveToBoard': { args: [ids: string[], targetBoardId: string, at?: Point]; result: void }
+  'objects:copyTo': { args: [ids: string[], targetBoardId: string, at: Point]; result: string[] }
+  'clipboard:set': { args: [contents: ClipboardContents | null]; result: void }
+  'clipboard:get': { args: []; result: ClipboardContents | null }
   'folder:create': { args: [input: CreateFolderInput]; result: FolderListItem }
   'folder:rename': { args: [id: string, name: string]; result: void }
   'folder:move': { args: [id: string, newParentId: string | null]; result: void }
@@ -65,6 +78,14 @@ export const IPC_CHANNELS = [
   'board:rename',
   'board:move',
   'board:delete',
+  'board:setViewport',
+  'objects:update',
+  'objects:delete',
+  'objects:restore',
+  'objects:moveToBoard',
+  'objects:copyTo',
+  'clipboard:set',
+  'clipboard:get',
   'folder:create',
   'folder:rename',
   'folder:move',

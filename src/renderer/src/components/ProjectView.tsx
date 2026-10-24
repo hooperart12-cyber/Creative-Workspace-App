@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import type { ProjectSummary } from '@shared/types'
 import { useProjectStore } from '../store/projectStore'
 import { boardFromHash, useWorkspaceStore } from '../store/workspaceStore'
-import { BoardGrid } from './BoardGrid'
+import { ArrangeBar, CanvasToolbar, ZoomControl } from '../canvas/CanvasChrome'
+import { CanvasMenu } from '../canvas/CanvasMenu'
+import { CanvasView } from '../canvas/CanvasView'
 import { Breadcrumb } from './Breadcrumb'
 import { SidebarIcon } from './icons'
 import { Sidebar } from './Sidebar'
@@ -98,7 +100,16 @@ export function ProjectView({ project }: { project: ProjectSummary }) {
         {!sidebarCollapsed && <Sidebar />}
         <main className="flex min-w-0 flex-1 flex-col">
           <Breadcrumb />
-          <BoardGrid />
+          <div className="relative min-h-0 flex-1">
+            <CanvasMenu>
+              <div className="h-full w-full">
+                <CanvasView />
+              </div>
+            </CanvasMenu>
+            <CanvasToolbar />
+            <ArrangeBar />
+            <ZoomControl />
+          </div>
         </main>
       </div>
       <WorkspaceDialogs />

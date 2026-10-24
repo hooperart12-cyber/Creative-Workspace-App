@@ -1,5 +1,6 @@
 import { BrowserWindow, dialog, ipcMain, webContents, type IpcMainInvokeEvent } from 'electron'
 import type { IpcChannel, IpcEventChannel, IpcEvents, IpcRequests } from '@shared/ipc'
+import type { ClipboardContents } from '@shared/types'
 import type { Project } from './project/project'
 import type { ProjectRegistry } from './project/projectRegistry'
 import type { RecentProjects } from './project/recentProjects'
@@ -118,7 +119,7 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
 
   handle('board:create', (event, input) => {
     const project = requireProject(event)
-    const board = project.boards.create(input.parentId, input.title)
+    const board = project.boards.create(input.parentId, input.title, input.at)
     broadcastContent(project)
     return board
   })
@@ -144,8 +145,60 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
 
   handle('board:delete', (event, id) => {
     const project = requireProject(event)
+    const cardId = project.boards.cardIdOf(id)
     project.boards.delete(id)
     broadcastContent(project)
+    return { cardId }
+  })
+
+  handle('board:setViewport', (event, id, viewport) => {
+    requireProject(event).boards.setViewport(id, viewport)
+  })
+
+  // Every canvas edit is broadcast so other windows showing the project refresh.
+  handle('objects:update', (event, patches) => {
+    const project = requireProject(event)
+    project.objects.update(patches)
+    broadcastContent(project)
+  })
+
+  handle('objects:delete', (event, ids) => {
+    const project = requireProject(event)
+    project.objects.delete(ids)
+    broadcastContent(project)
+  })
+
+  handle('objects:restore', (event, ids) => {
+    const project = requireProject(event)
+    project.objects.restore(ids)
+    broadcastContent(project)
+  })
+
+  handle('objects:moveToBoard', (event, ids, targetBoardId, at) => {
+    const project = requireProject(event)
+    project.objects.moveToBoard(ids, targetBoardId, at)
+    broadcastContent(project)
+  })
+
+  handle('objects:copyTo', (event, ids, targetBoardId, at) => {
+    const project = requireProject(event)
+    const created = project.objects.copyTo(ids, targetBoardId, at)
+    broadcastContent(project)
+    return created
+  })
+
+  // One clipboard for the whole app, so you can copy in one window and paste in another.
+  // It only holds object ids, and is tied to the project they came from.
+  let clipboard: { projectPath: string; contents: ClipboardContents } | null = null
+
+  handle('clipboard:set', (event, contents) => {
+    const project = requireProject(event)
+    clipboard = contents ? { projectPath: project.path, contents } : null
+  })
+
+  handle('clipboard:get', (event) => {
+    const project = registry.get(event.sender.id)
+    return project && clipboard?.projectPath === project.path ? clipboard.contents : null
   })
 
   handle('folder:create', (event, input) => {

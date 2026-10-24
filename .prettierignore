@@ -3,3 +3,5 @@ dist
 drizzle
 *.md
 package-lock.json
+test-results
+playwright-report
