@@ -14,6 +14,7 @@ It combines infinite visual canvases, interconnected boards, notes, reference im
 | [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md) | Living requirements: the full feature inventory with MVP/Later status per section |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | Architecture decisions with pros and cons (frameworks, database, storage, local vs. cloud) |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Milestones and progress checklist |
+| [`docs/TESTING.md`](docs/TESTING.md) | **How to test the app by hand** (installer download, step-by-step checklists per milestone, reporting bugs) |
 | [`docs/SETUP.md`](docs/SETUP.md) | **Install prerequisites, run, test and build the app**; full dependency list |
 | [`docs/HANDOFF.md`](docs/HANDOFF.md) | Prompt and current-state notes for continuing work in a new AI/dev session |
 

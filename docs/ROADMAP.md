@@ -33,6 +33,12 @@ This is the living progress tracker. **Tick boxes as work is completed** and kee
 - [x] Open a board in a new window (§2); windows stay in sync and fall back gracefully if their board is deleted elsewhere
 - [x] Decision recorded: boards and folders are separate hierarchies (ADR-011, pending team discussion)
 
+## Testing infrastructure (ongoing)
+- [x] Manual test guide with per-milestone checklists (`docs/TESTING.md`), bug/feedback issue templates, PR template
+- [ ] End-to-end UI tests: Playwright driving the real Electron app, automating the TESTING.md checklists, run in CI
+- [ ] Renderer store tests (navigation history, rename flow, cross-window refresh)
+- [ ] Coverage report with a minimum threshold for main-process logic
+
 ## M2 — Canvas Navigation & Manipulation (§4) — *Figma-style*
 - [ ] Pan: Space+drag, middle-mouse drag, scroll/trackpad, arrow keys
 - [ ] Zoom: Ctrl/Cmd+scroll to cursor, +/- keys, zoom % indicator, Shift+1 fit-all, Shift+2 fit-selection, Ctrl+0 to 100%

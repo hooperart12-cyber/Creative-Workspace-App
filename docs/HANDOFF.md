@@ -39,6 +39,8 @@ RULES:
   and Figma for canvas interaction and shortcuts.
 - Keep docs current in the same commit/PR as the code: tick boxes in docs/ROADMAP.md,
   record new decisions in docs/DECISIONS.md, update status badges in docs/REQUIREMENTS.md.
+- Testing: every feature PR adds unit tests for its logic, adds/updates its manual
+  checklist in docs/TESTING.md, and includes a "How to test" section in the PR.
 - Work on feature branches and open PRs; don't push directly to main.
 - Verify your work: run typecheck, lint and tests, and launch the app (`npm run dev`)
   to check the feature actually works before calling it done.
