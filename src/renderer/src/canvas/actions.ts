@@ -27,6 +27,7 @@ import {
   zoomAt
 } from './geometry'
 import type { Command } from './history'
+import { serialQueue } from './queue'
 
 const BOARD_CARD = { width: 200, height: 160 }
 /** Offset for duplicates and repeated pastes, so copies don't hide the original. */
@@ -43,14 +44,22 @@ export const selectedObjects = (): CanvasObject[] => {
   return currentObjects().filter((o) => selection.has(o.id))
 }
 
+/**
+ * Edits run one at a time, in the order they were made: an undo pressed straight after
+ * Delete waits until the delete is saved and recorded, instead of undoing the step before.
+ */
+const enqueue = serialQueue()
+
 /** Runs an edit; on failure shows the error and refetches so the screen matches the data. */
-async function run(edit: () => Promise<void>): Promise<void> {
-  try {
-    await edit()
-  } catch (error) {
-    reportError(error)
-    await workspace().refresh()
-  }
+function run(edit: () => Promise<void>): Promise<void> {
+  return enqueue(async () => {
+    try {
+      await edit()
+    } catch (error) {
+      reportError(error)
+      await workspace().refresh()
+    }
+  })
 }
 
 function record(command: Command): void {
@@ -354,12 +363,18 @@ export function importDroppedFiles(files: File[], at: Point): Promise<void> {
 }
 
 /** Asks for image files and places them at `at` (or the middle of the view, next to what's there). */
-export function addImagesFromPicker(at?: Point): Promise<void> {
+export async function addImagesFromPicker(at?: Point): Promise<void> {
+  // The picker stays open as long as the user likes, so it isn't part of the queued edit.
+  const paths = await api()
+    .invoke('dialog:pickImages')
+    .catch((error: unknown) => {
+      reportError(error)
+      return []
+    })
+  if (paths.length === 0) return
   return run(async () => {
     const board = workspace().board
     if (!board) return
-    const paths = await api().invoke('dialog:pickImages')
-    if (paths.length === 0) return
     const result = await withProgress(() => api().invoke('assets:importFiles', paths))
     await placeImported(result, board.id, at ?? viewCenter(), !at)
   })
@@ -445,10 +460,12 @@ export function resetRotation(ids: string[]): Promise<void> {
 }
 
 /** Saves a copy of an image's original file, exactly as it was imported. */
-export function saveOriginal(object: CanvasObject): Promise<void> {
-  return run(async () => {
-    if (object.asset) await api().invoke('assets:saveOriginal', object.asset.id)
-  })
+export async function saveOriginal(object: CanvasObject): Promise<void> {
+  // Not an edit (nothing to undo), and its save dialog mustn't hold up queued edits.
+  if (!object.asset) return
+  await api()
+    .invoke('assets:saveOriginal', object.asset.id)
+    .catch((error: unknown) => reportError(error))
 }
 
 // ── Arrangement ──────────────────────────────────────────────────────────────

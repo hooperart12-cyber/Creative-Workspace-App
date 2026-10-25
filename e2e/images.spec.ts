@@ -231,10 +231,62 @@ test('drop files onto the canvas; unsupported files explained; delete, undo, dup
   await expect.poll(async () => (await images()).length).toBe(1)
 })
 
+test('a drop right after opening a board lands on the drop point, even if the window paints late', async () => {
+  // A slow or throttled window reports the canvas size late. The canvas must still know its
+  // size and camera straight away, and the camera mustn't jump once the report arrives.
+  await t.page.context().addInitScript(() => {
+    const Native = window.ResizeObserver
+    window.ResizeObserver = class extends Native {
+      constructor(callback: ResizeObserverCallback) {
+        super((entries, observer) =>
+          setTimeout(() => {
+            callback(entries, observer)
+            ;(window as never as { lateResizeReports: number }).lateResizeReports++
+          }, 1500)
+        )
+      }
+    }
+    ;(window as never as { lateResizeReports: number }).lateResizeReports = 0
+  })
+  await createProject(t.page, t.projectsDir, 'Early drop')
+  const png = readFileSync(await makePng('early.png', 400, 200)).toString('base64')
+  const canvas = (await t.page.getByTestId('canvas').boundingBox())!
+  await t.page.evaluate(
+    ({ b64, x, y }) => {
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
+      const data = new DataTransfer()
+      data.items.add(new File([bytes], 'early.png', { type: 'image/png' }))
+      const el = document.querySelector('[data-testid="canvas"]')!
+      const init = { dataTransfer: data, bubbles: true, cancelable: true, clientX: x, clientY: y }
+      el.dispatchEvent(new DragEvent('dragover', init))
+      el.dispatchEvent(new DragEvent('drop', init))
+    },
+    { b64: png, x: canvas.x + 300, y: canvas.y + 250 }
+  )
+  await expect.poll(async () => (await images()).length).toBe(1)
+  const camera = () =>
+    t.page.evaluate(() => (window as never as CanvasWindow).__cw.canvas.getState().viewport)
+  const before = await camera()
+  // Once the late size report arrives, the view stays where it was.
+  await t.page.waitForFunction(
+    () => (window as never as { lateResizeReports: number }).lateResizeReports > 0
+  )
+  expect(await camera()).toEqual(before)
+  const [image] = await images()
+  const center = await toScreen(t.page, { x: image.x + 200, y: image.y + 100 })
+  expect(Math.abs(center.x - (canvas.x + 300))).toBeLessThan(2)
+  expect(Math.abs(center.y - (canvas.y + 250))).toBeLessThan(2)
+})
+
+type CanvasWindow = { __cw: { canvas: { getState: () => { viewport: unknown } } } }
+
 test('paste screenshots, Explorer files and copied images', async () => {
   await createProject(t.page, t.projectsDir, 'Paste')
+  // Click empty canvas (the floating toolbar sits in the top-left corner) so shortcuts go to it.
   const canvas = (await t.page.getByTestId('canvas').boundingBox())!
-  await t.page.mouse.click(canvas.x + 50, canvas.y + 50)
+  await t.page.mouse.click(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2)
+  await expect(t.page.getByTestId('canvas')).toBeFocused()
+  expect(await objects(t.page)).toHaveLength(0)
 
   // A screenshot or an image copied in a browser: a bitmap on the clipboard.
   const screenshot = readFileSync(await makePng('shot.png', 300, 200)).toString('base64')

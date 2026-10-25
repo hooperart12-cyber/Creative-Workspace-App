@@ -98,6 +98,8 @@ Use a fresh project (e.g. `Image Test`) with one or two board cards on it.
 | 3A.20 | Select 3 images of different shapes (one rotated). Try align, **Distribute** and **Same width / Same height** in the floating bar. | They line up by their **visible** edges. Images keep their shape: "Same width" makes them as wide as the widest, and their heights follow. |
 | 3A.21 | On images, try everything from M2: move, arrow-key nudge, group, lock, layer order, copy/paste, duplicate, cut and paste on another board, Delete + Ctrl+Z. | All work as they do for board cards. Copies appear instantly (nothing is imported again). |
 | 3A.22 | Drag an image onto a board card. | It moves into that board. |
+| 3A.22a | Add 3 images one at a time, delete one, then press **Ctrl+Z** 4 times **as fast as you can**. Then **Ctrl+Shift+Z** twice quickly. | Every key press counts: the deleted image comes back and all 3 imports are undone (empty board), then two images return. Nothing is skipped or undone out of order. |
+| 3A.22b | Open a different project (or relaunch the app) and, **immediately** as its board appears, drop an image file onto the canvas. | It lands centred where you dropped it, and the view doesn't jump afterwards. |
 
 **Full-size viewer**
 

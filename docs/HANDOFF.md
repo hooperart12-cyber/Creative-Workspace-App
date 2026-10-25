@@ -98,6 +98,9 @@ RULES:
 - **Dev-only:** after hot-reloading `useCanvasShortcuts.ts`, Space+drag may stop working until the page reloads (duplicate module state). Not an issue in builds.
 - **Testing tips:**
   - Drive the canvas with real input events; positions come from `window.__cw` (see `e2e/app.ts`).
+  - The floating toolbar covers the canvas's top-left corner: to focus the canvas, click its middle (or another empty spot) and check `toBeFocused()`.
+  - Edits in `actions.ts` run one at a time through a queue (`canvas/queue.ts`), and so do undo/redo steps. Don't call one queued action from inside another (it would wait for itself).
+  - CI machines can paint late; the canvas measures itself before the first paint, so tests may interact as soon as the canvas exists.
   - New windows are listed first in DevTools `/json/list`.
   - Windows without OS focus don't fire blur, so use `Emulation.setFocusEmulationEnabled`.
 

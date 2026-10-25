@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Layer, Line, Rect, Shape, Stage, Transformer } from 'react-konva'
 import type Konva from 'konva'
 import type { CanvasObject, Point } from '@shared/types'
@@ -72,12 +72,17 @@ export function CanvasView() {
 
   useCanvasShortcuts()
 
-  // Track the canvas size.
-  useEffect(() => {
+  // Track the canvas size. It's measured before the first paint too: ResizeObserver reports
+  // later (much later in a throttled window), and until then the camera isn't set up, so a
+  // drop or paste would land in the wrong place and then the first-open "fit" would move it.
+  useLayoutEffect(() => {
     const el = containerEl
     if (!el) return
+    const { setViewSize } = useCanvasStore.getState()
+    const rect = el.getBoundingClientRect()
+    setViewSize({ width: Math.round(rect.width), height: Math.round(rect.height) })
     const observer = new ResizeObserver(([entry]) => {
-      useCanvasStore.getState().setViewSize({
+      setViewSize({
         width: Math.round(entry.contentRect.width),
         height: Math.round(entry.contentRect.height)
       })
@@ -89,7 +94,7 @@ export function CanvasView() {
   // Opening a board: restore its saved camera, or fit its content the first time.
   const boardId = board?.id
   const hasSize = viewSize.width > 0
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!boardId || !hasSize) return
     const { board: current } = useWorkspaceStore.getState()
     const { setViewport, setSelection, viewSize: size } = useCanvasStore.getState()
