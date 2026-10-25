@@ -80,6 +80,9 @@ export function ItemMenu({
             </>
           ) : (
             <>
+              <Item onSelect={() => useWorkspaceStore.getState().openLibrary(target.id)}>
+                Open in library
+              </Item>
               <Item onSelect={() => void createFolder(target.id)}>New folder inside</Item>
               <Item onSelect={() => setRenaming({ ...target, source })}>Rename</Item>
               <Item onSelect={() => setDialog({ kind: 'move', target })}>Move to…</Item>

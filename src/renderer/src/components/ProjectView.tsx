@@ -11,6 +11,8 @@ import { ImageViewer } from '../canvas/ImageViewer'
 import { ExpandedNoteEditor } from '../notes/ExpandedNoteEditor'
 import { useCanvasStore } from '../store/canvasStore'
 import { isEditingNote, useNoteStore } from '../notes/noteStore'
+import { LibraryView } from '../library/LibraryView'
+import { TrashView } from '../library/TrashView'
 import { Breadcrumb } from './Breadcrumb'
 import { SidebarIcon } from './icons'
 import { Sidebar } from './Sidebar'
@@ -26,6 +28,8 @@ export function ProjectView({ project }: { project: ProjectSummary }) {
   const cancelled = useRef(false)
   const sidebarCollapsed = useWorkspaceStore((s) => s.sidebarCollapsed)
   const toggleSidebar = useWorkspaceStore((s) => s.toggleSidebar)
+  const surface = useWorkspaceStore((s) => s.surface)
+  const libraryFocusId = useWorkspaceStore((s) => s.libraryFocusId)
 
   useEffect(() => {
     void useWorkspaceStore.getState().load(boardFromHash())
@@ -124,16 +128,20 @@ export function ProjectView({ project }: { project: ProjectSummary }) {
       <div className="flex min-h-0 flex-1">
         {!sidebarCollapsed && <Sidebar />}
         <main className="flex min-w-0 flex-1 flex-col">
-          <Breadcrumb />
-          <div className="relative min-h-0 flex-1">
-            <CanvasMenu>
-              <div className="h-full w-full">
-                <CanvasView />
-              </div>
-            </CanvasMenu>
-            <CanvasToolbar />
-            <ArrangeBar />
-            <ZoomControl />
+          {surface === 'canvas' && <Breadcrumb />}
+          <div className="relative flex min-h-0 flex-1 flex-col">
+            <div className={surface === 'canvas' ? 'relative min-h-0 flex-1' : 'hidden'}>
+              <CanvasMenu>
+                <div className="h-full w-full">
+                  <CanvasView />
+                </div>
+              </CanvasMenu>
+              <CanvasToolbar />
+              <ArrangeBar />
+              <ZoomControl />
+            </div>
+            {surface === 'library' && <LibraryView key={libraryFocusId ?? 'library'} />}
+            {surface === 'trash' && <TrashView />}
           </div>
         </main>
       </div>

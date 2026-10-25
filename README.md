@@ -4,7 +4,7 @@ A PC desktop creative workspace, inspired by Milanote (boards and organization) 
 
 It combines infinite visual canvases, interconnected boards, notes, reference images, document viewing, artwork management, and project organization in one flexible environment. The goal is to support the whole creative process, from brainstorming and research through planning, review, and organizing finished work, without forcing a rigid workflow.
 
-> **Status:** M3C complete: PDFs open in a read-only reader (pages, search, outline, two-page spreads) and other files are stored as cards with an optional preview. M3B added rich text notes. M3A added images (JPG, PNG and WebP). All sit on M2's canvas and M1's nested boards and folders. Next up is M4 (the asset library).
+> **Status:** M4 complete: a project library with folders, search, grid and list, import (including a whole folder), and Trash. The same stored file can appear on many boards. M3C added PDFs and other files, M3B rich text notes, and M3A images, on M2's canvas and M1's boards. Next up is M5 (save status, backups, command palette, project-wide search).
 > This README summarizes the full feature vision. The complete, **living** specification is [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md). The original PDF (v1.0) is archived at [`docs/archive/`](docs/archive/Creative%20Workspace%20App%20v1.0.pdf).
 
 ## Project Docs
@@ -185,7 +185,7 @@ Spec stages 1–4 (inventory, feasibility, scope, architecture) are **done**. St
 2. ~~**M1 — Nested boards and folders** (§3).~~ ✅ Done
 3. ~~**M2 — Canvas navigation and manipulation** (§4).~~ ✅ Done
 4. **M3 — Board objects** (§5, §7): ~~M3A images (JPEG/JPG, PNG, WebP)~~ ✅ Done; ~~M3B rich text notes~~ ✅ Done; ~~M3C PDFs and file cards~~ ✅ Done. (Board covers moved to later.)
-5. **M4 — Project asset library** (§8).
+5. ~~**M4 — Project asset library** (§8).~~ ✅ Done.
 6. **M5 — Reliability polish.** Autosave status, backups, command palette, search.
 
 ## Running Locally

@@ -10,7 +10,6 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { eq } from 'drizzle-orm'
 import sharp from 'sharp'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { assets } from '../db/schema'
@@ -76,8 +75,7 @@ describe('AssetRepository.importFile', () => {
       bytes: bytes.length,
       width: 640,
       height: 480,
-      hasAlpha: true,
-      folderId: null
+      hasAlpha: true
     })
     const stored = project.assets.originalPath(asset.sha256, asset.ext)
     expect(stored).toBe(
@@ -120,13 +118,17 @@ describe('AssetRepository.importFile', () => {
     ])
   })
 
-  it('brings a trashed asset back when the same file is imported again', async () => {
+  it('keeps a trashed library entry trashed when the same file is imported again', async () => {
     const { path } = await makeImage('a.png', { width: 50, height: 50, format: 'png' })
     const first = await project.assets.importFile(path)
-    project.db.update(assets).set({ deletedAt: new Date() }).where(eq(assets.id, first.id)).run()
+    const listed = project.library.list({ folderId: null, scope: 'folder', direct: true })
+    project.library.trash([listed.entries[0].id])
     const again = await project.assets.importFile(path)
     expect(again.id).toBe(first.id)
-    expect(project.db.select().from(assets).get()?.deletedAt).toBeNull()
+    const active = project.library.list({ folderId: null, scope: 'folder', direct: true })
+    expect(active.total).toBe(1)
+    expect(active.entries[0].id).not.toBe(listed.entries[0].id)
+    expect(project.library.trashList('entry').map((item) => item.id)).toEqual([listed.entries[0].id])
   })
 
   it('restores a stored original that went missing on disk', async () => {

@@ -50,6 +50,46 @@ To test a specific pull request instead of `main`: `git fetch origin && git chec
 
 Work through each step, and tick the box if the **Expected** result happens. If it doesn't, write down the step number and report it (Part 3). Keyboard shortcuts say **Ctrl** for Windows; on macOS use **Cmd** where Ctrl is listed, and **Option** for Alt.
 
+### M4 — Project asset library (≈35 minutes)
+
+Use a fresh project. Have ready: a folder of mixed files (a JPG, a PDF, a text file, and an empty subfolder), one file larger than 100 MB if you have one, and a second copy of the JPG under another name.
+
+**Browsing**
+
+| # | Do this | Expected |
+|---|---|---|
+| 4.1 | In the sidebar, click **Open library**. | The canvas is replaced by the library. Go back to the canvas and the view is where you left it. |
+| 4.2 | Expand a folder in the sidebar. | Its files are listed there (name and a small mark). There is a filter box. |
+| 4.3 | Switch between **Grid** and **List**, and change the sort. | The same files stay selected. Name, date, size, and type each sort both ways. |
+| 4.4 | Search, then switch between **This folder** and **Whole library**. | The words you typed stay. This folder includes subfolders. Whole library searches everywhere. |
+| 4.5 | Turn on **Unfiled**, then click one file. | Only files that are not in a folder show. The details list the original filename, type, size, pixel size or page count, import date, and folder. |
+
+**Import**
+
+| # | Do this | Expected |
+|---|---|---|
+| 4.6 | Choose **Import**, pick a destination folder, leave **Skip** and **Keep folders**, and choose the mixed folder. | Files are copied in. Nothing new appears on the board. The empty subfolder is created. Progress counts found, imported, skipped, and failed. |
+| 4.7 | Import the same folder again with **Skip**. | The message says the files are already in the library. No second copy is stored. |
+| 4.8 | Import the renamed JPG with **Add another entry**. | A second name appears. Storage still counts the bytes once. |
+| 4.9 | Import two different files that share a name. | Both are kept. |
+| 4.10 | Start an import and press **Cancel** after it has begun. | Files already finished stay. The message does not claim the rest were imported. |
+| 4.11 | If you have a file over 100 MB, import it. | It is imported, and a message says it is over 100 MB. |
+| 4.12 | Drop a library file onto the canvas. Drag the same file from the sidebar onto another board. | Each board gets a card. The project still has one stored original. |
+| 4.13 | Delete one of those cards and press Ctrl+Z. | The card goes away and comes back. The library file stays the whole time. |
+| 4.14 | Move the library file into another folder, and rename it. | Both cards still show the picture. Ctrl+Z undoes the rename and the move. |
+
+**Folders and trash**
+
+| # | Do this | Expected |
+|---|---|---|
+| 4.15 | Trash a folder that contains files, including one that is on a board. | The dialog tells you how many files and folders, and that board appearances stay. The folder and its files leave the library. The card stays. |
+| 4.16 | Choose **Delete folder only** when a child has the same name as something in the parent. | You can cancel, or keep both and see a “ (2)” name. |
+| 4.17 | Open **Trash**. Restore the folder. | The folder and the files that were inside it come back. |
+| 4.18 | Trash a folder that has a folder inside it. In Trash, restore only the inner folder. | You are asked where to put it, because its parent is still in Trash. Choosing Library puts it at the top. |
+| 4.19 | Trash a file that is on a board, then **Delete permanently**. | The file row is gone. The stored file stays, and the message says a board still uses it. |
+| 4.20 | **Empty trash** after removing the card as well and trashing the file again. | Confirming removes the stored file. This cannot be undone. |
+| 4.21 | Open a second window, trash a file there, and press Ctrl+Z in the first window for an older library action. | The first window does not undo the other window’s trash. |
+
 ### M3C — PDFs and other files (≈40 minutes)
 
 Use a fresh project. Have ready: a text PDF of a few pages that has a table of contents, a long PDF (a few hundred pages if you have one), a PDF that is only scanned images, a password-protected PDF if you have one, a JPG or PNG, and a few other files (for example `.txt`, `.psd`, `.clip`, `.zip`, and an `.exe` or `.bat` you can spare — they will not be run).

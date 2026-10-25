@@ -583,7 +583,11 @@ export function CanvasView() {
 
   const onDragOver = (e: React.DragEvent) => {
     const types = e.dataTransfer.types
-    if (types.includes(NEW_OBJECT_MIME) || types.includes('Files')) {
+    if (
+      types.includes(NEW_OBJECT_MIME) ||
+      types.includes('Files') ||
+      types.includes('application/x-cw-entries')
+    ) {
       e.preventDefault()
       e.dataTransfer.dropEffect = 'copy'
     }
@@ -591,6 +595,20 @@ export function CanvasView() {
 
   const onDrop = (e: React.DragEvent) => {
     const world = screenToWorld(pointer(e), useCanvasStore.getState().viewport)
+    const entryPayload = e.dataTransfer.getData('application/x-cw-entries')
+    if (entryPayload) {
+      e.preventDefault()
+      try {
+        const items = JSON.parse(entryPayload) as { assetId: string }[]
+        void actions.placeExistingAssets(
+          items.map((item) => item.assetId),
+          world
+        )
+      } catch {
+        // A drop that isn't a library entry is ignored.
+      }
+      return
+    }
     if (e.dataTransfer.files.length > 0) {
       e.preventDefault()
       void actions.importDroppedFiles([...e.dataTransfer.files], world)

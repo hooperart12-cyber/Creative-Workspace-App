@@ -1,5 +1,5 @@
-import { useMemo, useState, type ReactNode } from 'react'
-import type { BoardListItem, FolderListItem } from '@shared/types'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import type { BoardListItem, FolderListItem, LibraryEntry } from '@shared/types'
 import * as actions from '../canvas/actions'
 import { buildTree, descendantIds, type TreeNode } from '../lib/tree'
 import { useCanvasStore } from '../store/canvasStore'
@@ -10,6 +10,7 @@ import { ItemMenu } from './ItemMenu'
 
 const BOARD_MIME = 'application/x-cw-board'
 const FOLDER_MIME = 'application/x-cw-folder'
+const ENTRY_MIME = 'application/x-cw-entries'
 
 /** The tree item being dragged in the sidebar (dataTransfer can't be read during dragover). */
 let dragging: { type: 'board' | 'folder'; id: string } | null = null
@@ -74,6 +75,9 @@ export function Sidebar() {
   const tree = useWorkspaceStore((s) => s.tree)
   const createFolder = useWorkspaceStore((s) => s.createFolder)
   const libraryDrop = useTreeDrop('folder', null)
+  const filter = useWorkspaceStore((s) => s.sidebarFilter)
+  const setSidebarFilter = useWorkspaceStore((s) => s.setSidebarFilter)
+  const openLibrary = useWorkspaceStore((s) => s.openLibrary)
 
   const boardRoots = useMemo(
     () => buildTree(tree?.boards ?? [], (b) => b.parentBoardId),
@@ -106,6 +110,25 @@ export function Sidebar() {
         dropHighlight={libraryDrop.over}
         dropHandlers={libraryDrop.handlers}
       >
+        <li className="px-3 pb-1">
+          <input
+            value={filter}
+            onChange={(e) => setSidebarFilter(e.target.value)}
+            placeholder="Filter"
+            aria-label="Filter library"
+            className="w-full rounded border border-line bg-canvas px-2 py-1 text-xs"
+          />
+        </li>
+        <li>
+          <button
+            type="button"
+            onClick={() => openLibrary(null)}
+            className="w-full px-4 py-1 text-left text-xs text-muted hover:bg-canvas hover:text-ink"
+          >
+            Open library
+          </button>
+        </li>
+        <EntryList folderId={null} depth={0} />
         {folderRoots.length === 0 ? (
           <p className="px-4 py-1 text-xs text-muted">
             Folders organize imported images and files.
@@ -282,7 +305,7 @@ function FolderRow({ node, depth }: { node: TreeNode<FolderListItem>; depth: num
   const renaming = useWorkspaceStore(
     (s) => s.renaming?.type === 'folder' && s.renaming.id === node.item.id
   )
-  const selectFolder = useWorkspaceStore((s) => s.selectFolder)
+  const openLibrary = useWorkspaceStore((s) => s.openLibrary)
   const renameFolder = useWorkspaceStore((s) => s.renameFolder)
   const setRenaming = useWorkspaceStore((s) => s.setRenaming)
   const treeDrop = useTreeDrop('folder', node.item.id)
@@ -293,7 +316,7 @@ function FolderRow({ node, depth }: { node: TreeNode<FolderListItem>; depth: num
         <div>
           <Row
             depth={depth}
-            hasChildren={node.children.length > 0}
+            hasChildren
             expanded={expanded}
             onToggle={() => setExpanded(!expanded)}
             active={active}
@@ -302,7 +325,7 @@ function FolderRow({ node, depth }: { node: TreeNode<FolderListItem>; depth: num
               ...treeDrop.handlers,
               ...(renaming ? {} : dragSource('folder', node.item.id))
             }}
-            onClick={() => selectFolder(node.item.id)}
+            onClick={() => openLibrary(node.item.id)}
             icon={<FolderIcon width={14} height={14} />}
             label={
               renaming ? (
@@ -319,13 +342,78 @@ function FolderRow({ node, depth }: { node: TreeNode<FolderListItem>; depth: num
           />
         </div>
       </ItemMenu>
-      {expanded && node.children.length > 0 && (
+      {expanded && (
         <ul role="group">
+          <EntryList folderId={node.item.id} depth={depth + 1} />
           {node.children.map((child) => (
             <FolderRow key={child.item.id} node={child} depth={depth + 1} />
           ))}
         </ul>
       )}
     </li>
+  )
+}
+
+function EntryList({ folderId, depth }: { folderId: string | null; depth: number }) {
+  const filter = useWorkspaceStore((s) => s.sidebarFilter)
+  const epoch = useWorkspaceStore((s) => s.sidebarEpoch)
+  const openLibrary = useWorkspaceStore((s) => s.openLibrary)
+  const [entries, setEntries] = useState<LibraryEntry[]>([])
+  const [more, setMore] = useState(0)
+
+  useEffect(() => {
+    let cancel = false
+    void window.api
+      .invoke('library:list', {
+        folderId,
+        scope: 'folder',
+        direct: true,
+        query: filter,
+        sort: 'name',
+        direction: 'asc',
+        limit: 40
+      })
+      .then((page) => {
+        if (cancel) return
+        setEntries(page.entries)
+        setMore(Math.max(0, page.total - page.entries.length))
+      })
+      .catch(() => {})
+    return () => {
+      cancel = true
+    }
+  }, [folderId, filter, epoch])
+
+  if (entries.length === 0) return null
+  return (
+    <>
+      {entries.map((entry) => (
+        <li key={entry.id}>
+          <button
+            type="button"
+            draggable
+            aria-label={entry.name}
+            onClick={() => openLibrary(folderId, entry.id)}
+            onDragStart={(event) => {
+              event.dataTransfer.setData(
+                ENTRY_MIME,
+                JSON.stringify([{ id: entry.id, assetId: entry.assetId }])
+              )
+              event.dataTransfer.effectAllowed = 'copy'
+            }}
+            style={{ paddingLeft: 8 + depth * 14 }}
+            className="flex w-full items-center gap-2 py-1 pr-3 text-left hover:bg-canvas"
+          >
+            <span className="w-4 shrink-0 text-[10px] text-muted uppercase">{entry.asset.ext}</span>
+            <span className="truncate">{entry.name}</span>
+          </button>
+        </li>
+      ))}
+      {more > 0 && (
+        <li className="px-4 py-1 text-xs text-muted" style={{ paddingLeft: 8 + depth * 14 }}>
+          {more} more in the library
+        </li>
+      )}
+    </>
   )
 }

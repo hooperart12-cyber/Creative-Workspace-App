@@ -67,13 +67,36 @@ export const assets = sqliteTable(
     hasAlpha: integer('has_alpha', { mode: 'boolean' }),
     /** Set for PDFs once the file can be read. Null for other files and locked PDFs. */
     pageCount: integer('page_count'),
-    folderId: text('folder_id').references(() => folders.id),
-    /** Manually attached preview for formats the app cannot render (§7). */
+    /** Manually attached preview for formats the app cannot render (§7). Shared by every entry. */
     previewAssetId: text('preview_asset_id').references((): AnySQLiteColumn => assets.id),
     ...timestamps,
     ...softDelete
   },
-  (t) => [uniqueIndex('assets_sha256_idx').on(t.sha256), index('assets_folder_idx').on(t.folderId)]
+  (t) => [uniqueIndex('assets_sha256_idx').on(t.sha256)]
+)
+
+/**
+ * A named place for a stored original (ADR-016). Several entries can share one asset.
+ * Trashing an entry does not hide board appearances of that asset.
+ */
+export const libraryEntries = sqliteTable(
+  'library_entries',
+  {
+    id: text('id').primaryKey(),
+    assetId: text('asset_id')
+      .notNull()
+      .references(() => assets.id),
+    folderId: text('folder_id').references(() => folders.id),
+    name: text('name').notNull(),
+    ...timestamps,
+    ...softDelete
+  },
+  (t) => [
+    index('library_entries_folder_idx').on(t.folderId),
+    index('library_entries_asset_idx').on(t.assetId),
+    index('library_entries_deleted_idx').on(t.deletedAt),
+    index('library_entries_name_idx').on(t.name)
+  ]
 )
 
 /** Boards (§3). Nested via parent_board_id; the main board has no parent. */

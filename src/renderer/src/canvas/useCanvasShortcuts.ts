@@ -55,9 +55,16 @@ export function useCanvasShortcuts(): void {
         }
       }
       if (keysBelongElsewhere(e)) return
+      const mod = e.ctrlKey || e.metaKey
+      if (useWorkspaceStore.getState().surface !== 'canvas') {
+        if (mod && e.code === 'KeyZ') {
+          e.preventDefault()
+          void (e.shiftKey ? actions.redo() : actions.undo())
+        }
+        return
+      }
       const canvas = useCanvasStore.getState()
       const workspace = useWorkspaceStore.getState()
-      const mod = e.ctrlKey || e.metaKey
       // Plain keys (Space, Enter, Delete, arrows) on a focused button or tree row belong to it.
       const onControl = (e.target as HTMLElement | null)?.closest('button, a, [role="treeitem"]')
       if (onControl && !mod) return

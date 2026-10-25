@@ -42,6 +42,7 @@ function send<E extends IpcEventChannel>(
 }
 
 export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentProjects): void {
+  const importCancel = new Map<number, { cancelled: boolean }>()
   const requireProject = (event: IpcMainInvokeEvent): Project => {
     const project = registry.get(event.sender.id)
     if (!project) throw new Error('No project is open in this window.')
@@ -188,9 +189,9 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
     broadcastContent(project)
   })
 
-  handle('objects:restore', (event, ids) => {
+  handle('objects:restore', (event, ids, boardId) => {
     const project = requireProject(event)
-    project.objects.restore(ids)
+    project.objects.restore(ids, boardId)
     broadcastContent(project)
   })
 
@@ -396,10 +397,129 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
     broadcastContent(project)
   })
 
-  handle('folder:delete', (event, id) => {
+  handle('folder:delete', (event, id, mode = 'tree', renameConflicts = false) => {
     const project = requireProject(event)
-    project.folders.delete(id)
+    const renamed =
+      mode === 'dissolve' ? project.library.dissolveFolder(id, renameConflicts).renamed : []
+    if (mode !== 'dissolve') project.folders.delete(id)
     broadcastContent(project)
+    return { renamed }
+  })
+
+  handle('folder:deletePreview', (event, id) => {
+    const project = requireProject(event)
+    return project.library.folderPreview(id)
+  })
+
+  handle('library:list', (event, query) => requireProject(event).library.list(query))
+  handle('library:details', (event, id) => requireProject(event).library.details(id))
+  handle('library:rename', (event, id, name) => {
+    const project = requireProject(event)
+    const previous = project.library.rename(id, name)
+    broadcastContent(project)
+    return previous
+  })
+  handle('library:move', (event, ids, folderId) => {
+    const project = requireProject(event)
+    const previous = project.library.move(ids, folderId)
+    broadcastContent(project)
+    return previous
+  })
+  handle('library:trash', (event, ids) => {
+    const project = requireProject(event)
+    const result = project.library.trash(ids)
+    broadcastContent(project)
+    return result
+  })
+  handle('library:restore', (event, ids, destinationFolderId) => {
+    const project = requireProject(event)
+    const result = project.library.restoreEntries(ids, destinationFolderId)
+    broadcastContent(project)
+    return result
+  })
+  handle('library:entriesForAsset', (event, assetId) =>
+    requireProject(event).library.entriesForAsset(assetId)
+  )
+  handle('library:storage', async (event) => {
+    const project = requireProject(event)
+    return project.library.storage(await project.assets.thumbnailBytes())
+  })
+
+  const runImport = async (
+    event: IpcMainInvokeEvent,
+    work: (signal: { cancelled: boolean }) => Promise<import('@shared/types').ImportResult>
+  ) => {
+    const project = requireProject(event)
+    const signal = { cancelled: false }
+    importCancel.set(event.sender.id, signal)
+    try {
+      const result = await work(signal)
+      broadcastContent(project)
+      return result
+    } finally {
+      importCancel.delete(event.sender.id)
+    }
+  }
+
+  handle('library:importFiles', (event, paths, options) =>
+    runImport(event, (signal) =>
+      requireProject(event).assets.importPaths(paths, {
+        ...options,
+        signal,
+        onProgress: (progress) => send(event.sender.id, 'library:importProgress', progress)
+      })
+    )
+  )
+  handle('library:importTree', (event, root, options) =>
+    runImport(event, (signal) =>
+      requireProject(event).assets.importTree(root, {
+        ...options,
+        signal,
+        onProgress: (progress) => send(event.sender.id, 'library:importProgress', progress)
+      })
+    )
+  )
+  handle('library:cancelImport', (event) => {
+    const signal = importCancel.get(event.sender.id)
+    if (signal) signal.cancelled = true
+  })
+
+  const finishPurge = async (project: Project, result: ReturnType<Project['library']['purge']>) => {
+    const unlinkErrors: string[] = []
+    for (const file of result.removedFiles) {
+      try {
+        await project.assets.deleteStoredFiles(file.sha256, file.ext)
+      } catch (error) {
+        unlinkErrors.push(error instanceof Error ? error.message : String(error))
+      }
+    }
+    broadcastContent(project)
+    return { filesDeleted: result.filesDeleted, filesKept: result.filesKept, unlinkErrors }
+  }
+
+  handle('trash:list', (event, kind) => requireProject(event).library.trashList(kind))
+  handle('trash:restoreFolders', (event, ids, destinationParentId) => {
+    const project = requireProject(event)
+    const result = project.library.restoreFolders(ids, destinationParentId)
+    broadcastContent(project)
+    return result
+  })
+  handle('trash:purge', async (event, input) => {
+    const project = requireProject(event)
+    return finishPurge(project, project.library.purge(input))
+  })
+  handle('trash:empty', async (event) => {
+    const project = requireProject(event)
+    return finishPurge(project, project.library.emptyTrash())
+  })
+
+  handle('dialog:pickFolder', async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)!
+    const result = await dialog.showOpenDialog(window, {
+      title: 'Choose a folder to import',
+      properties: ['openDirectory']
+    })
+    return result.canceled ? null : result.filePaths[0]
   })
 
   handle('recent:list', () => recent.list())
