@@ -78,7 +78,7 @@ function ViewerContent({
   // A state ref: the dialog's portal mounts its content after this component's first render.
   const [area, setArea] = useState<HTMLDivElement | null>(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
-  const openedAt = useRef(0)
+  const pressesInside = useRef(0)
   // null = fit to window (and keep fitting when the window is resized).
   const [manual, setManual] = useState<View | null>(null)
   const [originalLoaded, setOriginalLoaded] = useState(false)
@@ -104,10 +104,6 @@ function ViewerContent({
   useLayoutEffect(() => {
     viewRef.current = view
   })
-
-  useEffect(() => {
-    openedAt.current = performance.now()
-  }, [])
 
   useLayoutEffect(() => {
     const el = area
@@ -265,6 +261,7 @@ function ViewerContent({
           className="relative min-h-0 flex-1 cursor-grab overflow-hidden active:cursor-grabbing"
           onPointerDown={(e) => {
             if (e.button !== 0) return
+            pressesInside.current++
             e.currentTarget.setPointerCapture(e.pointerId)
             const p = local(e)
             pan.current = { pointerId: e.pointerId, startX: p.x, startY: p.y, view }
@@ -278,8 +275,10 @@ function ViewerContent({
           onPointerUp={() => (pan.current = null)}
           onPointerCancel={() => (pan.current = null)}
           onDoubleClick={(e) => {
-            // The double-click that opened the viewer on the canvas also arrives here.
-            if (performance.now() - openedAt.current < 500) return
+            // The double-click that opened the viewer on the canvas also arrives here, and
+            // one of its presses may have landed in here already: only count double-clicks
+            // made entirely inside the viewer.
+            if (pressesInside.current < 2) return
             if (fitted) zoomAt(1, local(e))
             else setManual(null)
           }}

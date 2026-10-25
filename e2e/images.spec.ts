@@ -319,6 +319,32 @@ test('paste screenshots, Explorer files and copied images', async () => {
   }
 })
 
+test('the viewer ignores the double-click that opened it, even on a slow machine', async () => {
+  await createProject(t.page, t.projectsDir, 'Viewer clicks')
+  await addImageWithToolbar(await makePng('artwork.png', 2400, 1200))
+  const [image] = await images()
+  // Click to select, then double-click: the canvas sees its double-click on the first two
+  // presses and opens the viewer, so the last press lands in the viewer.
+  const c = await clickImage(image.id)
+  await t.page.mouse.click(c.x, c.y)
+  const viewer = t.page.getByRole('dialog', { name: 'artwork.png' })
+  await expect(viewer).toBeVisible()
+  const fit = viewer.getByRole('button', { name: 'Fit' })
+  await expect(fit).toHaveAttribute('aria-pressed', 'true')
+  // A busy machine delivers that last press late; it still isn't a double-click in the viewer.
+  await t.page.waitForTimeout(600)
+  await t.page.mouse.down({ clickCount: 2 })
+  await t.page.mouse.up({ clickCount: 2 })
+  await expect(fit).toHaveAttribute('aria-pressed', 'true')
+
+  // A real double-click in the viewer toggles between 100% and fit.
+  await t.page.mouse.dblclick(c.x, c.y)
+  await expect(viewer.getByLabel('Zoom level')).toHaveText('100%')
+  await expect(fit).toHaveAttribute('aria-pressed', 'false')
+  await t.page.mouse.dblclick(c.x, c.y)
+  await expect(fit).toHaveAttribute('aria-pressed', 'true')
+})
+
 test('full-size viewer: open, download the original, close; second window shows images', async () => {
   await createProject(t.page, t.projectsDir, 'Viewer')
   const source = await makePng('artwork.png', 2400, 1200)

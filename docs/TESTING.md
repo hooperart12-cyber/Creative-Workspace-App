@@ -107,6 +107,7 @@ Use a fresh project (e.g. `Image Test`) with one or two board cards on it.
 |---|---|---|
 | 3A.23 | Double-click an image (or select it and press **Enter**, or right-click → **View full size**). | A dark full-window viewer opens with the image fitted to the window. The top shows the file name, pixel size, format and file size. |
 | 3A.24 | Scroll to zoom, drag to pan; try **Fit**, **100%**, double-click, and the keys **+**, **−**, **1**, **F**. | Zoom follows the pointer. Double-click toggles between 100% (at that spot) and fit. Zoomed right in, pixels look crisp and square (not blurry). Transparent areas show a grey checkerboard. |
+| 3A.24a | Close the viewer. Click an image once, then straight away double-click it (three quick clicks). | The viewer opens **fitted** (below 100% for a big image) and stays fitted. Double-clicking inside the viewer still toggles 100% / fit. |
 | 3A.25 | Press **←** / **→** (or the arrow buttons). | Steps through the images on this board ("2 of 5"). |
 | 3A.26 | Click **Download original** and save it somewhere. Also try right-click on the canvas → **Save original as…**. | The saved file is **identical** to the file you imported: same size in bytes (right-click → Properties), opens in your art app at full quality with its transparency. |
 | 3A.27 | Press **Esc** (or ✕). While the viewer was open, did **Delete** or the arrow keys change the board? | The viewer closes. Keys pressed in the viewer never edit the board. |
