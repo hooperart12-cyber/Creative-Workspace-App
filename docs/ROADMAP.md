@@ -61,12 +61,24 @@ This is the living progress tracker. **Tick boxes as work is completed** and kee
 - [x] Custom app menu without page zoom (so Ctrl+=/− zoom the canvas, not the window)
 
 ## M3 — Object Types: Images → Text → PDF (§5, §7)
-- [ ] Import images via drag-drop from Explorer/Finder, paste from browser/clipboard, file picker
-- [ ] JPG/JPEG + PNG: copied into the asset store, thumbnails generated with `sharp`, transparency preserved
-- [ ] Image object: proportional resize only, rotate, no cropping/distortion
-- [ ] Full-size image viewer: zoom, pan, fit-to-window, download original
+
+M3 is built in three parts, each with its own branch and PR.
+
+### M3A — Images ✅ (ADR-013)
+- [x] Import images by dropping files from Explorer/Finder or a browser, pasting (screenshots, images copied in a browser, files copied in Explorer), the **Image** tool, or "Add images here…"
+- [x] JPG/JPEG, PNG and WebP: originals copied byte-for-byte into the asset store (never modified), deduplicated by hash, thumbnails (256/1024 px WebP) generated with `sharp`, transparency preserved
+- [x] Clear message listing files that couldn't be imported (generic file cards come in M3C)
+- [x] Image object: proportional resize only (no maximum size), rotation (Shift = 15° steps), no cropping or distortion; align and match size keep proportions
+- [x] Zoom-dependent image quality (thumbnail → original), asynchronous decoding and an image memory budget so large images don't freeze the UI
+- [x] Full-size image viewer: zoom, pan, fit-to-window, 100%, previous/next image, download original
+- [x] Image context menu: view full size, save original as…, reset to original size, reset rotation
+- [x] Undo/redo and multi-window sync for everything above; packaged builds include `sharp`
+
+### M3B — Text notes and board covers
 - [ ] Text note object: place, resize, rotate, basic formatting, font size, text/background color
-- [ ] Nested board card: custom cover image (moved from M1; needs image import)
+- [ ] Nested board card: custom cover image (moved from M1, then from M3A)
+
+### M3C — Documents and other files
 - [ ] PDF import → document card with first-page cover
 - [ ] PDF viewer (pdf.js): page navigation, thumbnails, text search, outline/TOC jump, download original
 - [ ] Generic file card for unsupported types + "attach preview image"
@@ -102,7 +114,8 @@ This is the living progress tracker. **Tick boxes as work is completed** and kee
 5. Linked TOC, named anchors, pinned panel (§13, §14)
 6. Annotations and revisions (§11)
 7. Board snapshots (§20)
-8. More formats: WebP, TIFF, PSD, .procreate, .clip, DOCX (§7, §6)
-9. Custom fonts, covers everywhere (§17)
-10. **Cloud hybrid + collaboration (§15)**: Supabase + Cloudflare R2 (ADR-006)
-11. Plot roadmaps (§16, optional)
+8. More formats: TIFF, PSD, .procreate, .clip, DOCX (§7, §6)
+9. Drop images straight into a nested board card; paste image URLs from the web
+10. Custom fonts, covers everywhere (§17)
+11. **Cloud hybrid + collaboration (§15)**: Supabase + Cloudflare R2 (ADR-006)
+12. Plot roadmaps (§16, optional)

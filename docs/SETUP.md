@@ -159,6 +159,7 @@ docs/              Requirements, decisions, roadmap, handoff, this guide
 | `tailwindcss`, `@tailwindcss/vite` | ^4 | Utility-first CSS styling |
 | `radix-ui` | ^1.8 | Accessible context menus and dialogs (bundled into the renderer) |
 | `konva`, `react-konva` | ^10 / ^19 | Canvas rendering, hit detection and resize handles (bundled into the renderer) |
+| `sharp` | ^0.35 | Checks imported images, reads their size and transparency, and makes thumbnails (main process). Installs a prebuilt native library for your platform (`@img/sharp-*`); installers unpack it from the asar |
 | `@playwright/test` | ^1.64 | End-to-end UI tests that drive the Electron app |
 | `drizzle-kit` | ^0.31 | Generates SQL migrations from the schema (`npm run db:generate`) |
 | `vitest` | ^5 | Unit test runner |
@@ -170,8 +171,7 @@ docs/              Requirements, decisions, roadmap, handoff, this guide
 
 | Package | Milestone | Purpose |
 |---|---|---|
-| `sharp` | M3 | Image metadata and thumbnail generation |
-| `pdfjs-dist` | M3 | PDF viewing, search and outline |
+| `pdfjs-dist` | M3C | PDF viewing, search and outline |
 | `cmdk` | M5 | Command palette |
 
 ---

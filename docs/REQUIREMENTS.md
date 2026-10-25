@@ -1,6 +1,6 @@
 # Creative Workspace App
 
-## Complete Feature Inventory — Version 1.1 (living document)
+## Complete Feature Inventory — Version 1.4 (living document)
 
 > **This Markdown file is the source of truth for requirements.** It was converted from the original PDF (v1.0, archived at [`docs/archive/Creative Workspace App v1.0.pdf`](archive/Creative%20Workspace%20App%20v1.0.pdf)).
 > Update it whenever a decision or scope change is made, and record the reasoning in [`DECISIONS.md`](DECISIONS.md). Progress is tracked in [`ROADMAP.md`](ROADMAP.md).
@@ -29,9 +29,9 @@
 | 2 | Platform and Multi-Window Support | 🟢 MVP (basic) | Electron `BrowserWindow`s; changes broadcast from the main process |
 | 3 | Projects and Organizational Structure | 🟢 **MVP – priority** (✅ core done in M1) | Nested boards + folders; Collections ⚪ Later; ADR-011 pending team review |
 | 4 | Infinite Canvas | 🟢 **MVP – priority** (✅ done in M2) | Navigation, selection, move/resize, group, lock, layers, align/distribute, grid/snap, smart guides |
-| 5 | Board Object Types | 🟢 **MVP – priority** | Images first, then text and documents. Checklists, headers/dividers and containers 🟡 deprioritized |
+| 5 | Board Object Types | 🟢 **MVP – priority** (✅ images done in M3A) | Images first, then text and documents. Checklists, headers/dividers and containers 🟡 deprioritized |
 | 6 | Document Viewing and Review | 🟢 MVP (PDF only) | Other formats ⚪ Later |
-| 7 | Artwork and Image Handling | 🟢 **MVP – priority** | JPEG/JPG, PNG and PDF first; other formats ⚪ Later |
+| 7 | Artwork and Image Handling | 🟢 **MVP – priority** (✅ images done in M3A) | JPEG/JPG, PNG, WebP and PDF first; other formats ⚪ Later |
 | 8 | Project Asset Libraries | 🟢 **MVP – priority** | Storage approach decided (local-first) |
 | 9 | Image Stacks | ⚪ Later | |
 | 10 | Page Collections and Manga Planning | ⚪ Later | |
@@ -42,7 +42,7 @@
 | 15 | Collaboration and Shared Workspaces | ⚪ Later | **Requires cloud backend** (see DECISIONS ADR-006) |
 | 16 | Plot Roadmaps | 🔵 Optional | |
 | 17 | Covers, Typography, and Appearance | ⚪ Later | Board covers may land with §3 |
-| 18 | Quick Capture and Importing | 🟢 MVP (images/PDF) | Paste and drag-drop of images; URL link cards ⚪ Later |
+| 18 | Quick Capture and Importing | 🟢 MVP (images/PDF) (✅ image paste and drag-drop done in M3A) | Direct library import in M4; URL link cards ⚪ Later |
 | 19 | Keyboard Shortcuts and Quick Commands | 🟢 MVP | ✅ Canvas shortcuts done in M2; command palette in M5 |
 | 20 | Board History and Recovery | 🟢 MVP (undo/redo, trash) | ✅ Undo/redo done in M2; Trash view M4; snapshots ⚪ Later |
 | 21 | Essential Quality-of-Life Features | 🟢 MVP | Autosave, save status, backups, project search |
@@ -172,7 +172,7 @@ A collection can appear as an object on a board.
 
 ## 4. Infinite Canvas
 
-> **Status:** 🟢 **MVP – priority**. ✅ **Implemented in M2**: everything in this section except free rotation, which arrives with text notes and images in M3 (board cards don't rotate).
+> **Status:** 🟢 **MVP – priority**. ✅ **Implemented in M2**, with free rotation of images added in M3A (Shift snaps to 15°). Text notes will rotate when they arrive in M3B; board cards don't rotate.
 > **Decisions:** Built on react-konva (ADR-003). Interaction model follows Figma conventions (ADR-012).
 
 The infinite canvas is the primary application interface.
@@ -226,7 +226,7 @@ Users should be able to create either completely freeform arrangements or highly
 
 ## 5. Board Object Types
 
-> **Status:** 🟢 **MVP – priority** (Milestone M3). Build order: **Images → Text Boxes/Notes → Nested Board cards → Documents (PDF)**.
+> **Status:** 🟢 **MVP – priority** (Milestone M3). Build order: **Images (M3A ✅) → Text Boxes/Notes and Nested Board covers (M3B) → Documents (PDF) (M3C)**.
 > Checklists, Headers and Dividers, and Containers are 🟡 **deprioritized**. Tables, Connections, and Comments are ⚪ Later.
 
 The canvas should support multiple object types.
@@ -245,7 +245,7 @@ The canvas should support multiple object types.
 
 These are intended for character biographies, setting descriptions, worldbuilding notes, brainstorming, and similar material.
 
-### Images 🟢 (highest priority)
+### Images 🟢 (highest priority) — ✅ implemented in M3A (ADR-013)
 
 - Place images directly on boards.
 - Move, resize, and rotate images.
@@ -340,7 +340,7 @@ A 500-page manuscript should be a dedicated document, not one enormous canvas te
 
 ## 7. Artwork and Image Handling
 
-> **Status:** 🟢 **MVP – priority** for **JPEG/JPG, PNG and PDF**. WebP is cheap to add. TIFF, PSD, .clip, .procreate and others are ⚪ Later; they can be stored with a manually attached preview (ADR-007).
+> **Status:** 🟢 **MVP – priority** for **JPEG/JPG, PNG, WebP and PDF**. ✅ **Implemented in M3A** for JPEG, PNG and WebP: originals stored byte-for-byte and never modified, proportional resizing only, transparency kept, full-size viewer with zoom, pan, fit, previous/next and original download (ADR-013). PDF comes in M3C. TIFF, PSD, .clip, .procreate and others are ⚪ Later; they can be stored with a manually attached preview (ADR-007).
 
 ### Image Preservation
 
@@ -379,7 +379,7 @@ Target formats include:
 
 - PNG 🟢
 - JPEG/JPG 🟢
-- WebP ⚪
+- WebP 🟢
 - TIFF ⚪
 - PSD ⚪
 - PDF 🟢
@@ -798,6 +798,7 @@ Font licensing and portability will need consideration during development.
 ## 18. Quick Capture and Importing
 
 > **Status:** 🟢 MVP for images and PDFs (paste, drag-and-drop, file picker, direct library import). URL link cards are ⚪ Later.
+> ✅ **Implemented in M3A for images:** paste screenshots, images copied in a browser and files copied in File Explorer; drag one or many files from File Explorer or a browser; file picker. Imported images are registered in the project library (top level until M4). Direct library import without a board comes in M4.
 
 The application should make collecting creative references easy.
 
@@ -956,7 +957,7 @@ The goal is to avoid duplicating functions better handled by dedicated creative 
 
 | Decision | Status | Answer |
 |---|---|---|
-| Programming languages and frameworks | ✅ Decided | TypeScript + React 18, Vite, Zustand, Tailwind + Radix UI (ADR-002) |
+| Programming languages and frameworks | ✅ Decided | TypeScript + React 19, Vite, Zustand, Tailwind + Radix UI (ADR-002, ADR-010) |
 | Desktop application framework | ✅ Decided | Electron, built with electron-vite and packaged with electron-builder (ADR-001) |
 | Database architecture | ✅ Decided | One SQLite database per project (better-sqlite3 + Drizzle ORM), cloud-ready schema (ADR-004) |
 | Local, cloud, or hybrid file storage | ✅ Decided | Local-first now, hybrid later; files copied in and content-addressed (ADR-005, ADR-006) |
@@ -1024,3 +1025,4 @@ The overarching goal is a **flexible, PC-based visual creative workspace that ca
 | 1.1 | 2026-10-24 | Converted to Markdown; added status badges; recorded architecture decisions (§2, §3, §4, §5, §7, §8, §15, §23, §24) |
 | 1.2 | 2026-10-24 | M1 implemented (§3); boards/folders relationship decided as separate hierarchies, pending team review (ADR-011) |
 | 1.3 | 2026-10-24 | M2 implemented (§4 canvas, canvas shortcuts §19, undo/redo §20); interaction model recorded (ADR-012) |
+| 1.4 | 2026-10-24 | M3A implemented: images on boards (§5), JPEG/PNG/WebP handling and full-size viewer (§7), image paste and drag-and-drop (§18), image rotation (§4); WebP moved into the MVP (ADR-013) |

@@ -22,7 +22,7 @@ BEFORE WRITING ANY CODE:
    and get the project owner's confirmation before you start coding.
 
 RULES:
-- The tech stack is decided (docs/DECISIONS.md): Electron + electron-vite + React 18 +
+- The tech stack is decided (docs/DECISIONS.md): Electron + electron-vite + React 19 +
   TypeScript, Zustand, Tailwind + Radix UI, react-konva for the canvas, SQLite per project
   (better-sqlite3 + Drizzle ORM), pdf.js, sharp. Do not change the stack without adding a
   new ADR to docs/DECISIONS.md and asking the project owner.
@@ -55,39 +55,46 @@ RULES:
 > Outgoing agent: replace this section each session. Keep it short and factual.
 
 **Last updated:** 2026-10-24
-**Branch:** `feat/m2-canvas` (PR open → merge into `main`; it includes the testing-guide commits from PR #4)
-**Phase:** M2 (Canvas) complete; M3 (Images, text notes, PDFs) not started.
+**Branch:** `feat/m3a-images` (PR open → merge into `main` after the project owner's review; don't merge automatically)
+**Phase:** M3A (Images) complete; M3B (text notes, board covers) and M3C (PDFs, file cards) not started.
 
 **Done**
-- M0 scaffold, M1 boards/folders (PRs #2, #3), testing guide (PR #4).
-- M2 canvas (react-konva), see ADR-012:
-  - Figma-style pan/zoom, per-board camera memory, selection (click/shift/marquee), move, resize.
-  - Smart guides + optional snap-to-grid.
-  - Group, lock, layer order, align/distribute/match size.
-  - Copy/cut/paste/duplicate (deep board copies), undo/redo for every edit.
-  - Drag-and-drop: toolbar tile onto the canvas; cards onto board cards, breadcrumb items or sidebar rows to nest; sidebar tree drag for boards and folders.
-- Backend: `ObjectRepository` (`src/main/project/objects.ts`) for batch updates, trash/restore, move-to-board and copy. `BoardRepository` gained restore, duplicate, setViewport and cardIdOf. Deletion timestamps are strictly increasing (`deletionTime()`).
-- Tests: 64 unit tests; 6 Playwright end-to-end tests (`e2e/`) run in CI on Windows + macOS.
-- `docs/TESTING.md` has an M2 checklist (33 steps); the M1 checklist was updated for the canvas.
+- M0 scaffold, M1 boards/folders, testing guide, M2 canvas (PR #5, ADR-012).
+- M3A images, see ADR-013:
+  - **Main process:**
+    - `AssetRepository` (`src/main/project/assets.ts`): streamed copy + SHA-256, content check with `sharp`, dedupe, thumbnails (256/1024 WebP), export of originals. `ImportOptions.folderId` is ready for M4.
+    - `cw-asset://` protocol (`src/main/assetProtocol.ts`).
+    - `ObjectRepository.createImages` and proportions enforced in `update`.
+    - Clipboard: a note on the system clipboard tells the app's own copies apart from external ones (`clipboard:importExternal` reads screenshots, browser images and Explorer files).
+  - **Renderer:**
+    - `ImageNode` with zoom-dependent quality and a shared decoded-image cache (`imageCache.ts`).
+    - Per-selection Transformer: corner-only proportional resize, rotation with Shift = 15°.
+    - Rotated bounds (`src/shared/geometry.ts`) used across the canvas maths.
+    - Import flows in `actions.ts`: drop, paste, picker, one undo step, notice for skipped files.
+    - `ImageViewer.tsx`.
+- Tests: 98 unit tests; 11 Playwright end-to-end tests (6 canvas + 5 images). The image tests include a real screenshot paste and, on Windows, a File Explorer file paste (via PowerShell `Set-Clipboard -Path`).
+- `docs/TESTING.md` has an M3A checklist (30 steps).
+- Packaged build verified: `sharp` loads from `app.asar.unpacked` and imports and thumbnails work.
 
 **In progress**
 - Nothing.
 
 **Next steps**
-1. Merge the M2 PR once CI is green. The project owner should run the M2 checklist; how the canvas *feels* is the key feedback.
+1. Project owner reviews the M3A PR and runs the M3A checklist (pasting from their own browser and screenshot tool is the key check), then merges.
 2. Discuss ADR-011 (separate vs. unified tree) with the team before M4.
-3. Start **M3 — Images, text notes, PDFs** (see ROADMAP). Plan first. Likely pieces:
-   - an asset import pipeline (copy + SHA-256 + `sharp` thumbnails, ADR-005)
-   - image objects with aspect-locked resize and rotation (enable the Transformer's `rotateEnabled` / `keepRatio` per type)
-   - text notes (DOM overlay editor)
-   - PDF cards and viewer (pdf.js)
+3. Start **M3B** (text notes, board covers). Plan first. Likely pieces:
+   - text notes with a DOM overlay editor; rotation already works through `canRotate` in `canvas/objectTypes.ts`
    - double-click on empty canvas creates a text note (Milanote)
-   - add a renderer for each new `type` alongside `BoardCardNode`
+   - board cover: pick an image asset for `boards.cover_asset_id` and draw it in `BoardCardNode` via `useImage` and `assetUrl`
+4. Then **M3C**: PDF cards and viewer (pdf.js), generic file cards. Reuse `AssetRepository` (relax the image-only check per type) and the viewer pattern.
 
 **Known issues / open questions**
 - Trashed items can only be restored with undo (in the same session) until the Trash view (M4).
 - Undo history is per window and not saved across restarts (by design for now).
 - Windows installer not code-signed; no app icon yet.
+- Images go to the library's top level and onto the open board only; there's no library panel until M4. Dropping images onto a board card doesn't import into that board yet.
+- Copying objects in the app replaces the system clipboard text with a short note (by design, ADR-013).
+- Unused thumbnails and originals of permanently deleted assets aren't cleaned up yet (needs the M4 Trash view).
 - **Dev-only:** after hot-reloading `useCanvasShortcuts.ts`, Space+drag may stop working until the page reloads (duplicate module state). Not an issue in builds.
 - **Testing tips:**
   - Drive the canvas with real input events; positions come from `window.__cw` (see `e2e/app.ts`).
