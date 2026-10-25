@@ -100,7 +100,8 @@ RULES:
   - Drive the canvas with real input events; positions come from `window.__cw` (see `e2e/app.ts`).
   - The floating toolbar covers the canvas's top-left corner: to focus the canvas, click its middle (or another empty spot) and check `toBeFocused()`.
   - Edits in `actions.ts` run one at a time through a queue (`canvas/queue.ts`), and so do undo/redo steps. Don't call one queued action from inside another (it would wait for itself).
-  - CI machines can paint late; the canvas measures itself before the first paint, so tests may interact as soon as the canvas exists.
+  - CI machines can paint late; the canvas measures itself before the first paint, so tests may interact as soon as the canvas exists. Konva's hit map (what a click lands on) is refreshed before every press for the same reason (`CanvasView`), so clicks follow the board's data, not the last painted frame. Both are covered by e2e tests that delay `ResizeObserver` / `requestAnimationFrame`.
+  - "Download original" copies to a hidden `.part` file next to the destination and renames it when complete; wait for the file to exist rather than polling its contents.
   - New windows are listed first in DevTools `/json/list`.
   - Windows without OS focus don't fire blur, so use `Emulation.setFocusEmulationEnabled`.
 

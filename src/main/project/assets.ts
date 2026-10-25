@@ -139,7 +139,16 @@ export class AssetRepository {
   /** Copies an asset's original to `destination` ("Download original"). */
   async exportOriginal(id: string, destination: string): Promise<void> {
     const asset = this.get(id)
-    await copyFile(this.originalPath(asset.sha256, asset.ext), destination)
+    // Copy under a temporary name, then rename: the file only appears under its real name
+    // once it's complete, and an existing file is either fully replaced or left as it was.
+    const temp = join(dirname(destination), `.${basename(destination)}.${randomUUID()}.part`)
+    try {
+      await copyFile(this.originalPath(asset.sha256, asset.ext), temp)
+      await replaceFile(temp, destination)
+    } catch (error) {
+      await rm(temp, { force: true })
+      throw error
+    }
   }
 
   /** Creates a thumbnail if it's missing. Returns its path, or null if it can't be made. */
@@ -315,6 +324,19 @@ async function placeFile(temp: string, target: string): Promise<void> {
       await rm(temp, { force: true })
       return
     }
+    try {
+      await rename(temp, target)
+      return
+    } catch (error) {
+      if (attempt >= 4) throw error
+      await delay(100 * (attempt + 1))
+    }
+  }
+}
+
+/** Moves a finished temp file over `target`, replacing it. Retries like `placeFile`. */
+async function replaceFile(temp: string, target: string): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
     try {
       await rename(temp, target)
       return

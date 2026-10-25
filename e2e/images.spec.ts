@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import sharp from 'sharp'
@@ -348,8 +348,10 @@ test('full-size viewer: open, download the original, close; second window shows 
     dialog.showSaveDialog = (async () => ({ canceled: false, filePath })) as never
   }, dest)
   await viewer.getByRole('button', { name: 'Download original' }).click()
-  await expect.poll(() => readFileSync(dest, { flag: 'r' }).length).toBeGreaterThan(0)
+  // The copy appears under its name only once it's complete.
+  await expect.poll(() => existsSync(dest)).toBe(true)
   expect(readFileSync(dest).equals(readFileSync(source))).toBe(true)
+  expect(readdirSync(t.projectsDir).filter((name) => name.endsWith('.part'))).toEqual([])
 
   await t.page.keyboard.press('Escape')
   await expect(viewer).toBeHidden()

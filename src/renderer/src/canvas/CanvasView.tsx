@@ -125,6 +125,21 @@ export function CanvasView() {
       setSelection([...current].filter((id) => ids.has(id)))
   }, [objects])
 
+  // Konva finds what's under the pointer in a hit map that it redraws on the next animation
+  // frame. Bring it up to date before each press, so a click always hits what's on the board,
+  // even if the window hasn't repainted since the last change (slow or throttled window).
+  useEffect(() => {
+    const el = containerEl
+    if (!el) return
+    const refreshHitMap = () => void objectLayer.current?.drawHit()
+    el.addEventListener('pointerdown', refreshHitMap, true)
+    el.addEventListener('contextmenu', refreshHitMap, true)
+    return () => {
+      el.removeEventListener('pointerdown', refreshHitMap, true)
+      el.removeEventListener('contextmenu', refreshHitMap, true)
+    }
+  }, [containerEl])
+
   // Zoom/pan with the wheel or trackpad (needs a non-passive listener to stop page scrolling).
   useEffect(() => {
     const el = containerEl

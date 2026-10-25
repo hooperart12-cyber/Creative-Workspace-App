@@ -1,5 +1,13 @@
 import { createHash } from 'node:crypto'
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { eq } from 'drizzle-orm'
@@ -286,5 +294,27 @@ describe('AssetRepository.fileFor', () => {
     const target = join(dir, 'exported.webp')
     await project.assets.exportOriginal(asset.id, target)
     expect(readFileSync(target).equals(bytes)).toBe(true)
+  })
+
+  it('replaces an existing file in one step and leaves no temporary files', async () => {
+    const { path, bytes } = await makeImage('a.png', { width: 50, height: 50, format: 'png' })
+    const asset = await project.assets.importFile(path)
+    const out = join(dir, 'out')
+    mkdirSync(out)
+    const target = join(out, 'exported.png')
+    writeFileSync(target, 'an older file with the same name')
+    await project.assets.exportOriginal(asset.id, target)
+    expect(readFileSync(target).equals(bytes)).toBe(true)
+    expect(readdirSync(out)).toEqual(['exported.png'])
+  })
+
+  it('leaves no partial file behind when the copy fails', async () => {
+    const { path } = await makeImage('a.png', { width: 50, height: 50, format: 'png' })
+    const asset = await project.assets.importFile(path)
+    const out = join(dir, 'out')
+    mkdirSync(out)
+    rmSync(project.assets.originalPath(asset.sha256, asset.ext))
+    await expect(project.assets.exportOriginal(asset.id, join(out, 'x.png'))).rejects.toThrow()
+    expect(readdirSync(out)).toEqual([])
   })
 })
