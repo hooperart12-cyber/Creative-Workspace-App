@@ -182,6 +182,12 @@ async function moveCursor(keys: string[], page: Page = t.page) {
 }
 const times = (n: number, key: string) => Array<string>(n).fill(key)
 
+/**
+ * Moves the cursor to the end of the note. Ctrl+End does this on Windows and Linux, but macOS
+ * has no such shortcut (Cmd+End does nothing); Cmd+Down goes to the end of the text there.
+ */
+const END_OF_NOTE = process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End'
+
 async function startEditing(note: Note, page: Page = t.page) {
   const c = await noteCenter(note, page)
   await page.mouse.dblclick(c.x, c.y)
@@ -417,7 +423,7 @@ test('resizing reflows text without stretching it; auto-height grows and shrinks
 
   // Auto-height follows the text: more paragraphs, taller; less text, shorter again.
   await startEditing(narrow)
-  await moveCursor(['ControlOrMeta+End'])
+  await moveCursor([END_OF_NOTE])
   for (let i = 0; i < 4; i++) {
     await page.keyboard.press('Enter')
     await page.keyboard.type(`Line ${i}`)
@@ -440,7 +446,7 @@ test('fixed height: text scrolls inside the note, fit to content', async () => {
   await page.getByRole('button', { name: 'More formatting' }).click()
   await page.getByRole('radio', { name: 'Fixed' }).click()
   await expect.poll(async () => (await stored(note.id))!.data.sizing).toBe('fixed')
-  await moveCursor(['ControlOrMeta+End'])
+  await moveCursor([END_OF_NOTE])
   for (let i = 0; i < 12; i++) {
     await page.keyboard.press('Enter')
     await page.keyboard.type(`More text ${i}`)
@@ -515,7 +521,7 @@ test('move and rotate a note, then edit it rotated', async () => {
   await startEditing(rotated)
   const transform = await editorBox().evaluate((el) => el.style.transform)
   expect(transform).toContain(`rotate(${rotated.rotation}deg)`)
-  await moveCursor(['ControlOrMeta+End'])
+  await moveCursor([END_OF_NOTE])
   await page.keyboard.type(' still')
   await page.keyboard.press('Escape')
   await expect.poll(async () => (await stored(note.id))!.data.plainText).toBe('Tilted words still')
@@ -554,7 +560,7 @@ test('edit inline zoomed in (cursor where clicked) and zoomed far out (zooms to 
   expect((await viewport()).zoom).toBeLessThan(0.5)
   await startEditing((await notes())[0])
   expect((await viewport()).zoom).toBe(1)
-  await moveCursor(['ControlOrMeta+End'])
+  await moveCursor([END_OF_NOTE])
   await page.keyboard.type('!')
   await page.keyboard.press('Escape')
   await expect.poll(async () => (await stored(note.id))!.data.plainText).toBe('alpha beta omega!')
@@ -573,7 +579,7 @@ test('expanded editor: same note and typing history, changes appear on the canva
   const dialog = page.getByTestId('note-expanded')
   await expect(dialog).toBeVisible()
   await expect(dialog.locator('.ProseMirror')).toBeFocused()
-  await moveCursor(['ControlOrMeta+End'])
+  await moveCursor([END_OF_NOTE])
   await page.keyboard.type(' with more words')
   await expect(dialog.getByTestId('note-save-status')).toHaveAttribute('data-status', 'saved')
 
@@ -606,7 +612,7 @@ test('paste: rich text cleaned, Ctrl+Shift+V plain, images never go inside notes
   await createProject(page, t.projectsDir, 'Paste')
   const note = await typeNewNote('Start')
   await startEditing(note)
-  await moveCursor(['ControlOrMeta+End'])
+  await moveCursor([END_OF_NOTE])
 
   const html =
     '<p>Hi <b>strong</b> <span style="color: red; font-family: Comic Sans MS; font-size: 40px">red</span>' +
@@ -640,13 +646,15 @@ test('paste: rich text cleaned, Ctrl+Shift+V plain, images never go inside notes
   expect(json).toContain('cell')
   expect(await page.evaluate(() => (window as never as { __xss?: number }).__xss)).toBeUndefined()
 
-  // Ctrl+Shift+V: the same clipboard as plain text.
+  // Ctrl/Cmd+Shift+V: the same clipboard as plain text, replacing the selection.
   await page.keyboard.press('ControlOrMeta+a')
+  await synced(page)
   await page.keyboard.press('ControlOrMeta+Shift+v')
-  await expect(status()).toHaveAttribute('data-status', 'saved')
+  await expect
+    .poll(async () => (await stored(note.id))!.data.plainText)
+    .toBe('Hi strong red bad good cell')
   doc = (await stored(note.id))!.data.content.doc
   expect(textRuns(doc).every((r) => r.marks.length === 0)).toBe(true)
-  expect((await stored(note.id))!.data.plainText).toContain('Hi strong red')
 
   // An image on the clipboard: not put inside the note, and the user is told why.
   const png = await sharp({
@@ -789,6 +797,8 @@ test('reopening the project restores text, formatting, look, sizing and placemen
   await t.page.getByRole('button', { name: /^Persist/ }).click()
   await t.page.getByTestId('canvas').waitFor()
   await expect.poll(async () => (await notes(t.page)).length).toBe(1)
+  // A freshly opened window isn't focused, so a double-click in it wouldn't register.
+  await t.page.bringToFront()
   const reopened = (await notes(t.page))[0]
   expect(reopened).toMatchObject({
     x: saved.x,
@@ -829,7 +839,7 @@ test('two windows: edits appear in the other window, which shows the note is bei
       note.id
     )
   await expect.poll(othersSee).toBe(true)
-  await moveCursor(['ControlOrMeta+End'])
+  await moveCursor([END_OF_NOTE])
   await page.keyboard.type(' text')
   // The other window gets the saved text while this one is still typing.
   await expect.poll(async () => (await notes(second))[0].data.plainText).toBe('Shared text')
@@ -862,7 +872,7 @@ test('two windows can’t overwrite each other: take over, conflicts, deleted no
   // window before typing in it; cursor keys only work in the focused window.)
   await page.bringToFront()
   await startEditing(note)
-  await moveCursor(['ControlOrMeta+End'])
+  await moveCursor([END_OF_NOTE])
   await page.keyboard.type(' plus mine')
   const c2 = await noteCenter((await notes(second))[0], second)
   await second.bringToFront()
@@ -878,7 +888,7 @@ test('two windows can’t overwrite each other: take over, conflicts, deleted no
     'Another window is editing this note now'
   )
   await expect(textArea()).toHaveAttribute('contenteditable', 'false')
-  await moveCursor(['ControlOrMeta+End'], second)
+  await moveCursor([END_OF_NOTE], second)
   await second.keyboard.type(' and theirs')
   await second.keyboard.press('Escape')
   await expect
@@ -908,7 +918,7 @@ test('two windows can’t overwrite each other: take over, conflicts, deleted no
       }),
     { id: note.id, revision: current.revision }
   )
-  await moveCursor(['ControlOrMeta+End'])
+  await moveCursor([END_OF_NOTE])
   await page.keyboard.type(' mine again')
   await expect(page.getByTestId('note-notice')).toContainText('changed this note in another window')
   expect((await stored(note.id))!.data.plainText).toBe('Theirs')
@@ -922,7 +932,7 @@ test('two windows can’t overwrite each other: take over, conflicts, deleted no
   // The note goes to the trash in window 2 while window 1 is editing it: the text isn't lost.
   const target = (await notes()).find((n) => n.data.plainText === 'Theirs')!
   await startEditing(target)
-  await moveCursor(['ControlOrMeta+End'])
+  await moveCursor([END_OF_NOTE])
   await page.keyboard.type(' rescued')
   await expect(status()).toHaveAttribute('data-status', 'saved')
   await second.evaluate((id) => window.api.invoke('objects:delete', [id]), target.id)
@@ -951,7 +961,7 @@ test('a failed save keeps the note open with the text, retries, and recovers', a
     })
   })
   await startEditing(note)
-  await moveCursor(['ControlOrMeta+End'])
+  await moveCursor([END_OF_NOTE])
   await page.keyboard.type(' and sound')
   await expect(status()).toHaveAttribute('data-status', 'error')
   await expect(page.getByTestId('note-notice')).toContainText('aren’t saved yet')
@@ -1011,14 +1021,22 @@ test('a damaged note shows a placeholder; the board and other notes keep working
     [
       '-e',
       `const Database = require('better-sqlite3')
-       const db = new Database(process.argv[1])
+       const db = new Database(process.env.CW_DB)
        db.prepare('UPDATE board_objects SET data = ? WHERE id = ?')
-         .run(JSON.stringify({ content: 'garbage', plainText: 'Will be damaged' }), process.argv[2])
-       db.close()`,
-      join(t.projectsDir, 'Damaged.cwproj', 'project.db'),
-      bad.id
+         .run(JSON.stringify({ content: 'garbage', plainText: 'Will be damaged' }), process.env.CW_ID)
+       db.close()`
     ],
-    { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, cwd: process.cwd() }
+    {
+      // Passed through the environment: Electron on macOS adds its own process.argv entries,
+      // so positional arguments wouldn't land where the script reads them.
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: '1',
+        CW_DB: join(t.projectsDir, 'Damaged.cwproj', 'project.db'),
+        CW_ID: bad.id
+      },
+      cwd: process.cwd()
+    }
   )
 
   t = await launchApp(dirs)
@@ -1029,6 +1047,7 @@ test('a damaged note shows a placeholder; the board and other notes keep working
   await expect.poll(async () => (await layoutOf(good.id, t.page))?.runs[0].text).toBe('Fine note')
   const damaged = (await notes(t.page)).find((n) => n.id === bad.id)!
   const c = await noteCenter(damaged, t.page)
+  await t.page.bringToFront()
   await t.page.mouse.dblclick(c.x, c.y)
   await expect(t.page.getByRole('status').filter({ hasText: 'couldn’t be read' })).toBeVisible()
   expect(await editingState(t.page)).toBeNull()

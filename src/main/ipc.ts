@@ -287,6 +287,8 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
     return (await ownClipboard()) ? clipboard.contents : null
   })
 
+  handle('clipboard:readText', () => systemClipboard.readText())
+
   handle('clipboard:importExternal', async (event) => {
     const project = requireProject(event)
     if (await ownClipboard()) return null
@@ -435,6 +437,16 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
 const leases = new NoteLeases()
 /** Windows waiting to close until they've saved their open note. */
 const pendingClose = new Map<number, () => void>()
+
+/**
+ * A quit closes every window, but a window that's editing a note pauses its close to save first,
+ * and pausing it cancels the quit. macOS won't quit on its own when the last window closes, so
+ * the quit would be lost. Remember it, and finish it once the window has saved and closed.
+ */
+let quitRequested = false
+app.on('before-quit', () => {
+  quitRequested = true
+})
 /** Take-overs waiting for the previous editor to save, by project path and note id. */
 const pendingHandover = new Map<string, () => void>()
 const HANDOVER_TIMEOUT_MS = 3000
@@ -522,5 +534,9 @@ export function trackWindow(window: BrowserWindow, registry: ProjectRegistry): v
     pendingClose.delete(id)
     releaseWindowLeases(id)
     registry.release(id)
+    if (asked && quitRequested) {
+      quitRequested = false
+      app.quit()
+    }
   })
 }

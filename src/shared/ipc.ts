@@ -61,6 +61,8 @@ export interface IpcRequests {
   /** App objects copied with Ctrl+C/X. Null once something else has been copied to the system clipboard. */
   'clipboard:set': { args: [contents: ClipboardContents | null]; result: void }
   'clipboard:get': { args: []; result: ClipboardContents | null }
+  /** Plain text currently on the system clipboard (empty when there is none). */
+  'clipboard:readText': { args: []; result: string }
   /**
    * Imports what another program put on the system clipboard: files copied in File Explorer
    * or Finder, or an image (browser "Copy image", screenshots). Null if there's nothing to import.
@@ -138,6 +140,7 @@ export const IPC_CHANNELS = [
   'dialog:pickImages',
   'clipboard:set',
   'clipboard:get',
+  'clipboard:readText',
   'clipboard:importExternal',
   'folder:create',
   'folder:rename',

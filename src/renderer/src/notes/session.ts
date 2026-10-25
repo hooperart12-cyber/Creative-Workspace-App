@@ -595,10 +595,33 @@ const SessionKeys = Extension.create({
       'Mod-k': () => {
         useNoteStore.setState({ linkEditorOpen: true })
         return true
+      },
+      // Plain paste. Handled here rather than left to the browser: its built-in shortcut for this
+      // only exists on Windows, so Ctrl/Cmd+Shift+V would do nothing on macOS.
+      'Mod-Shift-v': () => {
+        void pastePlainText(this.editor)
+        return true
       }
     }
   }
 })
+
+/** Replaces the selection with the clipboard's plain text: no formatting, one paragraph per line. */
+async function pastePlainText(editor: Editor): Promise<void> {
+  const text = await api().invoke('clipboard:readText')
+  if (!text || editor.isDestroyed) return
+  const lines = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n').split('\n')
+  editor
+    .chain()
+    .focus()
+    .insertContent(
+      lines.map((line) => ({
+        type: 'paragraph',
+        content: line ? [{ type: 'text', text: line }] : []
+      }))
+    )
+    .run()
+}
 
 function createEditor(doc: RichNode): Editor {
   return new Editor({
