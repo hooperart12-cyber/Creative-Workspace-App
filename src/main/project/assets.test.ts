@@ -128,7 +128,9 @@ describe('AssetRepository.importFile', () => {
     const active = project.library.list({ folderId: null, scope: 'folder', direct: true })
     expect(active.total).toBe(1)
     expect(active.entries[0].id).not.toBe(listed.entries[0].id)
-    expect(project.library.trashList('entry').map((item) => item.id)).toEqual([listed.entries[0].id])
+    expect(project.library.trashList('entry').map((item) => item.id)).toEqual([
+      listed.entries[0].id
+    ])
   })
 
   it('restores a stored original that went missing on disk', async () => {
