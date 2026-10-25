@@ -6,12 +6,15 @@ import {
   clipboard as systemClipboard,
   dialog,
   ipcMain,
+  shell,
   webContents,
   type IpcMainInvokeEvent
 } from 'electron'
 import { IMAGE_EXTENSIONS, SUPPORTED_IMAGES_LABEL } from '@shared/assets'
 import type { IpcChannel, IpcEventChannel, IpcEvents, IpcRequests } from '@shared/ipc'
+import { isSafeLink } from '@shared/notes'
 import type { ClipboardContents, ImportBytesInput } from '@shared/types'
+import { NoteLeases } from './project/noteLeases'
 import type { Project } from './project/project'
 import type { ProjectRegistry } from './project/projectRegistry'
 import type { RecentProjects } from './project/recentProjects'
@@ -87,6 +90,7 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
   })
 
   handle('project:create', (event, input) => {
+    releaseWindowLeases(event.sender.id)
     const project = registry.create(event.sender.id, input.parentDir, input.name)
     const summary = project.summary()
     recent.touch(summary)
@@ -95,6 +99,7 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
   })
 
   handle('project:open', (event, path) => {
+    releaseWindowLeases(event.sender.id)
     const summary = registry.open(event.sender.id, path).summary()
     recent.touch(summary)
     setWindowTitle(event, summary.name)
@@ -102,6 +107,7 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
   })
 
   handle('project:close', (event) => {
+    releaseWindowLeases(event.sender.id)
     registry.release(event.sender.id)
     setWindowTitle(event)
   })
@@ -328,7 +334,90 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
     if (project) window.setTitle(`${project.summary().name} — Creative Workspace`)
     trackWindow(window, registry)
   })
+
+  // ── Notes ──────────────────────────────────────────────────────────────────
+
+  handle('notes:create', (event, input) => {
+    const project = requireProject(event)
+    const note = project.notes.create(input)
+    broadcastContent(project)
+    return note
+  })
+
+  // Text saves happen every second or so while typing: other windows refetch just that note.
+  handle('notes:saveContent', (event, input) => {
+    const project = requireProject(event)
+    const result = project.notes.saveContent(input)
+    const boardId = project.notes.boardOf(input.id)
+    if (result.ok && boardId) {
+      for (const owner of registry.ownersOf(project)) {
+        send(owner, 'objects:changed', { boardId, objectIds: [input.id] })
+      }
+    }
+    return result
+  })
+
+  handle('notes:updateStyle', (event, patches) => {
+    const project = requireProject(event)
+    project.notes.updateStyle(patches)
+    broadcastContent(project)
+  })
+
+  handle('notes:get', (event, ids) => requireProject(event).notes.get(ids))
+
+  handle('notes:lease', (event, id, action) => {
+    const project = requireProject(event)
+    const owner = event.sender.id
+    let ok = true
+    if (action === 'acquire') ok = leases.acquire(project.path, id, owner).ok
+    else if (action === 'release') leases.release(project.path, id, owner)
+    else {
+      const previous = leases.takeOver(project.path, id, owner)
+      if (previous !== undefined) send(previous, 'notes:leaseLost', { objectId: id })
+    }
+    broadcastLeases(project)
+    return { ok }
+  })
+
+  handle('notes:editedElsewhere', (event) => {
+    const project = registry.get(event.sender.id)
+    return project ? leases.editedElsewhere(project.path, event.sender.id) : []
+  })
+
+  handle('links:open', async (_event, url) => {
+    if (!isSafeLink(url)) throw new Error('Only web and email links can be opened.')
+    await shell.openExternal(url)
+  })
+
+  handle('window:flushed', (event) => {
+    const close = pendingClose.get(event.sender.id)
+    pendingClose.delete(event.sender.id)
+    close?.()
+  })
+
+  /** Tells each window of a project which notes other windows are editing. */
+  const broadcastLeases = (project: Project): void => {
+    for (const owner of registry.ownersOf(project)) {
+      send(owner, 'notes:editedElsewhere', leases.editedElsewhere(project.path, owner))
+    }
+  }
+
+  releaseWindowLeases = (owner: number): void => {
+    const project = registry.get(owner)
+    if (leases.releaseOwner(owner) && project) {
+      for (const other of registry.ownersOf(project)) {
+        if (other !== owner) {
+          send(other, 'notes:editedElsewhere', leases.editedElsewhere(project.path, other))
+        }
+      }
+    }
+  }
 }
+
+const leases = new NoteLeases()
+/** Windows waiting to close until they've saved their open note. */
+const pendingClose = new Map<number, () => void>()
+let releaseWindowLeases: (owner: number) => void = () => {}
 
 /** Image types other programs put on the clipboard, best first (browsers and screenshots use PNG). */
 const CLIPBOARD_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp']
@@ -388,8 +477,29 @@ function pastedImageName(type: string): string {
   return `Pasted image ${stamp}.${type === 'image/jpeg' ? 'jpg' : type.split('/')[1]}`
 }
 
-/** Releases a window's project when the window closes. */
+/** How long a closing window may take to save an open note before it closes anyway. */
+const FLUSH_TIMEOUT_MS = 4000
+
+/**
+ * Releases a window's project when the window closes. A window that is editing a note
+ * first gets a moment to save it.
+ */
 export function trackWindow(window: BrowserWindow, registry: ProjectRegistry): void {
   const id = window.webContents.id
-  window.on('closed', () => registry.release(id))
+  let asked = false
+  window.on('close', (event) => {
+    if (asked || !leases.holds(id) || window.webContents.isDestroyed()) return
+    asked = true
+    event.preventDefault()
+    pendingClose.set(id, () => window.close())
+    send(id, 'window:flushRequest', null)
+    setTimeout(() => {
+      if (pendingClose.delete(id) && !window.isDestroyed()) window.close()
+    }, FLUSH_TIMEOUT_MS)
+  })
+  window.on('closed', () => {
+    pendingClose.delete(id)
+    releaseWindowLeases(id)
+    registry.release(id)
+  })
 }

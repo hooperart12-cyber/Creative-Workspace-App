@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { ProjectSummary, RecentProject } from '@shared/types'
 import { messageOf } from '../lib/errors'
+import { readyToLeaveProject } from './workspaceStore'
 
 interface ProjectState {
   status: 'loading' | 'ready'
@@ -49,6 +50,7 @@ export const useProjectStore = create<ProjectState>((set, get) => {
       run(async () => {
         const parentDir = await window.api.invoke('dialog:pickDirectory')
         if (!parentDir) return
+        if (!(await readyToLeaveProject())) return
         const project = await window.api.invoke('project:create', { parentDir, name })
         set({ project, recent: await window.api.invoke('recent:list') })
       }),
@@ -57,12 +59,14 @@ export const useProjectStore = create<ProjectState>((set, get) => {
       run(async () => {
         const target = path ?? (await window.api.invoke('dialog:pickProject'))
         if (!target) return
+        if (!(await readyToLeaveProject())) return
         const project = await window.api.invoke('project:open', target)
         set({ project, recent: await window.api.invoke('recent:list') })
       }),
 
     closeProject: () =>
       run(async () => {
+        if (!(await readyToLeaveProject())) return
         await window.api.invoke('project:close')
         set({ project: null, recent: await window.api.invoke('recent:list') })
       }),

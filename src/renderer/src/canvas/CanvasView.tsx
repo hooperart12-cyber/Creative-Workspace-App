@@ -21,6 +21,14 @@ import {
 import { ImageNode } from './ImageNode'
 import { canRotate, isViewable, lockedAspectRatio } from './objectTypes'
 import { useCanvasShortcuts, isSpaceHeld } from './useCanvasShortcuts'
+import { NoteNode } from '../notes/NoteNode'
+import { NoteEditorOverlay } from '../notes/NoteEditorOverlay'
+import { useNoteStore } from '../notes/noteStore'
+import { isAutoHeightNote, noteContentHeight } from '../notes/measure'
+import { lastLayout } from '../notes/layout'
+import { createNote } from '../notes/noteActions'
+import { beginEditing, openLink, zoomInToEdit } from '../notes/session'
+import { NOTE_MIN_WIDTH } from '@shared/notes'
 
 /** Pixels the pointer must move before a press becomes a drag. */
 const DRAG_THRESHOLD = 3
@@ -59,6 +67,10 @@ export function CanvasView() {
   const drag = useCanvasStore((s) => s.drag)
   const marquee = useCanvasStore((s) => s.marquee)
   const showGrid = useCanvasStore((s) => s.showGrid)
+  const editingId = useNoteStore((s) => s.editing?.objectId)
+  const editedElsewhere = useNoteStore((s) => s.editedElsewhere)
+  const liveSizes = useNoteStore((s) => s.liveSizes)
+  const noteScroll = useNoteStore((s) => s.scroll)
 
   const container = useRef<HTMLDivElement | null>(null)
   // The container appears once a board is loaded; effects that attach to it re-run then.
@@ -155,12 +167,34 @@ export function CanvasView() {
           zoomAt(vp, { x: e.clientX - rect.left, y: e.clientY - rect.top }, vp.zoom * factor)
         )
       } else {
-        // Wheel / two-finger scroll pans (Shift turns vertical wheel into horizontal).
         const scale = e.deltaMode === 1 ? 20 : 1
+        // Over a selected fixed-height note with more text than fits: scroll its text.
+        if (!e.shiftKey && scrollNoteUnderPointer(e.clientX - rect.left, e.clientY - rect.top, e.deltaY * scale)) {
+          return
+        }
+        // Wheel / two-finger scroll pans (Shift turns vertical wheel into horizontal).
         const dx = (e.shiftKey && !e.deltaX ? e.deltaY : e.deltaX) * scale
         const dy = (e.shiftKey && !e.deltaX ? 0 : e.deltaY) * scale
         setViewport({ ...vp, x: vp.x - dx, y: vp.y - dy })
       }
+    }
+    const scrollNoteUnderPointer = (x: number, y: number, delta: number): boolean => {
+      const hit = stage.current?.getIntersection({ x, y })
+      const node = hit?.findAncestor('.object', true)
+      const id = node?.id()
+      if (!id || !useCanvasStore.getState().selection.has(id)) return false
+      const object = useWorkspaceStore.getState().board?.objects.find((o) => o.id === id)
+      if (!object || object.type !== 'text' || isAutoHeightNote(object)) return false
+      const contentHeight = lastLayout(id)?.height ?? 0
+      const max = Math.max(0, contentHeight - object.height)
+      if (max <= 0) return false
+      const notes = useNoteStore.getState()
+      const current = Math.min(notes.scroll[id] ?? 0, max)
+      const next = Math.min(max, Math.max(0, current + delta / useCanvasStore.getState().viewport.zoom))
+      // Even at the end of the text the wheel stays with the note, so it never suddenly
+      // starts moving the canvas mid-scroll.
+      if (next !== current) notes.setScroll(id, next)
+      return true
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
@@ -192,13 +226,19 @@ export function CanvasView() {
   )
   const keepRatio = transformable.some((o) => lockedAspectRatio(o) !== null)
   const rotateEnabled = transformable.length > 0 && transformable.every(canRotate)
+  // Auto-height notes only get width handles: their height follows the text.
+  const widthOnly = transformable.length > 0 && transformable.every(isAutoHeightNote)
+  // Notes can't be narrower than a few words.
+  const minWidth = transformable.some((o) => o.type === 'text')
+    ? Math.max(MIN_RESIZE, NOTE_MIN_WIDTH * viewport.zoom)
+    : MIN_RESIZE
 
-  // Attach resize handles to the selected, unlocked objects (hidden while dragging).
+  // Attach resize handles to the selected, unlocked objects (hidden while dragging or editing text).
   useEffect(() => {
     const tr = transformer.current
     const layer = objectLayer.current
     if (!tr || !layer) return
-    const targets = drag
+    const targets = drag || editingId
       ? []
       : layer.find((node: Konva.Node) => {
           if (!node.hasName('object')) return false
@@ -207,7 +247,12 @@ export function CanvasView() {
         })
     tr.nodes(targets)
     tr.getLayer()?.batchDraw()
-  }, [selection, board?.objects, drag, visible])
+  }, [selection, board?.objects, drag, visible, editingId])
+
+  // Notes resized in another way (e.g. their text reflowed) keep their handles in place.
+  useEffect(() => {
+    transformer.current?.forceUpdate()
+  }, [liveSizes])
 
   if (!board) return null
 
@@ -222,6 +267,20 @@ export function CanvasView() {
     if (target.hasName('object-title')) return target.getAttr('objectId')
     const node = target.hasName('object') ? target : target.findAncestor('.object')
     return node?.id()
+  }
+
+  /** The link under the pointer in a note, if any. */
+  const linkAt = (target: Konva.Node, id: string): string | null => {
+    const object = board.objects.find((o) => o.id === id)
+    const node = target.findAncestor('.object', true)
+    const pointerPos = stage.current?.getPointerPosition()
+    if (object?.type !== 'text' || !node || !pointerPos) return null
+    const local = node.getAbsoluteTransform().copy().invert().point(pointerPos)
+    const y = local.y + (isAutoHeightNote(object) ? 0 : (noteScroll[id] ?? 0))
+    const run = lastLayout(id)?.runs.find(
+      (r) => r.href && local.x >= r.x && local.x <= r.x + r.width && y >= r.top && y <= r.top + r.height
+    )
+    return run?.href ?? null
   }
 
   const onMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
@@ -242,6 +301,16 @@ export function CanvasView() {
     const world = screenToWorld(screen, vp)
     const id = objectIdOf(e.target)
     const objectsNow = useWorkspaceStore.getState().board?.objects ?? []
+
+    // Ctrl+click on a link in a note opens it (a plain click just selects the note).
+    if (id && (evt.ctrlKey || evt.metaKey)) {
+      const href = linkAt(e.target, id)
+      if (href) {
+        evt.preventDefault()
+        openLink(href)
+        return
+      }
+    }
 
     if (id) {
       const group = expandToGroups([id], objectsNow)
@@ -417,6 +486,14 @@ export function CanvasView() {
     const object = board.objects.find((o) => o.id === id)
     if (object?.type === 'board' && object.linkedBoardId) void openBoard(object.linkedBoardId)
     else if (object && isViewable(object)) useCanvasStore.getState().setViewerObjectId(object.id)
+    else if (object?.type === 'text') {
+      zoomInToEdit(pointer(e.evt))
+      void beginEditing(object.id, { caretAt: { x: e.evt.clientX, y: e.evt.clientY } })
+    }
+    else if (!object && e.evt.button === 0) {
+      // Double-click on empty canvas: start a note right there.
+      void createNote(screenToWorld(pointer(e.evt), useCanvasStore.getState().viewport))
+    }
   }
 
   const onContextMenu = (e: Konva.KonvaEventObject<PointerEvent>) => {
@@ -426,6 +503,26 @@ export function CanvasView() {
     contextPoint.current = screenToWorld(pointer(e.evt), state.viewport)
     if (!id) state.setSelection([])
     else if (!state.selection.has(id)) actions.selectWithGroups([id])
+  }
+
+  // Notes are never stretched: as a handle moves, the stretch becomes a new width (and height
+  // for fixed-height notes) and the text reflows at its normal size.
+  const onTransform = () => {
+    const nodes = transformer.current?.nodes() ?? []
+    const sizes: Record<string, { width: number; height: number }> = {}
+    for (const node of nodes) {
+      const object = board.objects.find((o) => o.id === node.id())
+      if (object?.type !== 'text') continue
+      const width = Math.max(NOTE_MIN_WIDTH, node.width() * node.scaleX())
+      const height = isAutoHeightNote(object)
+        ? noteContentHeight(object, { width })
+        : Math.max(1, node.height() * node.scaleY())
+      node.setAttrs({ scaleX: 1, scaleY: 1, width, height })
+      sizes[object.id] = { width, height }
+    }
+    if (Object.keys(sizes).length) {
+      useNoteStore.setState({ liveSizes: { ...useNoteStore.getState().liveSizes, ...sizes } })
+    }
   }
 
   const onTransformEnd = () => {
@@ -447,7 +544,9 @@ export function CanvasView() {
       node.scale({ x: 1, y: 1 })
       return patch
     })
-    void actions.applyPatches(patches, rotated ? 'Rotate' : 'Resize')
+    void actions.applyPatches(patches, rotated ? 'Rotate' : 'Resize').finally(() => {
+      useNoteStore.setState({ liveSizes: {} })
+    })
   }
 
   // ── HTML5 drops: the toolbar's "Board" tile, and files from File Explorer / Finder ──
@@ -467,7 +566,13 @@ export function CanvasView() {
       void actions.importDroppedFiles([...e.dataTransfer.files], world)
       return
     }
-    if (e.dataTransfer.getData(NEW_OBJECT_MIME) !== 'board') return
+    const kind = e.dataTransfer.getData(NEW_OBJECT_MIME)
+    if (kind === 'text') {
+      e.preventDefault()
+      void createNote(world, true)
+      return
+    }
+    if (kind !== 'board') return
     e.preventDefault()
     void actions.createBoardOnCanvas(world)
   }
@@ -495,6 +600,20 @@ export function CanvasView() {
       style={{ cursor: drag ? 'grabbing' : undefined }}
       onDragOver={onDragOver}
       onDrop={onDrop}
+      onMouseMove={(e) => (hoverPoint.current = pointer(e))}
+      onMouseLeave={() => (hoverPoint.current = null)}
+      onScroll={(e) => {
+        // The note editor asks the browser to keep the cursor in view, which would scroll
+        // this box. Move the camera instead, so the canvas and the editor stay together.
+        const el = e.currentTarget
+        const dx = el.scrollLeft
+        const dy = el.scrollTop
+        if (!dx && !dy) return
+        el.scrollLeft = 0
+        el.scrollTop = 0
+        const { viewport: vp, setViewport } = useCanvasStore.getState()
+        setViewport({ ...vp, x: vp.x - dx, y: vp.y - dy })
+      }}
     >
       {viewSize.width > 0 && (
         <Stage
@@ -516,7 +635,22 @@ export function CanvasView() {
           )}
           <Layer ref={objectLayer}>
             {visible.map((o) =>
-              o.type === 'image' ? (
+              o.type === 'text' ? (
+                <NoteNode
+                  key={o.id}
+                  object={o}
+                  {...positionOf(o)}
+                  width={liveSizes[o.id]?.width ?? o.width}
+                  height={liveSizes[o.id]?.height ?? o.height}
+                  faded={cut.has(o.id)}
+                  zoom={viewport.zoom}
+                  selected={selection.has(o.id)}
+                  editing={editingId === o.id}
+                  editedElsewhere={editedElsewhere.has(o.id)}
+                  scrollTop={noteScroll[o.id] ?? 0}
+                  onMeasured={syncMeasuredHeight}
+                />
+              ) : o.type === 'image' ? (
                 <ImageNode
                   key={o.id}
                   object={o}
@@ -542,7 +676,7 @@ export function CanvasView() {
               // Shift while rotating snaps to 15° steps (built into Konva). With keepRatio on,
               // Shift can't unlock the proportions.
               keepRatio={keepRatio}
-              enabledAnchors={keepRatio ? CORNER_ANCHORS : ALL_ANCHORS}
+              enabledAnchors={keepRatio ? CORNER_ANCHORS : widthOnly ? SIDE_ANCHORS : ALL_ANCHORS}
               flipEnabled={false}
               ignoreStroke
               borderStroke={COLORS.accent}
@@ -556,11 +690,15 @@ export function CanvasView() {
                 (
                   keepRatio
                     ? Math.max(newBox.width, newBox.height) < MIN_RESIZE
-                    : newBox.width < MIN_RESIZE || newBox.height < MIN_RESIZE
+                    : // A side may stay as small as it already is (a one-line note seen
+                      // zoomed out), it just can't be made smaller than the minimum.
+                      (newBox.width < minWidth && newBox.width < oldBox.width) ||
+                      (newBox.height < MIN_RESIZE && newBox.height < oldBox.height)
                 )
                   ? oldBox
                   : newBox
               }
+              onTransform={onTransform}
               onTransformEnd={onTransformEnd}
             />
           </Layer>
@@ -610,6 +748,8 @@ export function CanvasView() {
         </Stage>
       )}
 
+      <NoteEditorOverlay />
+
       {renamingCard && (
         <div
           className="absolute"
@@ -636,6 +776,7 @@ export function CanvasView() {
 }
 
 const CORNER_ANCHORS = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
+const SIDE_ANCHORS = ['middle-left', 'middle-right']
 const ALL_ANCHORS = [
   ...CORNER_ANCHORS,
   'top-center',
@@ -643,6 +784,18 @@ const ALL_ANCHORS = [
   'bottom-center',
   'middle-left'
 ]
+
+/**
+ * An auto-height note whose text measures taller or shorter than its stored height (fonts
+ * finished loading, or it was saved by an older layout): store the real height so selecting,
+ * arranging and snapping use it. Not an undo step — nothing the user did changed.
+ */
+function syncMeasuredHeight(id: string, measured: number): void {
+  if (useNoteStore.getState().liveSizes[id]) return
+  const patch = { id, height: Math.round(measured * 100) / 100 }
+  useWorkspaceStore.getState().patchObjects([patch])
+  void actions.queued(() => window.api.invoke('objects:update', [patch])).catch(() => {})
+}
 
 /** Rotation in degrees between -180 and 180, tidied to two decimals. */
 function normalizeRotation(degrees: number): number {
@@ -655,6 +808,9 @@ export const NEW_OBJECT_MIME = 'application/x-cw-new-object'
 
 /** Where the last right-click happened, in world coordinates ("New board here", "Paste here"). */
 export const contextPoint: { current: Point | null } = { current: null }
+
+/** The pointer's position over the canvas, in screen coordinates (null when it's elsewhere). */
+export const hoverPoint: { current: Point | null } = { current: null }
 
 /** Dot grid covering the visible area; spacing grows when zoomed out so it stays readable. */
 function GridDots() {

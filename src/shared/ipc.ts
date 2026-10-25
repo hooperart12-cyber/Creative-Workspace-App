@@ -1,19 +1,25 @@
 import type {
   BoardDetail,
   BoardListItem,
+  CanvasObject,
   ClipboardContents,
   CreateBoardInput,
   CreateFolderInput,
   CreateImagesInput,
+  CreateNoteInput,
   CreateProjectInput,
   FolderListItem,
   ImportBytesInput,
   ImportResult,
+  NoteLeaseAction,
+  NoteStylePatch,
   ObjectPatch,
   Point,
   ProjectSummary,
   ProjectTree,
   RecentProject,
+  SaveNoteInput,
+  SaveNoteResult,
   Viewport
 } from './types'
 
@@ -65,6 +71,21 @@ export interface IpcRequests {
   'folder:move': { args: [id: string, newParentId: string | null]; result: void }
   'folder:delete': { args: [id: string]; result: void }
   'window:openNew': { args: [options?: { boardId?: string }]; result: void }
+  /** Creates an empty (or pre-filled) note and returns it. */
+  'notes:create': { args: [input: CreateNoteInput]; result: CanvasObject }
+  /** Saves a note's text unless another window saved since `baseRevision`. */
+  'notes:saveContent': { args: [input: SaveNoteInput]; result: SaveNoteResult }
+  'notes:updateStyle': { args: [patches: NoteStylePatch[]]; result: void }
+  /** Fresh copies of notes (after another window changed them). */
+  'notes:get': { args: [ids: string[]]; result: CanvasObject[] }
+  /** Starts or stops editing a note in this window; `ok` is false if another window is editing it. */
+  'notes:lease': { args: [id: string, action: NoteLeaseAction]; result: { ok: boolean } }
+  /** Notes other windows are editing right now. */
+  'notes:editedElsewhere': { args: []; result: string[] }
+  /** Opens a link from a note in the default browser or mail app (web and mail links only). */
+  'links:open': { args: [url: string]; result: void }
+  /** The window finished saving after `window:flushRequest`, and may close. */
+  'window:flushed': { args: []; result: void }
 }
 
 /** Events pushed from the main process to renderer windows. */
@@ -73,6 +94,14 @@ export interface IpcEvents {
   'project:changed': ProjectSummary
   /** Boards or folders of the open project changed; refetch the tree and current board. */
   'project:contentChanged': null
+  /** Only these objects changed (note text saves): refetch just them. */
+  'objects:changed': { boardId: string; objectIds: string[] }
+  /** Notes being edited in other windows changed. */
+  'notes:editedElsewhere': string[]
+  /** Another window took over editing this note. */
+  'notes:leaseLost': { objectId: string }
+  /** The window is closing: save open notes, then call `window:flushed`. */
+  'window:flushRequest': null
 }
 
 export type IpcChannel = keyof IpcRequests
@@ -112,7 +141,15 @@ export const IPC_CHANNELS = [
   'folder:rename',
   'folder:move',
   'folder:delete',
-  'window:openNew'
+  'window:openNew',
+  'notes:create',
+  'notes:saveContent',
+  'notes:updateStyle',
+  'notes:get',
+  'notes:lease',
+  'notes:editedElsewhere',
+  'links:open',
+  'window:flushed'
 ] as const satisfies readonly IpcChannel[]
 
 /** The API exposed to the renderer as `window.api`. */

@@ -1,0 +1,1 @@
+ALTER TABLE `board_objects` ADD `revision` integer DEFAULT 0 NOT NULL;

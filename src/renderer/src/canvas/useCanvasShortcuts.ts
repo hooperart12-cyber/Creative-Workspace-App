@@ -3,6 +3,10 @@ import { useCanvasStore } from '../store/canvasStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import * as actions from './actions'
 import { isViewable } from './objectTypes'
+import { isEditingNote } from '../notes/noteStore'
+import { createNote, editSelectedNote } from '../notes/noteActions'
+import { hoverPoint } from './CanvasView'
+import { screenToWorld } from './geometry'
 
 let spaceHeld = false
 
@@ -19,9 +23,11 @@ function keysBelongElsewhere(e: KeyboardEvent): boolean {
   ) {
     return true
   }
+  // While a note is being edited every key belongs to its text, even with focus on its toolbar.
   return (
     useWorkspaceStore.getState().dialog !== null ||
-    useCanvasStore.getState().viewerObjectId !== null
+    useCanvasStore.getState().viewerObjectId !== null ||
+    isEditingNote()
   )
 }
 
@@ -82,6 +88,7 @@ export function useCanvasShortcuts(): void {
           return handled(() => actions.zoomStepAtCenter(-1))
         }
         if (e.code === 'Quote') return handled(canvas.toggleGrid)
+        if (e.code === 'KeyE' && e.shiftKey && editSelectedNote('expanded')) return e.preventDefault()
         return
       }
 
@@ -112,6 +119,16 @@ export function useCanvasShortcuts(): void {
       }
       if (e.key === 'Enter' && single && isViewable(single)) {
         return handled(() => canvas.setViewerObjectId(single.id))
+      }
+      if (e.key === 'Enter' && single?.type === 'text' && editSelectedNote('inline')) {
+        return e.preventDefault()
+      }
+      // T: a new note under the pointer (or in the middle of the view).
+      if (e.code === 'KeyT' && !e.shiftKey && !e.repeat) {
+        return handled(() => {
+          const at = hoverPoint.current
+          void (at ? createNote(screenToWorld(at, canvas.viewport)) : createNote())
+        })
       }
       if (e.key === 'F2' && single?.linkedBoardId) {
         return handled(() =>
