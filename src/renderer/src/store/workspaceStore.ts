@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useCanvasStore } from './canvasStore'
 import type { BoardDetail, CanvasObject, ObjectPatch, ProjectTree } from '@shared/types'
 import { reportError } from './projectStore'
 
@@ -64,12 +65,20 @@ function readSidebarCollapsed(): boolean {
 
 /** Keeps the current board in the URL hash so a reload stays on the same board. */
 function rememberBoard(id: string): void {
+  // A reader window's hash is the PDF card. Replacing it would close the reader.
+  if (pdfFromHash()) return
   history.replaceState(null, '', `#board=${encodeURIComponent(id)}`)
 }
 
 /** The board requested in the URL hash (set when a board is opened in a new window). */
 export function boardFromHash(): string | undefined {
   const match = /board=([^&]+)/.exec(location.hash)
+  return match ? decodeURIComponent(match[1]) : undefined
+}
+
+/** A PDF reader window puts the card id in the hash. Closing that window does not close the project. */
+export function pdfFromHash(): string | undefined {
+  const match = /pdf=([^&]+)/.exec(location.hash)
   return match ? decodeURIComponent(match[1]) : undefined
 }
 
@@ -272,6 +281,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
 
 // Another window (or this one) changed boards or folders: refetch.
 window.api.on('project:contentChanged', () => {
+  useCanvasStore.getState().bumpCovers()
   if (useWorkspaceStore.getState().tree) void useWorkspaceStore.getState().refresh()
 })
 

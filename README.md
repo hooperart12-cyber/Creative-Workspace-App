@@ -4,7 +4,7 @@ A PC desktop creative workspace, inspired by Milanote (boards and organization) 
 
 It combines infinite visual canvases, interconnected boards, notes, reference images, document viewing, artwork management, and project organization in one flexible environment. The goal is to support the whole creative process, from brainstorming and research through planning, review, and organizing finished work, without forcing a rigid workflow.
 
-> **Status:** M3B complete: rich text notes. Type straight onto the canvas, with headings, lists, fonts, colours, links and card or floating-text styles; notes autosave and stay safe across windows. M3A added images (drop, paste or pick JPG, PNG and WebP; proportional resize, rotation, a full-size viewer; originals stored untouched). Both sit on M2's Figma-style canvas and M1's nested boards and folders. Next up is M3C (PDFs and file cards).
+> **Status:** M3C complete: PDFs open in a read-only reader (pages, search, outline, two-page spreads) and other files are stored as cards with an optional preview. M3B added rich text notes. M3A added images (JPG, PNG and WebP). All sit on M2's canvas and M1's nested boards and folders. Next up is M4 (the asset library).
 > This README summarizes the full feature vision. The complete, **living** specification is [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md). The original PDF (v1.0) is archived at [`docs/archive/`](docs/archive/Creative%20Workspace%20App%20v1.0.pdf).
 
 ## Project Docs
@@ -184,7 +184,7 @@ Spec stages 1–4 (inventory, feasibility, scope, architecture) are **done**. St
 1. ~~**M0 — Scaffold.** Electron + React app, database, project create/open.~~ ✅ Done
 2. ~~**M1 — Nested boards and folders** (§3).~~ ✅ Done
 3. ~~**M2 — Canvas navigation and manipulation** (§4).~~ ✅ Done
-4. **M3 — Board objects** (§5, §7): ~~M3A images (JPEG/JPG, PNG, WebP)~~ ✅ Done; ~~M3B rich text notes~~ ✅ Done; M3C PDFs and file cards. (Board covers moved to later.)
+4. **M3 — Board objects** (§5, §7): ~~M3A images (JPEG/JPG, PNG, WebP)~~ ✅ Done; ~~M3B rich text notes~~ ✅ Done; ~~M3C PDFs and file cards~~ ✅ Done. (Board covers moved to later.)
 5. **M4 — Project asset library** (§8).
 6. **M5 — Reliability polish.** Autosave status, backups, command palette, search.
 

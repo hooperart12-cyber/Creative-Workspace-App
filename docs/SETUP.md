@@ -166,6 +166,7 @@ docs/              Requirements, decisions, roadmap, handoff, this guide
 | `dompurify` | ^3.4 | Cleans pasted HTML before it reaches a note (bundled into the renderer) |
 | `@fontsource/inter`, `lora`, `jetbrains-mono`, `caveat` | ^5.3 | The four fonts included for notes (SIL Open Font License), bundled as font files |
 | `@playwright/test` | ^1.64 | End-to-end UI tests that drive the Electron app |
+| `pdfjs-dist` | ^5.4 | Reads PDFs in the window: pages, search, outline and the first-page cover. Fonts and cmaps are copied next to the page at build time. No native module |
 | `drizzle-kit` | ^0.31 | Generates SQL migrations from the schema (`npm run db:generate`) |
 | `vitest` | ^5 | Unit test runner |
 | `eslint`, `@eslint/js`, `typescript-eslint`, `eslint-plugin-react-hooks`, `globals` | ^10 / ^8 / ^7 | Linting |
@@ -176,7 +177,6 @@ docs/              Requirements, decisions, roadmap, handoff, this guide
 
 | Package | Milestone | Purpose |
 |---|---|---|
-| `pdfjs-dist` | M3C | PDF viewing, search and outline |
 | `cmdk` | M5 | Command palette |
 
 ---

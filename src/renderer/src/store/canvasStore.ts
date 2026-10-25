@@ -34,6 +34,12 @@ interface CanvasState {
   historyVersion: number
   /** Image shown in the full-size viewer, if open. */
   viewerObjectId: string | null
+  /** PDF card open in the reader in this window. */
+  pdfReaderId: string | null
+  /** Generic file card whose details are open. */
+  fileDetailsId: string | null
+  /** Bumped when a PDF cover may have appeared, so the card refetches it. */
+  coverEpoch: number
 
   setViewport: (viewport: Viewport) => void
   setViewSize: (size: Size) => void
@@ -45,6 +51,9 @@ interface CanvasState {
   toggleSnap: () => void
   bumpHistory: () => void
   setViewerObjectId: (id: string | null) => void
+  setPdfReaderId: (id: string | null) => void
+  setFileDetailsId: (id: string | null) => void
+  bumpCovers: () => void
 }
 
 const PREFS_KEY = 'cw.canvasPrefs'
@@ -79,6 +88,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   ...readPrefs(),
   historyVersion: 0,
   viewerObjectId: null,
+  pdfReaderId: null,
+  fileDetailsId: null,
+  coverEpoch: 0,
 
   setViewport: (viewport) => set({ viewport }),
   setViewSize: (viewSize) => set({ viewSize }),
@@ -95,5 +107,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     savePrefs({ showGrid: get().showGrid, snapToGrid: get().snapToGrid })
   },
   bumpHistory: () => set({ historyVersion: get().historyVersion + 1 }),
-  setViewerObjectId: (viewerObjectId) => set({ viewerObjectId })
+  setViewerObjectId: (viewerObjectId) => set({ viewerObjectId }),
+  setPdfReaderId: (pdfReaderId) => set({ pdfReaderId }),
+  setFileDetailsId: (fileDetailsId) => set({ fileDetailsId }),
+  bumpCovers: () => set({ coverEpoch: get().coverEpoch + 1 })
 }))

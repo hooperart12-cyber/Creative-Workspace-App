@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ProjectSummary } from '@shared/types'
 import { useProjectStore } from '../store/projectStore'
-import { boardFromHash, useWorkspaceStore } from '../store/workspaceStore'
+import { FileDetails } from '../files/FileDetails'
+import { PdfReader } from '../pdf/PdfReader'
+import { boardFromHash, pdfFromHash, useWorkspaceStore } from '../store/workspaceStore'
 import { ArrangeBar, CanvasToolbar, ZoomControl } from '../canvas/CanvasChrome'
 import { CanvasMenu } from '../canvas/CanvasMenu'
 import { CanvasView } from '../canvas/CanvasView'
@@ -39,6 +41,8 @@ export function ProjectView({ project }: { project: ProjectSummary }) {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return
       if (useCanvasStore.getState().viewerObjectId) return
+      if (useCanvasStore.getState().pdfReaderId || pdfFromHash()) return
+      if (useCanvasStore.getState().fileDetailsId) return
       if (isEditingNote()) return
       if (e.altKey && e.key === 'ArrowLeft') void goBack()
       else if (e.altKey && e.key === 'ArrowRight') void goForward()
@@ -65,8 +69,19 @@ export function ProjectView({ project }: { project: ProjectSummary }) {
     setDraft(null)
   }
 
+  // Captured once: loading the board must not replace this window with the canvas.
+  const [popoutPdf] = useState(pdfFromHash)
+  const pdfReaderId = useCanvasStore((s) => s.pdfReaderId)
+  if (popoutPdf) {
+    return (
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <PdfReader objectId={popoutPdf} onClose={() => window.close()} />
+      </div>
+    )
+  }
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="relative flex min-h-0 flex-1 flex-col">
       <header className="flex items-center gap-3 border-b border-line bg-surface px-3 py-2">
         <button
           onClick={toggleSidebar}
@@ -125,6 +140,13 @@ export function ProjectView({ project }: { project: ProjectSummary }) {
       <WorkspaceDialogs />
       <ImageViewer />
       <ExpandedNoteEditor />
+      <FileDetails />
+      {pdfReaderId && (
+        <PdfReader
+          objectId={pdfReaderId}
+          onClose={() => useCanvasStore.getState().setPdfReaderId(null)}
+        />
+      )}
     </div>
   )
 }

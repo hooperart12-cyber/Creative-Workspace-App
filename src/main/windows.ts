@@ -4,6 +4,8 @@ import { BrowserWindow, shell } from 'electron'
 export interface WindowOptions {
   /** Board to show first (passed to the renderer in the URL hash). */
   boardId?: string
+  /** PDF card to open in the reader. This window does not replace the board window. */
+  pdfObjectId?: string
 }
 
 /** Creates an app window. Each window navigates, zooms and scrolls independently (§2). */
@@ -40,7 +42,11 @@ export function createWindow(options: WindowOptions = {}): BrowserWindow {
     if (strip(url) !== strip(window.webContents.getURL())) event.preventDefault()
   })
 
-  const hash = options.boardId ? `board=${encodeURIComponent(options.boardId)}` : ''
+  const hash = options.pdfObjectId
+    ? `pdf=${encodeURIComponent(options.pdfObjectId)}`
+    : options.boardId
+      ? `board=${encodeURIComponent(options.boardId)}`
+      : ''
   const devServerUrl = process.env['ELECTRON_RENDERER_URL']
   if (devServerUrl) {
     void window.loadURL(hash ? `${devServerUrl}#${hash}` : devServerUrl)

@@ -23,3 +23,28 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
+
+/* PDF.js text layer: invisible text over the page so it can be selected and searched. */
+.textLayer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  line-height: 1;
+  opacity: 1;
+}
+.textLayer span {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  transform-origin: 0 0;
+  cursor: text;
+}
+.textLayer ::selection {
+  background: rgba(61, 109, 242, 0.35);
+}
+.textLayer span.pdf-hit {
+  background: rgba(255, 214, 0, 0.45);
+}
+.textLayer span.pdf-hit-current {
+  background: rgba(255, 140, 0, 0.7);
+}

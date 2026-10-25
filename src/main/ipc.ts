@@ -1,4 +1,6 @@
-import { join } from 'node:path'
+import { existsSync } from 'node:fs'
+import { copyFile } from 'node:fs/promises'
+import { basename, extname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   app,
@@ -11,6 +13,7 @@ import {
   type IpcMainInvokeEvent
 } from 'electron'
 import { IMAGE_EXTENSIONS, SUPPORTED_IMAGES_LABEL } from '@shared/assets'
+import { isDangerousExtension } from '@shared/files'
 import type { IpcChannel, IpcEventChannel, IpcEvents, IpcRequests } from '@shared/ipc'
 import { isSafeLink } from '@shared/notes'
 import type { ClipboardContents, ImportBytesInput } from '@shared/types'
@@ -211,9 +214,27 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
     return ids
   })
 
-  handle('assets:importFiles', async (event, paths) => {
+  handle('objects:createFromAssets', (event, input) => {
     const project = requireProject(event)
-    const result = await project.assets.importFiles(paths)
+    const ids = project.objects.createFromAssets(input)
+    broadcastContent(project)
+    return ids
+  })
+
+  handle('objects:read', (event, id) => {
+    const project = requireProject(event)
+    return project.objects.read(id)
+  })
+
+  handle('objects:setFileAppearance', (event, id, appearance) => {
+    const project = requireProject(event)
+    project.objects.setFileAppearance(id, appearance)
+    broadcastContent(project)
+  })
+
+  handle('assets:importFiles', async (event, paths, options) => {
+    const project = requireProject(event)
+    const result = await project.assets.importFiles(paths, options)
     broadcastChanged(project)
     return result
   })
@@ -238,6 +259,50 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
     return true
   })
 
+  handle('assets:openCopy', async (event, assetId) => {
+    const project = requireProject(event)
+    const asset = project.assets.get(assetId)
+    if (isDangerousExtension(asset.ext)) {
+      throw new Error('This file type can’t be opened from the app.')
+    }
+    const window = BrowserWindow.fromWebContents(event.sender)!
+    const picked = await dialog.showOpenDialog(window, {
+      title: 'Choose a folder for the working copy',
+      properties: ['openDirectory', 'createDirectory']
+    })
+    if (picked.canceled || !picked.filePaths[0]) return null
+    const destination = uniquePath(picked.filePaths[0], asset.originalName)
+    await copyFile(project.assets.originalPath(asset.sha256, asset.ext), destination)
+    const error = await shell.openPath(destination)
+    if (error) throw new Error(error)
+    return destination
+  })
+
+  handle('assets:saveCover', async (event, assetId, png) => {
+    const project = requireProject(event)
+    await project.assets.saveCover(assetId, png)
+    broadcastContent(project)
+  })
+
+  handle('assets:readRange', (event, assetId, start, end) => {
+    const project = requireProject(event)
+    return project.assets.readRange(assetId, start, end)
+  })
+
+  handle('assets:recordPdfInfo', (event, assetId, info) => {
+    const project = requireProject(event)
+    const before = project.assets.get(assetId)
+    project.assets.recordPdfInfo(assetId, info)
+    if (!before.width) project.objects.fitDocumentPages(assetId)
+    broadcastContent(project)
+  })
+
+  handle('assets:setPreview', (event, assetId, previewAssetId) => {
+    const project = requireProject(event)
+    project.assets.setPreview(assetId, previewAssetId)
+    broadcastContent(project)
+  })
+
   handle('dialog:pickImages', async (event) => {
     const window = BrowserWindow.fromWebContents(event.sender)!
     const result = await dialog.showOpenDialog(window, {
@@ -247,6 +312,16 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
         { name: `Images (${SUPPORTED_IMAGES_LABEL})`, extensions: [...IMAGE_EXTENSIONS] },
         { name: 'All files', extensions: ['*'] }
       ]
+    })
+    return result.canceled ? [] : result.filePaths
+  })
+
+  handle('dialog:pickFiles', async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)!
+    const result = await dialog.showOpenDialog(window, {
+      title: 'Add files',
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'All files', extensions: ['*'] }]
     })
     return result.canceled ? [] : result.filePaths
   })
@@ -332,6 +407,13 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
 
   handle('window:openNew', (event, options) => {
     const window = createWindow({ boardId: options?.boardId })
+    const project = registry.share(event.sender.id, window.webContents.id)
+    if (project) window.setTitle(`${project.summary().name} — Creative Workspace`)
+    trackWindow(window, registry)
+  })
+
+  handle('window:openReader', (event, options) => {
+    const window = createWindow({ pdfObjectId: options.objectId })
     const project = registry.share(event.sender.id, window.webContents.id)
     if (project) window.setTitle(`${project.summary().name} — Creative Workspace`)
     trackWindow(window, registry)
@@ -539,4 +621,15 @@ export function trackWindow(window: BrowserWindow, registry: ProjectRegistry): v
       app.quit()
     }
   })
+}
+
+/** A path in `folder` that doesn't already exist, so a working copy never overwrites a file. */
+function uniquePath(folder: string, name: string): string {
+  const ext = extname(name)
+  const stem = basename(name, ext)
+  let candidate = join(folder, name || 'file')
+  for (let n = 2; existsSync(candidate); n++) {
+    candidate = join(folder, `${stem} (${n})${ext}`)
+  }
+  return candidate
 }

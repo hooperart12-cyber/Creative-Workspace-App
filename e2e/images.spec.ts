@@ -200,13 +200,19 @@ test('drop files onto the canvas; unsupported files explained; delete, undo, dup
     { b64: png, x: canvas.x + 300, y: canvas.y + 250 }
   )
   await expect.poll(async () => (await images()).length).toBe(1)
-  await expect(t.page.getByRole('status')).toContainText('notes.txt')
-  await expect(t.page.getByRole('status')).toContainText('Not a JPG, PNG or WebP image')
+  // A text file is stored as a file card. It is not rejected for not being an image.
+  const dropped = await objects(t.page)
+  const note = dropped.find((o) => o.type === 'file')
+  expect(note?.asset?.originalName).toBe('notes.txt')
 
-  // Centred on the drop point, at its pixel size (under the 800 limit).
+  // The image keeps its pixel size. The drop is the centre of the whole group.
   const [image] = await images()
   expect(image).toMatchObject({ width: 400, height: 200 })
-  const center = await toScreen(t.page, { x: image.x + 200, y: image.y + 100 })
+  const minX = Math.min(...dropped.map((o) => o.x))
+  const minY = Math.min(...dropped.map((o) => o.y))
+  const maxX = Math.max(...dropped.map((o) => o.x + o.width))
+  const maxY = Math.max(...dropped.map((o) => o.y + o.height))
+  const center = await toScreen(t.page, { x: (minX + maxX) / 2, y: (minY + maxY) / 2 })
   expect(Math.abs(center.x - (canvas.x + 300))).toBeLessThan(2)
   expect(Math.abs(center.y - (canvas.y + 250))).toBeLessThan(2)
 

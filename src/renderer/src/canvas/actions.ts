@@ -3,6 +3,7 @@
  * each one performs the change, then records how to undo and redo it.
  */
 import { positionForCenter, rotatedCenter } from '@shared/geometry'
+import { ensurePdfCovers } from '../pdf/pdfCover'
 import type { CanvasObject, ImportResult, ObjectPatch, Point } from '@shared/types'
 import { isAutoHeightNote, noteContentHeight } from '../notes/measure'
 import { history as undoHistory, useCanvasStore } from '../store/canvasStore'
@@ -389,6 +390,25 @@ export async function addImagesFromPicker(at?: Point): Promise<void> {
   return run(async () => {
     const board = workspace().board
     if (!board) return
+    const result = await withProgress(() =>
+      api().invoke('assets:importFiles', paths, { imagesOnly: true })
+    )
+    await placeImported(result, board.id, at ?? viewCenter(), !at)
+  })
+}
+
+/** Asks for any files and places them: images, PDFs, and everything else the library can store. */
+export async function addFilesFromPicker(at?: Point): Promise<void> {
+  const paths = await api()
+    .invoke('dialog:pickFiles')
+    .catch((error: unknown) => {
+      reportError(error)
+      return []
+    })
+  if (paths.length === 0) return
+  return run(async () => {
+    const board = workspace().board
+    if (!board) return
     const result = await withProgress(() => api().invoke('assets:importFiles', paths))
     await placeImported(result, board.id, at ?? viewCenter(), !at)
   })
@@ -415,18 +435,27 @@ async function placeImported(
   reportSkipped(result)
   if (result.imported.length === 0) return
   const assetIds = result.imported.map((a) => a.id)
-  const created = await api().invoke('objects:createImages', {
+  const created = await api().invoke('objects:createFromAssets', {
     boardId,
     assetIds,
     center,
     avoidOverlap
   })
   if (workspace().board?.id === boardId) canvas().setSelection(created)
+  const images = result.imported.every((asset) => asset.mime.startsWith('image/'))
   record({
-    label: created.length === 1 ? 'Add image' : 'Add images',
+    label:
+      created.length === 1
+        ? images
+          ? 'Add image'
+          : 'Add file'
+        : images
+          ? 'Add images'
+          : 'Add files',
     undo: () => api().invoke('objects:delete', created),
     redo: () => api().invoke('objects:restore', created)
   })
+  void ensurePdfCovers(result.imported)
 }
 
 function reportSkipped({ imported, skipped }: ImportResult): void {
@@ -437,7 +466,9 @@ function reportSkipped({ imported, skipped }: ImportResult): void {
       ? skipped.length === 1
         ? 'This file couldn’t be added:'
         : 'These files couldn’t be added:'
-      : `Added ${imported.length} image${imported.length === 1 ? '' : 's'}. ` +
+      : `Added ${imported.length} ${
+          imported.every((asset) => asset.mime.startsWith('image/')) ? 'image' : 'file'
+        }${imported.length === 1 ? '' : 's'}. ` +
         `${skipped.length} file${skipped.length === 1 ? ' was' : 's were'} skipped:`
   const shown = lines.slice(0, 5)
   if (lines.length > shown.length) shown.push(`…and ${lines.length - shown.length} more`)

@@ -52,12 +52,42 @@ export interface IpcRequests {
   'objects:moveToBoard': { args: [ids: string[], targetBoardId: string, at?: Point]; result: void }
   'objects:copyTo': { args: [ids: string[], targetBoardId: string, at: Point]; result: string[] }
   'objects:createImages': { args: [input: CreateImagesInput]; result: string[] }
-  /** Copies files into the library (images only for now). Unsupported files are listed as skipped. */
-  'assets:importFiles': { args: [paths: string[]]; result: ImportResult }
+  /** Places images, PDFs and other files. The card type follows the file. */
+  'objects:createFromAssets': { args: [input: CreateImagesInput]; result: string[] }
+  'objects:read': { args: [id: string]; result: CanvasObject | null }
+  'objects:setFileAppearance': {
+    args: [id: string, appearance: 'compact' | 'preview']
+    result: void
+  }
+  /**
+   * Copies files into the library. `imagesOnly` is the Image tool: other files are skipped.
+   * Drop, paste and the File tool omit it and also store PDFs and generic files.
+   */
+  'assets:importFiles': {
+    args: [paths: string[], options?: { imagesOnly?: boolean }]
+    result: ImportResult
+  }
   'assets:importBytes': { args: [files: ImportBytesInput[]]; result: ImportResult }
   /** Asks where to save, then copies the stored original there. False if cancelled. */
   'assets:saveOriginal': { args: [assetId: string]; result: boolean }
+  /** Writes a working copy into a chosen folder and opens that copy. Null if cancelled. */
+  'assets:openCopy': { args: [assetId: string]; result: string | null }
+  /** Saves a rendered PDF cover (PNG bytes) as the file's thumbnail. */
+  'assets:saveCover': { args: [assetId: string, png: Uint8Array]; result: void }
+  /** Bytes `[start, end)` of a stored original. The PDF reader reads the file this way. */
+  'assets:readRange': {
+    args: [assetId: string, start: number, end: number]
+    result: Uint8Array
+  }
+  /** Page size learned after unlocking a PDF. The password itself is never sent. */
+  'assets:recordPdfInfo': {
+    args: [assetId: string, info: { pageCount: number; width: number; height: number }]
+    result: void
+  }
+  /** Attaches or clears a file's preview image. Does not delete the image asset. */
+  'assets:setPreview': { args: [assetId: string, previewAssetId: string | null]; result: void }
   'dialog:pickImages': { args: []; result: string[] }
+  'dialog:pickFiles': { args: []; result: string[] }
   /** App objects copied with Ctrl+C/X. Null once something else has been copied to the system clipboard. */
   'clipboard:set': { args: [contents: ClipboardContents | null]; result: void }
   'clipboard:get': { args: []; result: ClipboardContents | null }
@@ -73,6 +103,8 @@ export interface IpcRequests {
   'folder:move': { args: [id: string, newParentId: string | null]; result: void }
   'folder:delete': { args: [id: string]; result: void }
   'window:openNew': { args: [options?: { boardId?: string }]; result: void }
+  /** Opens the PDF reader in its own window. Closing it does not close the project. */
+  'window:openReader': { args: [options: { objectId: string }]; result: void }
   /** Creates an empty (or pre-filled) note and returns it. */
   'notes:create': { args: [input: CreateNoteInput]; result: CanvasObject }
   /** Saves a note's text unless another window saved since `baseRevision`. */
@@ -134,10 +166,19 @@ export const IPC_CHANNELS = [
   'objects:moveToBoard',
   'objects:copyTo',
   'objects:createImages',
+  'objects:createFromAssets',
+  'objects:read',
+  'objects:setFileAppearance',
   'assets:importFiles',
   'assets:importBytes',
   'assets:saveOriginal',
+  'assets:openCopy',
+  'assets:saveCover',
+  'assets:readRange',
+  'assets:recordPdfInfo',
+  'assets:setPreview',
   'dialog:pickImages',
+  'dialog:pickFiles',
   'clipboard:set',
   'clipboard:get',
   'clipboard:readText',
@@ -147,6 +188,7 @@ export const IPC_CHANNELS = [
   'folder:move',
   'folder:delete',
   'window:openNew',
+  'window:openReader',
   'notes:create',
   'notes:saveContent',
   'notes:updateStyle',

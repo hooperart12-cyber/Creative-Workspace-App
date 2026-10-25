@@ -15,6 +15,13 @@
       "when": 1792901135725,
       "tag": "0001_note_revision",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793000000000,
+      "tag": "0002_pdf_page_count",
+      "breakpoints": true
     }
   ]
 }

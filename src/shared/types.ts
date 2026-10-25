@@ -70,8 +70,14 @@ export interface AssetInfo {
   width: number | null
   height: number | null
   hasAlpha: boolean | null
+  /** PDF page count. Null for other files, and for a PDF until its password is entered. */
+  pageCount: number | null
   /** Library folder; null is the library's top level. */
   folderId: string | null
+  /** Image asset used as a generic file's preview. Shared by every card of this file. */
+  previewAssetId: string | null
+  /** The preview image, when one is attached and still in the library. */
+  preview: { sha256: string; width: number; height: number } | null
 }
 
 /** Which stored file of an asset to load: a generated thumbnail (longest side in px) or the original. */

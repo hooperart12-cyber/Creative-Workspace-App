@@ -67,6 +67,18 @@ export function CanvasToolbar() {
         <TextIcon />
         Text
       </button>
+      <button
+        onClick={(e) => {
+          e.currentTarget.blur()
+          void actions.addFilesFromPicker()
+        }}
+        title="File: store a PDF or any other file. Drop files on the canvas too."
+        aria-label="Add files"
+        className="flex w-14 flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[11px] text-ink hover:bg-canvas"
+      >
+        <FileIcon />
+        File
+      </button>
       <Divider />
       <button
         className={toolButton}
@@ -269,6 +281,15 @@ function ImageIcon() {
       <rect x="3" y="3" width="18" height="18" rx="2" />
       <circle cx="9" cy="9" r="2" />
       <path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21" />
+    </svg>
+  )
+}
+
+function FileIcon() {
+  return (
+    <svg {...svg} width={20} height={20} className="text-accent">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M14 2v6h6" />
     </svg>
   )
 }

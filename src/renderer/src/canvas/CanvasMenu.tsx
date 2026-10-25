@@ -102,6 +102,9 @@ function MenuItems() {
         <Item onSelect={() => void actions.addImagesFromPicker(contextPoint.current ?? undefined)}>
           Add images here…
         </Item>
+        <Item onSelect={() => void actions.addFilesFromPicker(contextPoint.current ?? undefined)}>
+          Add files here…
+        </Item>
         <Item
           shortcut="Ctrl+V"
           onSelect={() => void actions.paste(contextPoint.current ?? undefined)}
@@ -171,6 +174,35 @@ function MenuItems() {
             </Item>
           )}
           <Item onSelect={() => void resetNoteAppearance(noteIds)}>Reset appearance</Item>
+          <Separator />
+        </>
+      )}
+      {single?.type === 'document' && single.asset && (
+        <>
+          <Item
+            shortcut="Enter"
+            onSelect={() => useCanvasStore.getState().setPdfReaderId(single.id)}
+          >
+            Open PDF
+          </Item>
+          <Item onSelect={() => void actions.saveOriginal(single)}>Save original as…</Item>
+          <Item
+            onSelect={() => void window.api.invoke('window:openReader', { objectId: single.id })}
+          >
+            Open in new window
+          </Item>
+          <Separator />
+        </>
+      )}
+      {single?.type === 'file' && single.asset && (
+        <>
+          <Item
+            shortcut="Enter"
+            onSelect={() => useCanvasStore.getState().setFileDetailsId(single.id)}
+          >
+            File details
+          </Item>
+          <Item onSelect={() => void actions.saveOriginal(single)}>Save original as…</Item>
           <Separator />
         </>
       )}

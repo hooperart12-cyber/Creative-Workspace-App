@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import type { Box } from '@shared/geometry'
-import type { CreateImagesInput, ObjectPatch, Point } from '@shared/types'
+import type { FileAppearance } from '@shared/files'
+import type { CanvasObject, CreateImagesInput, ObjectPatch, Point } from '@shared/types'
 import type { ProjectDb } from '../db/client'
 import { assets, boardObjects, boards } from '../db/schema'
-import { deletionTime, remap, type BoardRepository } from './boards'
+import { attachPreviews, toAssetInfo } from './assets'
+import { deletionTime, remap, toCanvasObject, type BoardRepository } from './boards'
 
 const PATCHABLE = ['x', 'y', 'width', 'height', 'rotation', 'zIndex', 'locked', 'groupId'] as const
 
@@ -67,6 +69,26 @@ export function layoutImages(sizes: { width: number; height: number }[]): {
 const overlaps = (a: Box, b: Box) =>
   a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
 
+const FILE_CARD = { width: 240, height: 96 }
+const PDF_CARD = { width: 340, height: 440 }
+
+function placementFor(asset: { mime: string; width: number | null; height: number | null }): {
+  type: 'image' | 'document' | 'file'
+  width: number
+  height: number
+  data: Record<string, unknown>
+} {
+  if (asset.mime.startsWith('image/') && asset.width && asset.height) {
+    return { type: 'image', ...initialImageSize(asset.width, asset.height), data: {} }
+  }
+  if (asset.mime === 'application/pdf') {
+    const size =
+      asset.width && asset.height ? initialImageSize(asset.width, asset.height) : PDF_CARD
+    return { type: 'document', ...size, data: {} }
+  }
+  return { type: 'file', ...FILE_CARD, data: { appearance: 'compact' } }
+}
+
 /**
  * Operations on objects placed on board canvases (§4). Board cards are special:
  * trashing, moving or copying a card does the same to the board it opens.
@@ -79,11 +101,11 @@ export class ObjectRepository {
 
   /**
    * Applies placement/arrangement changes to several objects in one transaction.
-   * Images always keep their aspect ratio: a new width sets the height (or the reverse).
+   * Images and PDF cards keep their aspect ratio: a new width sets the height (or the reverse).
    */
   update(patches: ObjectPatch[]): void {
     if (patches.length === 0) return
-    const ratios = this.imageRatios(
+    const ratios = this.lockedRatios(
       patches.filter((p) => p.width !== undefined || p.height !== undefined).map((p) => p.id)
     )
     const now = new Date()
@@ -284,6 +306,119 @@ export class ObjectRepository {
     return ids
   }
 
+  /**
+   * Places library files on a board. An image becomes an image card, a PDF a document card,
+   * and anything else a compact file card. One undo step covers the whole batch.
+   */
+  createFromAssets({ boardId, assetIds, center, avoidOverlap }: CreateImagesInput): string[] {
+    this.boards.require(boardId)
+    if (assetIds.length === 0) return []
+    const rows = this.db.select().from(assets).where(inArray(assets.id, assetIds)).all()
+    const byId = new Map(rows.map((row) => [row.id, row]))
+    const placed = assetIds.map((id) => {
+      const asset = byId.get(id)
+      if (!asset || asset.deletedAt) throw new Error('File not found in the library.')
+      return { asset, ...placementFor(asset) }
+    })
+    const layout = layoutImages(placed)
+    const origin = {
+      x: Math.round(center.x - layout.width / 2),
+      y: Math.round(center.y - layout.height / 2)
+    }
+    if (avoidOverlap) {
+      const existing = this.boards.contentBounds(boardId)
+      const area = () => ({ ...origin, width: layout.width, height: layout.height })
+      for (let tries = 0; tries < 50 && existing.some((b) => overlaps(b, area())); tries++) {
+        origin.x += Math.round(layout.width + IMAGE_GAP)
+      }
+    }
+
+    const now = new Date()
+    const ids = placed.map(() => randomUUID())
+    this.db.transaction((tx) => {
+      let z = this.boards.topZ(boardId)
+      placed.forEach((item, i) => {
+        tx.insert(boardObjects)
+          .values({
+            id: ids[i],
+            boardId,
+            type: item.type,
+            assetId: item.asset.id,
+            data: item.data,
+            x: origin.x + layout.positions[i].x,
+            y: origin.y + layout.positions[i].y,
+            width: item.width,
+            height: item.height,
+            zIndex: ++z,
+            createdAt: now,
+            updatedAt: now
+          })
+          .run()
+      })
+    })
+    return ids
+  }
+
+  /** One object, with its file, for the PDF reader and file details. */
+  read(id: string): CanvasObject | null {
+    const row = this.db
+      .select()
+      .from(boardObjects)
+      .where(and(eq(boardObjects.id, id), isNull(boardObjects.deletedAt)))
+      .get()
+    if (!row) return null
+    const object = toCanvasObject(row)
+    if (row.assetId) {
+      const asset = this.db.select().from(assets).where(eq(assets.id, row.assetId)).get()
+      if (!asset || asset.deletedAt) return null
+      object.asset = toAssetInfo(asset)
+      attachPreviews(this.db, [object.asset])
+    }
+    return object
+  }
+
+  /** Compact or preview layout for one file card. Does not change the file or its preview. */
+  setFileAppearance(id: string, appearance: FileAppearance): void {
+    const row = this.db
+      .select()
+      .from(boardObjects)
+      .where(and(eq(boardObjects.id, id), isNull(boardObjects.deletedAt)))
+      .get()
+    if (!row || row.type !== 'file') throw new Error('Not a file card.')
+    this.db
+      .update(boardObjects)
+      .set({ data: { ...row.data, appearance }, updatedAt: new Date() })
+      .where(eq(boardObjects.id, id))
+      .run()
+  }
+
+  /** Gives document cards of this PDF the page's proportions, keeping each card's width. */
+  fitDocumentPages(assetId: string): void {
+    const asset = this.db.select().from(assets).where(eq(assets.id, assetId)).get()
+    if (!asset?.width || !asset.height) return
+    const ratio = asset.width / asset.height
+    const rows = this.db
+      .select()
+      .from(boardObjects)
+      .where(
+        and(
+          eq(boardObjects.assetId, assetId),
+          eq(boardObjects.type, 'document'),
+          isNull(boardObjects.deletedAt)
+        )
+      )
+      .all()
+    const now = new Date()
+    for (const row of rows) {
+      const size = proportionalSize(ratio, { width: row.width })
+      this.db
+        .update(boardObjects)
+        .set({ ...size, updatedAt: now })
+        .where(eq(boardObjects.id, row.id))
+        .run()
+    }
+  }
+
   /** The board an object lives on (used to check clipboard pastes). */
   boardOf(id: string): string | undefined {
     return this.db
@@ -294,14 +429,14 @@ export class ObjectRepository {
       .get()?.boardId
   }
 
-  /** Width ÷ height of the images among `ids` (objects that must keep their proportions). */
-  private imageRatios(ids: string[]): Map<string, number> {
+  /** Width ÷ height of images and PDFs among `ids` (objects that must keep their proportions). */
+  private lockedRatios(ids: string[]): Map<string, number> {
     if (ids.length === 0) return new Map()
     const rows = this.db
       .select({ id: boardObjects.id, width: assets.width, height: assets.height })
       .from(boardObjects)
       .innerJoin(assets, eq(assets.id, boardObjects.assetId))
-      .where(and(inArray(boardObjects.id, ids), eq(boardObjects.type, 'image')))
+      .where(and(inArray(boardObjects.id, ids), inArray(boardObjects.type, ['image', 'document'])))
       .all()
     return new Map(
       rows.flatMap((r) => (r.width && r.height ? [[r.id, r.width / r.height] as const] : []))

@@ -20,6 +20,7 @@ Statuses: ✅ Accepted · 🟡 Tentative (will be confirmed when the feature is 
 | [012](#adr-012--canvas-interaction-model-and-undo) | Canvas interaction model and undo | ✅ |
 | [013](#adr-013--images-import-pipeline-display-and-rotation) | Images: import pipeline, display and rotation | ✅ |
 | [014](#adr-014--rich-text-notes-editor-display-saving-and-multiple-windows) | Rich text notes: editor, display, saving and multiple windows | ✅ |
+| [015](#adr-015--pdfs-and-generic-file-cards) | PDFs and generic file cards | ✅ |
 
 ---
 
@@ -181,7 +182,7 @@ MyProject.cwproj/
 
 ## ADR-007 — v1 file formats: JPEG/JPG, PNG, PDF
 
-**Date:** 2026-10-24 · **Status:** ✅ Accepted (WebP added by [ADR-013](#adr-013--images-import-pipeline-display-and-rotation)) · **Requirements:** §6, §7, §23
+**Date:** 2026-10-24 · **Status:** ✅ Accepted (WebP added by [ADR-013](#adr-013--images-import-pipeline-display-and-rotation); PDFs and other files are stored and shown as in [ADR-015](#adr-015--pdfs-and-generic-file-cards)) · **Requirements:** §6, §7, §23
 
 **Decision.**
 - **Images (v1):** JPEG/JPG and PNG, rendered natively by Chromium. Transparency is preserved. Dimensions and alpha are read with `sharp`. WebP is a cheap add-on.
@@ -451,3 +452,41 @@ MyProject.cwproj/
 - Ctrl+Shift+E opens the expanded editor (Tiptap uses it for centring; alignment is in the panel).
 - System fonts are stored by name; another computer without the font shows a fallback.
 - `plainText` is ready for project search (M5) and the revision column for future sync (ADR-006).
+
+---
+
+## ADR-015 — PDFs and generic file cards
+
+**Date:** 2026-10-25 · **Status:** ✅ Accepted · **Requirements:** §5, §6, §7, §18 · **Extends:** ADR-005 (asset storage), ADR-007 (formats), ADR-013 (image import)
+
+**Context.** M3C is the last part of board objects before the asset library. People need to read PDFs (scripts, references) and keep other creative files (`.clip`, `.psd`, `.procreate`, `.docx`, archives, and so on) in the project without the app becoming a document editor or launching those files on its own.
+
+**Decisions.**
+
+- **One store, three card types.** Drop, paste and the **File** tool copy every accepted file into the existing content-addressed asset store (SHA-256, byte-for-byte, deduplicated). The **Image** tool still accepts only JPG, PNG and WebP.
+  - A file `sharp` can read as JPEG, PNG or WebP becomes an image card, even if its name says `.pdf`.
+  - A file whose header or name says PDF must actually be a readable PDF, or it is skipped with a reason. A corrupt PDF is not stored as a generic file. The rest of a batch still imports.
+  - Empty files are skipped. Everything else is a generic file card. Import success does not mean the file can be previewed.
+- **PDF cards** (`board_objects.type = 'document'`). The first page's size (in PDF points) is stored on the asset as `width` and `height`, and `page_count` (migration `0002_pdf_page_count`) holds the page count. The card locks that ratio, like an image, and does not rotate. A cover is the first page rendered in the importing window (about 1024 px on the long side) and saved by the main process as `thumbs/<sha>_1024.webp`. Import does not wait for the cover. Any window can draw a missing cover later. Until then the card shows a PDF placeholder. A password-protected PDF is stored with no page size until it is unlocked in the reader; the password is kept in that window's memory only and is never written down.
+- **Generic file cards** (`type = 'file'`) do not rotate. The frame can be resized down to the usual minimum. Two appearances, per card, in `data.appearance`:
+  - **Compact** (the default): icon, filename, extension and size.
+  - **Preview:** an attached image, letterboxed so it keeps its own proportions, plus the filename and type.
+  - The preview image is a separate image asset (`assets.preview_asset_id`), shared by every card of that file. Switching appearance does not change the file or remove the preview. Removing or replacing a preview does not delete an image that another card still uses.
+- **Reader.** pdf.js (`pdfjs-dist`) in the renderer, read-only. Scripting and eval are off. The worker cannot fetch `cw-asset://`, so the main process serves byte ranges of the stored original (`assets:readRange`) and only the pages on screen are painted. Modes: continuous scroll (default), single page, and a two-page spread. The spread draws page 1 alone, then pairs, and a leftover last page alone. Right-to-left only swaps which side is drawn; it never reorders the file. Switching modes keeps the current page when it can. The sidebar shows page thumbnails as they come into view, and the PDF's own outline when it has one. Search covers the whole document, highlights matches, and says "No searchable text" when the PDF has none. There is no OCR. Hyperlinks use the same web-and-mail check as notes. Reading position, zoom and mode belong to the window and are not saved.
+- **Where the reader lives.** Double-click opens it full-window in the current window; closing it returns to the same board, camera and selection. **Open in new window** is another Electron window on the same project. Closing that window does not close the project.
+- **Opening a file outside the app.** **Save original as** copies the stored bytes. **Open a copy** asks for a folder, writes a new file there (it will not overwrite an existing one), opens that copy, and says edits in the other app do not come back into the project. The hash-named file in `assets/` is never opened for editing. Executables and scripts (`.exe`, `.bat`, `.cmd`, `.ps1`, `.msi`, `.app`, `.command`, `.sh`, and similar) can be stored and shown, and **Open a copy** is unavailable for them. Nothing is launched just because it was imported.
+
+| Choice | Pros | Cons | Alternatives considered |
+|---|---|---|---|
+| pdf.js in the renderer, ranges read by the main process ✅ | No new native module; pages stream; the worker never needs the custom protocol. | Each range is an IPC call. | Fetching `cw-asset://` from the page (Chromium returns "Failed to fetch" for this protocol), a native canvas library (rejected: another native module). |
+| Cover rendered in the window that imported the PDF ✅ | Uses the same pdf.js; no second renderer in the main process. | The cover appears a moment after the card. | Rendering covers in the main process (needs a canvas there). |
+| Preview on the asset, appearance on the card ✅ | Every card of a file shares one preview; each card can still be compact or large. | Replacing a preview changes it for every card of that file. | Preview stored per card (easy to lose, and duplicates the link). |
+
+**Consequences and known limitations.**
+- PDF and file cards do not rotate.
+- There is no PDF editing, annotation, user bookmarks, OCR, or editing of DOCX / Markdown.
+- The app does not invent a table of contents. If the PDF has no outline, the sidebar says so.
+- A 500-page PDF is read a few pages at a time. That is a manual check, not a CI fixture.
+- Password-protected PDFs show a placeholder cover until unlocked in that window.
+- Search in the reader is not project-wide search (M5).
+- Files land at the top of the library until M4. There is no library browser for picking a preview; the user picks an image file.
