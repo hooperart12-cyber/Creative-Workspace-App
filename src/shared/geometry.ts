@@ -29,3 +29,25 @@ export function rotatedBounds(o: Box & { rotation?: number }): Box {
   const top = Math.min(...ys)
   return { x: left, y: top, width: Math.max(...xs) - left, height: Math.max(...ys) - top }
 }
+
+/** Where the middle of a (possibly rotated) object is drawn. */
+export function rotatedCenter(o: Box & { rotation?: number }): { x: number; y: number } {
+  const rad = ((o.rotation ?? 0) * Math.PI) / 180
+  const hw = o.width / 2
+  const hh = o.height / 2
+  return {
+    x: o.x + hw * Math.cos(rad) - hh * Math.sin(rad),
+    y: o.y + hw * Math.sin(rad) + hh * Math.cos(rad)
+  }
+}
+
+/** The x/y that puts an object of this size and rotation with its middle at `center`. */
+export function positionForCenter(
+  center: { x: number; y: number },
+  width: number,
+  height: number,
+  rotation = 0
+): { x: number; y: number } {
+  const offset = rotatedCenter({ x: 0, y: 0, width, height, rotation })
+  return { x: center.x - offset.x, y: center.y - offset.y }
+}

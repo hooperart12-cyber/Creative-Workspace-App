@@ -1,3 +1,4 @@
+import { rotatedBounds } from '@shared/geometry'
 import type { Point, Viewport } from '@shared/types'
 
 export interface Rect {
@@ -6,6 +7,12 @@ export interface Rect {
   width: number
   height: number
 }
+
+/**
+ * The area an object covers on screen: its rotated bounds. Use this for hit tests, culling,
+ * snapping, aligning and fitting; use x/y/width/height for the object's own geometry.
+ */
+export const objectBounds = (o: Rect & { rotation?: number }): Rect => rotatedBounds(o)
 
 export interface Size {
   width: number

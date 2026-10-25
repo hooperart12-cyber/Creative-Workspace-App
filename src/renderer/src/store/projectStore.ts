@@ -7,6 +7,8 @@ interface ProjectState {
   project: ProjectSummary | null
   recent: RecentProject[]
   error: string | null
+  /** Information for the user that isn't an error (see showNotice). */
+  notice: string | null
   init: () => Promise<void>
   createProject: (name: string) => Promise<void>
   openProject: (path?: string) => Promise<void>
@@ -32,6 +34,7 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     project: null,
     recent: [],
     error: null,
+    notice: null,
 
     init: () =>
       run(async () => {
@@ -91,4 +94,18 @@ window.api.on('project:changed', (project) => {
 /** Shows an error in the app's error banner. */
 export function reportError(error: unknown): void {
   useProjectStore.setState({ error: messageOf(error) })
+}
+
+let noticeTimer: ReturnType<typeof setTimeout> | undefined
+
+/**
+ * Shows an information message (e.g. what an import skipped). It hides itself after
+ * `durationMs` unless that is 0.
+ */
+export function showNotice(message: string | null, durationMs = 8000): void {
+  clearTimeout(noticeTimer)
+  useProjectStore.setState({ notice: message })
+  if (message && durationMs > 0) {
+    noticeTimer = setTimeout(() => useProjectStore.setState({ notice: null }), durationMs)
+  }
 }

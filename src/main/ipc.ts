@@ -263,8 +263,17 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
     clipboard = { projectPath: project.path, contents, marker }
   })
 
-  const ownClipboard = async (): Promise<boolean> =>
-    !!clipboard && (await systemClipboard.readText().catch(() => '')) === clipboard.marker
+  const ownClipboard = async (): Promise<boolean> => {
+    if (!clipboard) return false
+    const items = await readSystemClipboard()
+    const text = items.find((item) => item.types.includes('text/plain'))
+    if (!text) return false
+    const value = await text
+      .getType('text/plain')
+      .then((blob) => blob.text())
+      .catch(() => '')
+    return value === clipboard.marker
+  }
 
   handle('clipboard:get', async (event) => {
     const project = registry.get(event.sender.id)
@@ -332,7 +341,7 @@ async function readExternalClipboard(): Promise<
   { kind: 'files'; paths: string[] } | { kind: 'image'; file: ImportBytesInput } | null
 > {
   try {
-    const items = await systemClipboard.read()
+    const items = await readSystemClipboard()
     for (const item of items) {
       if (!item.types.includes('text/uri-list')) continue
       const list = await (await item.getType('text/uri-list')).text()
@@ -354,6 +363,21 @@ async function readExternalClipboard(): Promise<
     // An unreadable clipboard just means there's nothing to paste.
   }
   return null
+}
+
+/**
+ * Right after something is copied, another program (Windows clipboard history, a clipboard
+ * manager) may hold the clipboard for a moment and a read comes back empty. Retry briefly.
+ */
+async function readSystemClipboard(): Promise<Electron.ClipboardItem[]> {
+  const read = () => systemClipboard.read().catch(() => [])
+  let items = await read()
+  for (const delay of [50, 150, 300]) {
+    if (items.some((item) => item.types.length > 0)) break
+    await new Promise((resolve) => setTimeout(resolve, delay))
+    items = await read()
+  }
+  return items
 }
 
 /** e.g. "Pasted image 2026-10-24 19.30.12.png" */

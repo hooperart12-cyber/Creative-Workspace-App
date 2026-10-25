@@ -5,6 +5,8 @@ import { boardFromHash, useWorkspaceStore } from '../store/workspaceStore'
 import { ArrangeBar, CanvasToolbar, ZoomControl } from '../canvas/CanvasChrome'
 import { CanvasMenu } from '../canvas/CanvasMenu'
 import { CanvasView } from '../canvas/CanvasView'
+import { ImageViewer } from '../canvas/ImageViewer'
+import { useCanvasStore } from '../store/canvasStore'
 import { Breadcrumb } from './Breadcrumb'
 import { SidebarIcon } from './icons'
 import { Sidebar } from './Sidebar'
@@ -30,6 +32,7 @@ export function ProjectView({ project }: { project: ProjectSummary }) {
     const { goBack, goForward, goUp, toggleSidebar } = useWorkspaceStore.getState()
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return
+      if (useCanvasStore.getState().viewerObjectId) return
       if (e.altKey && e.key === 'ArrowLeft') void goBack()
       else if (e.altKey && e.key === 'ArrowRight') void goForward()
       else if (e.altKey && e.key === 'ArrowUp') void goUp()
@@ -113,6 +116,7 @@ export function ProjectView({ project }: { project: ProjectSummary }) {
         </main>
       </div>
       <WorkspaceDialogs />
+      <ImageViewer />
     </div>
   )
 }

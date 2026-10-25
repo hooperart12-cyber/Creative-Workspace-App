@@ -5,6 +5,7 @@ import { useProjectStore } from '../store/projectStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import * as actions from './actions'
 import { contextPoint } from './CanvasView'
+import { isViewable } from './objectTypes'
 
 /** Shortcut labels use ⌘/⌥ on macOS and Ctrl/Alt elsewhere (both modifiers work everywhere). */
 const isMac = navigator.platform.toLowerCase().includes('mac')
@@ -71,12 +72,16 @@ function MenuItems() {
   const toggleGrid = useCanvasStore((s) => s.toggleGrid)
   const showGrid = useCanvasStore((s) => s.showGrid)
   const openNewWindow = useProjectStore((s) => s.openNewWindow)
+  const setViewerObjectId = useCanvasStore((s) => s.setViewerObjectId)
 
   if (selectionSize === 0) {
     return (
       <>
         <Item onSelect={() => void actions.createBoardOnCanvas(contextPoint.current ?? undefined)}>
           New board here
+        </Item>
+        <Item onSelect={() => void actions.addImagesFromPicker(contextPoint.current ?? undefined)}>
+          Add images here…
         </Item>
         <Item
           shortcut="Ctrl+V"
@@ -104,9 +109,36 @@ function MenuItems() {
   const anyGrouped = selected.some((o) => o.groupId)
   const allLocked = selected.every((o) => o.locked)
   const unlocked = selected.filter((o) => !o.locked)
+  const viewable = single && isViewable(single) ? single : undefined
+  const unlockedImages = unlocked.filter((o) => o.type === 'image' && o.asset?.width)
+  const rotated = unlocked.filter((o) => o.rotation !== 0)
 
   return (
     <>
+      {viewable && (
+        <>
+          <Item shortcut="Enter" onSelect={() => setViewerObjectId(viewable.id)}>
+            View full size
+          </Item>
+          <Item onSelect={() => void actions.saveOriginal(viewable)}>Save original as…</Item>
+          <Separator />
+        </>
+      )}
+      {(unlockedImages.length > 0 || rotated.length > 0) && (
+        <>
+          {unlockedImages.length > 0 && (
+            <Item onSelect={() => void actions.resetImageSize(unlockedImages.map((o) => o.id))}>
+              Reset to original size
+            </Item>
+          )}
+          {rotated.length > 0 && (
+            <Item onSelect={() => void actions.resetRotation(rotated.map((o) => o.id))}>
+              Reset rotation
+            </Item>
+          )}
+          <Separator />
+        </>
+      )}
       {boardId && (
         <>
           <Item shortcut="Enter" onSelect={() => void openBoard(boardId)}>

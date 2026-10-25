@@ -11,12 +11,15 @@ import { BoardCardNode, COLORS, TITLE_FONT_SIZE, TITLE_GAP } from './BoardCardNo
 import {
   boundsOf,
   intersects,
+  objectBounds,
   rectFromPoints,
   screenToWorld,
   visibleWorld,
   worldToScreen,
   zoomAt
 } from './geometry'
+import { ImageNode } from './ImageNode'
+import { canRotate, isViewable, lockedAspectRatio } from './objectTypes'
 import { useCanvasShortcuts, isSpaceHeld } from './useCanvasShortcuts'
 
 /** Pixels the pointer must move before a press becomes a drag. */
@@ -33,7 +36,10 @@ type Gesture =
       ids: string[]
       start: Point
       startScreen: Point
-      origins: Map<string, { x: number; y: number; width: number; height: number }>
+      origins: Map<
+        string,
+        { x: number; y: number; width: number; height: number; rotation: number }
+      >
       moved: boolean
       clickedId: string
       additive: boolean
@@ -155,8 +161,17 @@ export function CanvasView() {
       width: area.width + margin * 2,
       height: area.height + margin * 2
     }
-    return sorted.filter((o) => selection.has(o.id) || intersects(o, padded))
+    return sorted.filter((o) => selection.has(o.id) || intersects(objectBounds(o), padded))
   }, [sorted, viewport, viewSize, selection])
+
+  // Handles depend on what's selected: images resize only proportionally (corner handles)
+  // and rotate; board cards resize freely and don't rotate.
+  const transformable = useMemo(
+    () => (board?.objects ?? []).filter((o) => selection.has(o.id) && !o.locked),
+    [board?.objects, selection]
+  )
+  const keepRatio = transformable.some((o) => lockedAspectRatio(o) !== null)
+  const rotateEnabled = transformable.length > 0 && transformable.every(canRotate)
 
   // Attach resize handles to the selected, unlocked objects (hidden while dragging).
   useEffect(() => {
@@ -229,7 +244,10 @@ export function CanvasView() {
         start: world,
         startScreen: screen,
         origins: new Map(
-          draggable.map((o) => [o.id, { x: o.x, y: o.y, width: o.width, height: o.height }])
+          draggable.map((o) => [
+            o.id,
+            { x: o.x, y: o.y, width: o.width, height: o.height, rotation: o.rotation }
+          ])
         ),
         moved: false,
         clickedId: id,
@@ -273,7 +291,9 @@ export function CanvasView() {
       const rect = rectFromPoints(g.start, world)
       state.setMarquee(rect)
       const objectsNow = useWorkspaceStore.getState().board?.objects ?? []
-      const hit = objectsNow.filter((o) => !o.locked && intersects(o, rect)).map((o) => o.id)
+      const hit = objectsNow
+        .filter((o) => !o.locked && intersects(objectBounds(o), rect))
+        .map((o) => o.id)
       state.setSelection(new Set([...g.base, ...expandToGroups(hit, objectsNow)]))
       return
     }
@@ -287,7 +307,7 @@ export function CanvasView() {
     let dx = world.x - g.start.x
     let dy = world.y - g.start.y
     let guides: ReturnType<typeof smartSnap>['guides'] = []
-    const moving = boundsOf([...g.origins.values()])!
+    const moving = boundsOf([...g.origins.values()].map(objectBounds))!
     const objectsNow = useWorkspaceStore.getState().board?.objects ?? []
     const dragged = new Set(g.ids)
 
@@ -297,7 +317,10 @@ export function CanvasView() {
         dy = snapToGrid(moving.y + dy, GRID_SIZE) - moving.y
       } else {
         const area = visibleWorld(vp, state.viewSize)
-        const others = objectsNow.filter((o) => !dragged.has(o.id) && intersects(o, area))
+        const others = objectsNow
+          .filter((o) => !dragged.has(o.id))
+          .map(objectBounds)
+          .filter((b) => intersects(b, area))
         const snap = smartSnap(
           { ...moving, x: moving.x + dx, y: moving.y + dy },
           others,
@@ -373,6 +396,7 @@ export function CanvasView() {
     const id = objectIdOf(e.target)
     const object = board.objects.find((o) => o.id === id)
     if (object?.type === 'board' && object.linkedBoardId) void openBoard(object.linkedBoardId)
+    else if (object && isViewable(object)) useCanvasStore.getState().setViewerObjectId(object.id)
   }
 
   const onContextMenu = (e: Konva.KonvaEventObject<PointerEvent>) => {
@@ -386,33 +410,45 @@ export function CanvasView() {
 
   const onTransformEnd = () => {
     const nodes = transformer.current?.nodes() ?? []
+    let rotated = false
     const patches = nodes.map((node) => {
+      const object = board.objects.find((o) => o.id === node.id())
+      const width = Math.max(1, node.width() * node.scaleX())
+      const ratio = object ? lockedAspectRatio(object) : null
       const patch = {
         id: node.id(),
         x: node.x(),
         y: node.y(),
-        width: Math.max(1, node.width() * node.scaleX()),
-        height: Math.max(1, node.height() * node.scaleY())
+        width,
+        height: ratio ? width / ratio : Math.max(1, node.height() * node.scaleY()),
+        rotation: normalizeRotation(node.rotation())
       }
+      if (object && patch.rotation !== object.rotation) rotated = true
       node.scale({ x: 1, y: 1 })
       return patch
     })
-    void actions.applyPatches(patches, 'Resize')
+    void actions.applyPatches(patches, rotated ? 'Rotate' : 'Resize')
   }
 
-  // ── HTML5 drop from the toolbar ("Board" tile) ─────────────────────────────
+  // ── HTML5 drops: the toolbar's "Board" tile, and files from File Explorer / Finder ──
 
   const onDragOver = (e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes(NEW_OBJECT_MIME)) {
+    const types = e.dataTransfer.types
+    if (types.includes(NEW_OBJECT_MIME) || types.includes('Files')) {
       e.preventDefault()
       e.dataTransfer.dropEffect = 'copy'
     }
   }
 
   const onDrop = (e: React.DragEvent) => {
+    const world = screenToWorld(pointer(e), useCanvasStore.getState().viewport)
+    if (e.dataTransfer.files.length > 0) {
+      e.preventDefault()
+      void actions.importDroppedFiles([...e.dataTransfer.files], world)
+      return
+    }
     if (e.dataTransfer.getData(NEW_OBJECT_MIME) !== 'board') return
     e.preventDefault()
-    const world = screenToWorld(pointer(e), useCanvasStore.getState().viewport)
     void actions.createBoardOnCanvas(world)
   }
 
@@ -459,29 +495,51 @@ export function CanvasView() {
             </Layer>
           )}
           <Layer ref={objectLayer}>
-            {visible.map((o) => (
-              <BoardCardNode
-                key={o.id}
-                object={o}
-                {...positionOf(o)}
-                dropTarget={drag?.dropCardId === o.id}
-                faded={cut.has(o.id)}
-                hideTitle={renamingCard?.id === o.id}
-                zoom={viewport.zoom}
-              />
-            ))}
+            {visible.map((o) =>
+              o.type === 'image' ? (
+                <ImageNode
+                  key={o.id}
+                  object={o}
+                  {...positionOf(o)}
+                  faded={cut.has(o.id)}
+                  zoom={viewport.zoom}
+                />
+              ) : (
+                <BoardCardNode
+                  key={o.id}
+                  object={o}
+                  {...positionOf(o)}
+                  dropTarget={drag?.dropCardId === o.id}
+                  faded={cut.has(o.id)}
+                  hideTitle={renamingCard?.id === o.id}
+                  zoom={viewport.zoom}
+                />
+              )
+            )}
             <Transformer
               ref={transformer}
-              rotateEnabled={false}
-              keepRatio={false}
+              rotateEnabled={rotateEnabled}
+              // Shift while rotating snaps to 15° steps (built into Konva). With keepRatio on,
+              // Shift can't unlock the proportions.
+              keepRatio={keepRatio}
+              enabledAnchors={keepRatio ? CORNER_ANCHORS : ALL_ANCHORS}
               flipEnabled={false}
               ignoreStroke
               borderStroke={COLORS.accent}
               anchorStroke={COLORS.accent}
               anchorSize={9}
               anchorCornerRadius={2}
+              rotateAnchorOffset={24}
               boundBoxFunc={(oldBox, newBox) =>
-                newBox.width < MIN_RESIZE || newBox.height < MIN_RESIZE ? oldBox : newBox
+                // Proportional boxes only need their longest side to stay usable, so thin
+                // images (banners, strips) can still be resized.
+                (
+                  keepRatio
+                    ? Math.max(newBox.width, newBox.height) < MIN_RESIZE
+                    : newBox.width < MIN_RESIZE || newBox.height < MIN_RESIZE
+                )
+                  ? oldBox
+                  : newBox
               }
               onTransformEnd={onTransformEnd}
             />
@@ -496,10 +554,11 @@ export function CanvasView() {
                   {...positionOf(o)}
                   width={o.width}
                   height={o.height}
+                  rotation={o.rotation}
                   stroke={COLORS.accent}
                   dash={[4 / viewport.zoom, 4 / viewport.zoom]}
                   strokeWidth={1.5 / viewport.zoom}
-                  cornerRadius={12}
+                  cornerRadius={o.type === 'board' ? 12 : 0}
                 />
               ))}
             {drag?.guides.map((g, i) =>
@@ -554,6 +613,21 @@ export function CanvasView() {
       )}
     </div>
   )
+}
+
+const CORNER_ANCHORS = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
+const ALL_ANCHORS = [
+  ...CORNER_ANCHORS,
+  'top-center',
+  'middle-right',
+  'bottom-center',
+  'middle-left'
+]
+
+/** Rotation in degrees between -180 and 180, tidied to two decimals. */
+function normalizeRotation(degrees: number): number {
+  const wrapped = ((((degrees + 180) % 360) + 360) % 360) - 180
+  return Math.round(wrapped * 100) / 100
 }
 
 /** MIME type used when dragging a new object from the toolbar onto the canvas. */
