@@ -1008,10 +1008,10 @@ test('a damaged note shows a placeholder; the board and other notes keep working
   const page = t.page
   await createProject(page, t.projectsDir, 'Damaged')
   const good = await typeNewNote('Fine note')
-  const bad = await typeNewNote('Will be damaged', {
-    x: (await canvasBox()).x + 650,
-    y: (await canvasBox()).y + 120
-  })
+  // The good note sits at the default spot. Keep this one in the same central column, above it:
+  // far enough right to clear the toolbar, far enough left to stay on screen in CI's smaller window.
+  const box = await canvasBox()
+  const bad = await typeNewNote('Will be damaged', { x: box.x + 420, y: box.y + 100 })
   const dirs = { dataDir: t.dataDir, projectsDir: t.projectsDir }
   await t.close()
 
@@ -1044,6 +1044,8 @@ test('a damaged note shows a placeholder; the board and other notes keep working
   await expect.poll(async () => (await notes(t.page)).length).toBe(2)
   // The good note is drawn; the damaged one can't be edited but explains itself.
   await expect.poll(async () => (await layoutOf(good.id, t.page))?.runs[0].text).toBe('Fine note')
+  // The reopened app is reading the database the script damaged.
+  expect(JSON.stringify((await stored(bad.id, t.page))!.data.content)).toContain('garbage')
   const damaged = (await notes(t.page)).find((n) => n.id === bad.id)!
   const c = await noteCenter(damaged, t.page)
   await t.page.bringToFront()
