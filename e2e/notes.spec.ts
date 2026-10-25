@@ -1020,23 +1020,22 @@ test('a damaged note shows a placeholder; the board and other notes keep working
     electronPath as never as string,
     [
       '-e',
+      // Electron on macOS inserts its own process.argv entries, so the script finds its arguments
+      // by what they look like instead of trusting their position.
       `const Database = require('better-sqlite3')
-       const db = new Database(process.env.CW_DB)
-       db.prepare('UPDATE board_objects SET data = ? WHERE id = ?')
-         .run(JSON.stringify({ content: 'garbage', plainText: 'Will be damaged' }), process.env.CW_ID)
-       db.close()`
+       const args = process.argv.slice(1)
+       const dbPath = args.find((a) => a.endsWith('project.db'))
+       const id = args.find((a) => /^[0-9a-f-]{36}$/i.test(a))
+       if (!dbPath || !id) throw new Error('Arguments not found in ' + JSON.stringify(process.argv))
+       const db = new Database(dbPath)
+       const { changes } = db.prepare('UPDATE board_objects SET data = ? WHERE id = ?')
+         .run(JSON.stringify({ content: 'garbage', plainText: 'Will be damaged' }), id)
+       db.close()
+       if (changes !== 1) throw new Error('Expected to damage 1 note, damaged ' + changes)`,
+      join(t.projectsDir, 'Damaged.cwproj', 'project.db'),
+      bad.id
     ],
-    {
-      // Passed through the environment: Electron on macOS adds its own process.argv entries,
-      // so positional arguments wouldn't land where the script reads them.
-      env: {
-        ...process.env,
-        ELECTRON_RUN_AS_NODE: '1',
-        CW_DB: join(t.projectsDir, 'Damaged.cwproj', 'project.db'),
-        CW_ID: bad.id
-      },
-      cwd: process.cwd()
-    }
+    { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, cwd: process.cwd() }
   )
 
   t = await launchApp(dirs)
