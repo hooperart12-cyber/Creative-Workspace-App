@@ -1,10 +1,38 @@
 import DOMPurify from 'dompurify'
 
 const ALLOWED_TAGS = [
-  'p', 'br', 'div', 'span', 'b', 'strong', 'i', 'em', 'u', 's', 'strike', 'del', 'a', 'mark',
-  'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'sub', 'sup',
+  'p',
+  'br',
+  'div',
+  'span',
+  'b',
+  'strong',
+  'i',
+  'em',
+  'u',
+  's',
+  'strike',
+  'del',
+  'a',
+  'mark',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'ul',
+  'ol',
+  'li',
+  'sub',
+  'sup',
   // Table cells keep their text (the table itself is dropped by the note schema).
-  'table', 'thead', 'tbody', 'tr', 'td', 'th'
+  'table',
+  'thead',
+  'tbody',
+  'tr',
+  'td',
+  'th'
 ]
 const ALLOWED_ATTR = ['href', 'title', 'style', 'start', 'data-color', 'data-pm-slice']
 

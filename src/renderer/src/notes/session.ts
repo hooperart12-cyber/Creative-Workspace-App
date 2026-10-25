@@ -14,6 +14,7 @@
  */
 import { Extension } from '@tiptap/core'
 import { Placeholder } from '@tiptap/extensions'
+import { Selection } from '@tiptap/pm/state'
 import { Editor } from '@tiptap/react'
 import { useSyncExternalStore } from 'react'
 import {
@@ -66,6 +67,16 @@ export function useNoteEditor(): Editor | null {
 
 export const currentEditor = (): Editor | null => editor
 
+/** The note being edited: from the board, or its last copy if another window removed it. */
+export function useEditedObject(): CanvasObject | undefined {
+  const id = useNoteStore((s) => s.editing?.objectId)
+  const live = useWorkspaceStore((s) =>
+    id ? s.board?.objects.find((o) => o.id === id) : undefined
+  )
+  const last = useNoteStore((s) => s.lastCopy)
+  return live ?? (id && last?.id === id ? last : undefined)
+}
+
 /** Text when editing started (for the undo step). */
 let startDoc: RichNode | null = null
 /** JSON of the last successfully saved text. */
@@ -91,8 +102,20 @@ export interface BeginOptions {
   caretAt?: { x: number; y: number }
 }
 
+let beginning: { id: string; promise: Promise<boolean> } | null = null
+
 /** Starts editing a note. Returns false if it can't be edited right now. */
-export async function beginEditing(id: string, options: BeginOptions = {}): Promise<boolean> {
+export function beginEditing(id: string, options: BeginOptions = {}): Promise<boolean> {
+  // A second request while the first is still starting (e.g. a fast double-click) is the same one.
+  if (beginning?.id === id) return beginning.promise
+  const promise = startEditing(id, options).finally(() => {
+    if (beginning?.promise === promise) beginning = null
+  })
+  beginning = { id, promise }
+  return promise
+}
+
+async function startEditing(id: string, options: BeginOptions): Promise<boolean> {
   const current = notes().editing
   if (current?.objectId === id) {
     if (options.mode && options.mode !== current.mode) setMode(options.mode)
@@ -129,11 +152,12 @@ export async function beginEditing(id: string, options: BeginOptions = {}): Prom
     baseRevision = fresh.revision
     retryDelay = 1000
     dirtySince = 0
-    const created = createEditor(startDoc, !options.caretAt)
+    const created = createEditor(startDoc)
     setEditor(created)
     useNoteStore.setState({
       blocked: null,
       linkEditorOpen: false,
+      lastCopy: fresh,
       editing: {
         objectId: id,
         boardId: fresh.boardId,
@@ -147,25 +171,38 @@ export async function beginEditing(id: string, options: BeginOptions = {}): Prom
       }
     })
     useCanvasStore.getState().setSelection([id])
-    if (!options.caretAt) zoomInToEdit(worldToScreen(noteCenter(fresh), useCanvasStore.getState().viewport))
-    const caret = options.caretAt
-    if (caret) {
-      // Once the editor is on screen, where it shows the clicked spot.
-      requestAnimationFrame(() => {
-        if (editor !== created || created.isDestroyed) return
-        const hit = created.view.posAtCoords({ left: caret.x, top: caret.y })
-        created
-          .chain()
-          .focus(hit ? hit.pos : 'end', { scrollIntoView: false })
-          .run()
-      })
-    }
+    if (!options.caretAt)
+      zoomInToEdit(worldToScreen(noteCenter(fresh), useCanvasStore.getState().viewport))
+    pendingCaret = { editor: created, at: options.caretAt ?? null }
     return true
   } catch (error) {
-    void api().invoke('notes:lease', id, 'release').catch(() => {})
+    void api()
+      .invoke('notes:lease', id, 'release')
+      .catch(() => {})
     reportError(error)
     return false
   }
+}
+
+let pendingCaret: { editor: Editor; at: { x: number; y: number } | null } | null = null
+
+/**
+ * Called by the editor as soon as it's on screen: focuses it, with the cursor at the spot that
+ * was double-clicked (or at the end). Returns false if there was nothing to place.
+ *
+ * Done directly rather than with Tiptap's focus command, which focuses a frame later and would
+ * put the cursor back where it was if a key moved it in between.
+ */
+export function placePendingCaret(): boolean {
+  const pending = pendingCaret
+  if (!pending || pending.editor !== editor || pending.editor.isDestroyed) return false
+  pendingCaret = null
+  const { view } = pending.editor
+  const hit = pending.at && view.posAtCoords({ left: pending.at.x, top: pending.at.y })
+  const $pos = view.state.doc.resolve(hit ? hit.pos : view.state.doc.content.size)
+  view.dispatch(view.state.tr.setSelection(Selection.near($pos, -1)))
+  view.focus()
+  return true
 }
 
 /** Below this zoom, text is too small to edit: editing zooms in to 100% first. */
@@ -197,8 +234,10 @@ export async function takeOverNote(id: string): Promise<void> {
 
 export function setMode(mode: 'inline' | 'expanded'): void {
   notes().updateEditing({ mode })
-  // The editor moves to its new place on the next render; put the cursor back there.
-  requestAnimationFrame(() => editor?.commands.focus())
+  // The editor moves to its new place on the next render; focus it there.
+  requestAnimationFrame(() => {
+    if (editor && !editor.isDestroyed) editor.view.focus()
+  })
 }
 
 // ── Saving ───────────────────────────────────────────────────────────────────
@@ -254,7 +293,11 @@ async function saveNow(): Promise<void> {
     retryDelay = 1000
     clearTimeout(retryTimer)
     useWorkspaceStore.getState().patchObjectData([
-      { id: editing.objectId, data: { content, plainText: plainTextOf(doc) }, revision: result.revision }
+      {
+        id: editing.objectId,
+        data: { content, plainText: plainTextOf(doc) },
+        revision: result.revision
+      }
     ])
     if (height !== undefined && object && isAutoHeightNote(object)) {
       useWorkspaceStore.getState().patchObjects([{ id: editing.objectId, height }])
@@ -309,7 +352,10 @@ async function finish(): Promise<boolean> {
   if (!after) return true
   if (!after.readOnly && (after.conflict || after.deleted || after.status === 'error')) {
     if (after.status === 'error' && !after.conflict && !after.deleted) {
-      showNotice('Your latest changes haven’t been saved yet. The note stays open until they are.', 6000)
+      showNotice(
+        'Your latest changes haven’t been saved yet. The note stays open until they are.',
+        6000
+      )
     }
     return false
   }
@@ -339,12 +385,15 @@ function close(leaseLost: boolean): void {
   const editing = notes().editing
   clearTimeout(saveTimer)
   clearTimeout(retryTimer)
+  pendingCaret = null
   if (editing && !leaseLost) {
-    void api().invoke('notes:lease', editing.objectId, 'release').catch(() => {})
+    void api()
+      .invoke('notes:lease', editing.objectId, 'release')
+      .catch(() => {})
   }
   editor?.destroy()
   setEditor(null)
-  useNoteStore.setState({ editing: null, linkEditorOpen: false })
+  useNoteStore.setState({ editing: null, lastCopy: null, linkEditorOpen: false })
 }
 
 /** An undo step that swaps a note's text, if nobody changed it in the meantime. */
@@ -408,7 +457,10 @@ export function resolveDeleted(choice: 'keep' | 'discard'): Promise<void> {
 }
 
 async function saveAsNewNote(doc: RichNode, nextTo: string, boardId?: string): Promise<void> {
-  const source: CanvasObject | undefined = currentObjects().find((o) => o.id === nextTo)
+  const lastCopy = notes().lastCopy
+  const source: CanvasObject | undefined =
+    currentObjects().find((o) => o.id === nextTo) ??
+    (lastCopy?.id === nextTo ? lastCopy : undefined)
   const targetBoard = boardId ?? useWorkspaceStore.getState().board?.id
   if (!targetBoard) return
   const read = source ? readNote(source.data) : null
@@ -460,16 +512,49 @@ export async function leaveNote(targetBoardId: string | null, force: boolean): P
 
 setLeaveGuard((target, force) => leaveNote(target, force))
 
+// Keep the last copy of the edited note. If it disappears from this board (moved to the trash
+// in another window) after being changed here, the user can keep the text as a new note;
+// if nothing was changed, editing just stops.
+let removedWhileEditing: string | null = null
+useWorkspaceStore.subscribe((state) => {
+  const editing = notes().editing
+  if (!editing || state.board?.id !== editing.boardId) return
+  const here = state.board.objects.find((o) => o.id === editing.objectId)
+  if (here) {
+    if (here !== notes().lastCopy) useNoteStore.setState({ lastCopy: here })
+    return
+  }
+  if (editing.deleted || removedWhileEditing === editing.objectId) return
+  removedWhileEditing = editing.objectId
+  void queued(async () => {
+    const now = notes().editing
+    if (now?.objectId !== editing.objectId || now.deleted) return
+    const changed =
+      hasUnsavedChanges() || (!!startDoc && !sameDoc(startDoc, JSON.parse(savedJson) as RichNode))
+    if (changed && !now.readOnly)
+      notes().updateEditing({ status: 'error', deleted: true, error: null })
+    else close(now.readOnly)
+  }).finally(() => {
+    removedWhileEditing = null
+  })
+})
+
 window.api.on('notes:editedElsewhere', (ids) => {
   useNoteStore.setState({ editedElsewhere: new Set(ids) })
 })
 
 window.api.on('notes:leaseLost', ({ objectId }) => {
-  if (notes().editing?.objectId !== objectId) return
-  // Save what's here first; the revision check protects the other window's work.
+  const handedOver = () =>
+    void api()
+      .invoke('notes:handedOver', objectId)
+      .catch(() => {})
+  if (notes().editing?.objectId !== objectId) return handedOver()
+  // Save what's here first (the other window waits for it); the revision check protects
+  // the other window's work if this save comes too late.
+  editor?.setEditable(false)
   void queued(saveNow).then(() => {
+    handedOver()
     if (notes().editing?.objectId !== objectId) return
-    editor?.setEditable(false)
     notes().updateEditing({ readOnly: true })
   })
 })
@@ -478,7 +563,10 @@ window.api.on('notes:leaseLost', ({ objectId }) => {
 // button). The editor handles its own Escape first; open popovers close themselves instead.
 window.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || e.defaultPrevented || !notes().editing || notes().linkEditorOpen) return
-  if ((e.target as Element | null)?.closest?.('[role="menu"], [role="listbox"], [data-note-popover]')) return
+  if (
+    (e.target as Element | null)?.closest?.('[role="menu"], [role="listbox"], [data-note-popover]')
+  )
+    return
   e.preventDefault()
   void endEditing()
 })
@@ -492,6 +580,8 @@ window.api.on('window:flushRequest', () => {
 /** Keys that control the editing session rather than the text. */
 const SessionKeys = Extension.create({
   name: 'noteSessionKeys',
+  // Before the formatting shortcuts (text alignment also uses Ctrl+Shift+E).
+  priority: 1000,
   addKeyboardShortcuts() {
     return {
       Escape: () => {
@@ -510,7 +600,7 @@ const SessionKeys = Extension.create({
   }
 })
 
-function createEditor(doc: RichNode, focusEnd: boolean): Editor {
+function createEditor(doc: RichNode): Editor {
   return new Editor({
     extensions: [
       ...noteExtensions,
@@ -519,7 +609,8 @@ function createEditor(doc: RichNode, focusEnd: boolean): Editor {
     ],
     content: doc,
     injectCSS: false,
-    autofocus: focusEnd ? 'end' : false,
+    // Focused by placePendingCaret once it's on screen.
+    autofocus: false,
     editorProps: {
       attributes: { class: 'cw-note-content', 'aria-label': 'Note text', spellcheck: 'true' },
       transformPastedHTML: cleanPastedHtml,

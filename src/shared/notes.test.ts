@@ -23,10 +23,17 @@ const doc = (...content: RichNode[]): RichNode => ({ type: 'doc', content })
 describe('sanitizeDoc', () => {
   it('keeps supported formatting and is canonical', () => {
     const input = doc(
-      { type: 'heading', attrs: { level: 2, textAlign: 'center' }, content: [{ type: 'text', text: 'Title' }] },
+      {
+        type: 'heading',
+        attrs: { level: 2, textAlign: 'center' },
+        content: [{ type: 'text', text: 'Title' }]
+      },
       p('Bold and red', [
         { type: 'bold' },
-        { type: 'textStyle', attrs: { color: '#ff0000', fontSize: '24px', fontFamily: "'CW Lora', serif" } }
+        {
+          type: 'textStyle',
+          attrs: { color: '#ff0000', fontSize: '24px', fontFamily: "'CW Lora', serif" }
+        }
       ]),
       {
         type: 'bulletList',
@@ -39,21 +46,34 @@ describe('sanitizeDoc', () => {
       }
     )
     const clean = sanitizeDoc(input)
-    expect(clean.content![0]).toMatchObject({ type: 'heading', attrs: { level: 2, textAlign: 'center' } })
+    expect(clean.content![0]).toMatchObject({
+      type: 'heading',
+      attrs: { level: 2, textAlign: 'center' }
+    })
     expect(clean.content![1].content![0].marks).toEqual([
       { type: 'bold' },
-      { type: 'textStyle', attrs: { color: '#ff0000', fontFamily: "'CW Lora', serif", fontSize: '24px' } }
+      {
+        type: 'textStyle',
+        attrs: { color: '#ff0000', fontFamily: "'CW Lora', serif", fontSize: '24px' }
+      }
     ])
     expect(clean.content![3].attrs).toMatchObject({ start: 3 })
     expect(sanitizeDoc(clean)).toEqual(clean)
   })
 
   it('drops unsafe links but keeps their text', () => {
-    for (const href of ['javascript:alert(1)', 'file:///C:/secret.txt', 'data:text/html,hi', 'cw-asset://x']) {
+    for (const href of [
+      'javascript:alert(1)',
+      'file:///C:/secret.txt',
+      'data:text/html,hi',
+      'cw-asset://x'
+    ]) {
       const clean = sanitizeDoc(doc(p('click', [{ type: 'link', attrs: { href } }])))
       expect(clean.content![0].content![0]).toEqual({ type: 'text', text: 'click' })
     }
-    const safe = sanitizeDoc(doc(p('site', [{ type: 'link', attrs: { href: 'https://example.com' } }])))
+    const safe = sanitizeDoc(
+      doc(p('site', [{ type: 'link', attrs: { href: 'https://example.com' } }]))
+    )
     expect(safe.content![0].content![0].marks![0]).toMatchObject({
       type: 'link',
       attrs: { href: 'https://example.com' }
@@ -110,7 +130,12 @@ describe('sanitizeDoc', () => {
   })
 
   it('gives an empty document a paragraph', () => {
-    expect(sanitizeDoc({ type: 'doc' })).toEqual({ type: 'doc', content: [{ type: 'paragraph', attrs: { textAlign: null, lineHeight: null, spaceAfter: null } }] })
+    expect(sanitizeDoc({ type: 'doc' })).toEqual({
+      type: 'doc',
+      content: [
+        { type: 'paragraph', attrs: { textAlign: null, lineHeight: null, spaceAfter: null } }
+      ]
+    })
   })
 })
 
@@ -137,7 +162,10 @@ describe('readNote', () => {
 describe('plain text and helpers', () => {
   it('puts paragraphs, list items and line breaks on their own lines', () => {
     const d = doc(
-      { type: 'paragraph', content: [{ type: 'text', text: 'a' }, { type: 'hardBreak' }, { type: 'text', text: 'b' }] },
+      {
+        type: 'paragraph',
+        content: [{ type: 'text', text: 'a' }, { type: 'hardBreak' }, { type: 'text', text: 'b' }]
+      },
       { type: 'bulletList', content: [{ type: 'listItem', content: [p('c')] }] }
     )
     expect(plainTextOf(d)).toBe('a\nb\nc')
@@ -146,8 +174,16 @@ describe('plain text and helpers', () => {
   })
 
   it('compares documents by content, not attribute order', () => {
-    const a = doc({ type: 'paragraph', attrs: { lineHeight: null, textAlign: 'left' }, content: [{ type: 'text', text: 'x' }] })
-    const b = doc({ type: 'paragraph', attrs: { textAlign: 'left' }, content: [{ type: 'text', text: 'x' }] })
+    const a = doc({
+      type: 'paragraph',
+      attrs: { lineHeight: null, textAlign: 'left' },
+      content: [{ type: 'text', text: 'x' }]
+    })
+    const b = doc({
+      type: 'paragraph',
+      attrs: { textAlign: 'left' },
+      content: [{ type: 'text', text: 'x' }]
+    })
     expect(sameDoc(a, b)).toBe(true)
     expect(sameDoc(a, doc(p('y')))).toBe(false)
   })
@@ -163,7 +199,13 @@ describe('plain text and helpers', () => {
 
   it('keeps only valid appearance values', () => {
     expect(
-      sanitizeAppearance({ mode: 'floating', background: '#abc', padding: 500, shadow: 'yes', extra: 1 })
+      sanitizeAppearance({
+        mode: 'floating',
+        background: '#abc',
+        padding: 500,
+        shadow: 'yes',
+        extra: 1
+      })
     ).toEqual({ mode: 'floating', background: '#abc', padding: 64 })
   })
 })

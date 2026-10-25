@@ -33,7 +33,9 @@ interface WorkspaceState {
   /** Applies changes to the open board's objects immediately, before the save round-trip. */
   patchObjects: (patches: ObjectPatch[]) => void
   /** Merges into objects' `data` immediately (note text and look). */
-  patchObjectData: (patches: { id: string; data: Record<string, unknown>; revision?: number }[]) => void
+  patchObjectData: (
+    patches: { id: string; data: Record<string, unknown>; revision?: number }[]
+  ) => void
   /** Shows a just-created object straight away (the full refresh follows). */
   addObject: (object: CanvasObject) => void
   /** Swaps in fresh copies of objects (another window changed them). */

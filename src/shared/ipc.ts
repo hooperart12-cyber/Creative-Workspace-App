@@ -82,6 +82,8 @@ export interface IpcRequests {
   'notes:lease': { args: [id: string, action: NoteLeaseAction]; result: { ok: boolean } }
   /** Notes other windows are editing right now. */
   'notes:editedElsewhere': { args: []; result: string[] }
+  /** After `notes:leaseLost`: this window saved the note and stopped editing it. */
+  'notes:handedOver': { args: [id: string]; result: void }
   /** Opens a link from a note in the default browser or mail app (web and mail links only). */
   'links:open': { args: [url: string]; result: void }
   /** The window finished saving after `window:flushRequest`, and may close. */
@@ -148,6 +150,7 @@ export const IPC_CHANNELS = [
   'notes:get',
   'notes:lease',
   'notes:editedElsewhere',
+  'notes:handedOver',
   'links:open',
   'window:flushed'
 ] as const satisfies readonly IpcChannel[]

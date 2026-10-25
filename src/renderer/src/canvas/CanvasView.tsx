@@ -23,6 +23,7 @@ import { canRotate, isViewable, lockedAspectRatio } from './objectTypes'
 import { useCanvasShortcuts, isSpaceHeld } from './useCanvasShortcuts'
 import { NoteNode } from '../notes/NoteNode'
 import { NoteEditorOverlay } from '../notes/NoteEditorOverlay'
+import { NoteChrome } from '../notes/NoteChrome'
 import { useNoteStore } from '../notes/noteStore'
 import { isAutoHeightNote, noteContentHeight } from '../notes/measure'
 import { lastLayout } from '../notes/layout'
@@ -169,7 +170,10 @@ export function CanvasView() {
       } else {
         const scale = e.deltaMode === 1 ? 20 : 1
         // Over a selected fixed-height note with more text than fits: scroll its text.
-        if (!e.shiftKey && scrollNoteUnderPointer(e.clientX - rect.left, e.clientY - rect.top, e.deltaY * scale)) {
+        if (
+          !e.shiftKey &&
+          scrollNoteUnderPointer(e.clientX - rect.left, e.clientY - rect.top, e.deltaY * scale)
+        ) {
           return
         }
         // Wheel / two-finger scroll pans (Shift turns vertical wheel into horizontal).
@@ -190,7 +194,10 @@ export function CanvasView() {
       if (max <= 0) return false
       const notes = useNoteStore.getState()
       const current = Math.min(notes.scroll[id] ?? 0, max)
-      const next = Math.min(max, Math.max(0, current + delta / useCanvasStore.getState().viewport.zoom))
+      const next = Math.min(
+        max,
+        Math.max(0, current + delta / useCanvasStore.getState().viewport.zoom)
+      )
       // Even at the end of the text the wheel stays with the note, so it never suddenly
       // starts moving the canvas mid-scroll.
       if (next !== current) notes.setScroll(id, next)
@@ -238,13 +245,14 @@ export function CanvasView() {
     const tr = transformer.current
     const layer = objectLayer.current
     if (!tr || !layer) return
-    const targets = drag || editingId
-      ? []
-      : layer.find((node: Konva.Node) => {
-          if (!node.hasName('object')) return false
-          const o = board?.objects.find((x) => x.id === node.id())
-          return !!o && selection.has(o.id) && !o.locked
-        })
+    const targets =
+      drag || editingId
+        ? []
+        : layer.find((node: Konva.Node) => {
+            if (!node.hasName('object')) return false
+            const o = board?.objects.find((x) => x.id === node.id())
+            return !!o && selection.has(o.id) && !o.locked
+          })
     tr.nodes(targets)
     tr.getLayer()?.batchDraw()
   }, [selection, board?.objects, drag, visible, editingId])
@@ -278,7 +286,8 @@ export function CanvasView() {
     const local = node.getAbsoluteTransform().copy().invert().point(pointerPos)
     const y = local.y + (isAutoHeightNote(object) ? 0 : (noteScroll[id] ?? 0))
     const run = lastLayout(id)?.runs.find(
-      (r) => r.href && local.x >= r.x && local.x <= r.x + r.width && y >= r.top && y <= r.top + r.height
+      (r) =>
+        r.href && local.x >= r.x && local.x <= r.x + r.width && y >= r.top && y <= r.top + r.height
     )
     return run?.href ?? null
   }
@@ -455,6 +464,14 @@ export function CanvasView() {
       return
     }
     lastPressDragged.current = g?.kind === 'drag' && g.moved
+    if (lastPressDragged.current) {
+      // Konva counts the release that ends a drag as a click, so it would pair it with the next
+      // click as a double-click and then miss the real double-click that follows.
+      const konvaStage = stage.current as unknown as {
+        _lastClicks?: Record<string, unknown>
+      } | null
+      if (konvaStage?._lastClicks) konvaStage._lastClicks = {}
+    }
     if (g?.kind !== 'drag') return
 
     if (!g.moved) {
@@ -481,16 +498,17 @@ export function CanvasView() {
   }
 
   const onDoubleClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
-    if (lastPressDragged.current) return
+    if (lastPressDragged.current || e.evt.button !== 0) return
     const id = objectIdOf(e.target)
     const object = board.objects.find((o) => o.id === id)
     if (object?.type === 'board' && object.linkedBoardId) void openBoard(object.linkedBoardId)
     else if (object && isViewable(object)) useCanvasStore.getState().setViewerObjectId(object.id)
     else if (object?.type === 'text') {
+      // A quick second Ctrl+click is for links, not for editing.
+      if (e.evt.ctrlKey || e.evt.metaKey) return
       zoomInToEdit(pointer(e.evt))
       void beginEditing(object.id, { caretAt: { x: e.evt.clientX, y: e.evt.clientY } })
-    }
-    else if (!object && e.evt.button === 0) {
+    } else if (!object) {
       // Double-click on empty canvas: start a note right there.
       void createNote(screenToWorld(pointer(e.evt), useCanvasStore.getState().viewport))
     }
@@ -749,6 +767,7 @@ export function CanvasView() {
       )}
 
       <NoteEditorOverlay />
+      <NoteChrome />
 
       {renamingCard && (
         <div

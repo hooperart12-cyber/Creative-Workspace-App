@@ -6,6 +6,7 @@ import { ArrangeBar, CanvasToolbar, ZoomControl } from '../canvas/CanvasChrome'
 import { CanvasMenu } from '../canvas/CanvasMenu'
 import { CanvasView } from '../canvas/CanvasView'
 import { ImageViewer } from '../canvas/ImageViewer'
+import { ExpandedNoteEditor } from '../notes/ExpandedNoteEditor'
 import { useCanvasStore } from '../store/canvasStore'
 import { isEditingNote, useNoteStore } from '../notes/noteStore'
 import { Breadcrumb } from './Breadcrumb'
@@ -123,6 +124,7 @@ export function ProjectView({ project }: { project: ProjectSummary }) {
       </div>
       <WorkspaceDialogs />
       <ImageViewer />
+      <ExpandedNoteEditor />
     </div>
   )
 }

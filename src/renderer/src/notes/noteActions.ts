@@ -71,8 +71,7 @@ export function updateNoteStyle(
       if (!read.ok) continue
       const appearance = { ...read.note.appearance, ...change.appearance }
       const sizing = change.sizing ?? read.note.sizing
-      const height =
-        sizing === 'auto' ? noteContentHeight(object, { appearance }) : object.height
+      const height = sizing === 'auto' ? noteContentHeight(object, { appearance }) : object.height
       forward.push({
         id: object.id,
         ...(change.appearance ? { appearance } : {}),

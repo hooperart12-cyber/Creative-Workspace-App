@@ -365,7 +365,7 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
 
   handle('notes:get', (event, ids) => requireProject(event).notes.get(ids))
 
-  handle('notes:lease', (event, id, action) => {
+  handle('notes:lease', async (event, id, action) => {
     const project = requireProject(event)
     const owner = event.sender.id
     let ok = true
@@ -373,10 +373,28 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
     else if (action === 'release') leases.release(project.path, id, owner)
     else {
       const previous = leases.takeOver(project.path, id, owner)
-      if (previous !== undefined) send(previous, 'notes:leaseLost', { objectId: id })
+      if (previous !== undefined && previous !== owner) {
+        // Let the other window save what it has first, so this one starts from it.
+        const key = `${project.path}\n${id}`
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(done, HANDOVER_TIMEOUT_MS)
+          function done() {
+            clearTimeout(timer)
+            pendingHandover.delete(key)
+            resolve()
+          }
+          pendingHandover.set(key, done)
+          send(previous, 'notes:leaseLost', { objectId: id })
+        })
+      }
     }
     broadcastLeases(project)
     return { ok }
+  })
+
+  handle('notes:handedOver', (event, id) => {
+    const project = registry.get(event.sender.id)
+    if (project) pendingHandover.get(`${project.path}\n${id}`)?.()
   })
 
   handle('notes:editedElsewhere', (event) => {
@@ -417,6 +435,9 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
 const leases = new NoteLeases()
 /** Windows waiting to close until they've saved their open note. */
 const pendingClose = new Map<number, () => void>()
+/** Take-overs waiting for the previous editor to save, by project path and note id. */
+const pendingHandover = new Map<string, () => void>()
+const HANDOVER_TIMEOUT_MS = 3000
 let releaseWindowLeases: (owner: number) => void = () => {}
 
 /** Image types other programs put on the clipboard, best first (browsers and screenshots use PNG). */

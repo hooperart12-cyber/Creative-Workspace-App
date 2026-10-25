@@ -197,7 +197,11 @@ export function layoutNote(doc: RichNode, width: number, appearance: NoteAppeara
     const firstRunOf = new Map<Text, number>()
     const range = document.createRange()
     const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT)
-    for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null) {
+    for (
+      let node = walker.nextNode() as Text | null;
+      node;
+      node = walker.nextNode() as Text | null
+    ) {
       if (!node.data) continue
       const style = styleOf(node.parentElement!)
       const metrics = fontMetrics(style.font)
@@ -233,7 +237,9 @@ export function layoutNote(doc: RichNode, width: number, appearance: NoteAppeara
       const font = fontOf(cs)
       const first = li.firstElementChild
       let baseline: number | null = null
-      const firstText = first ? document.createTreeWalker(first, NodeFilter.SHOW_TEXT).nextNode() : null
+      const firstText = first
+        ? document.createTreeWalker(first, NodeFilter.SHOW_TEXT).nextNode()
+        : null
       if (firstText && firstRunOf.has(firstText as Text)) {
         baseline = runs[firstRunOf.get(firstText as Text)!].baseline
       } else if (first) {
@@ -241,7 +247,8 @@ export function layoutNote(doc: RichNode, width: number, appearance: NoteAppeara
         const fcs = getComputedStyle(first)
         const m = fontMetrics(fontOf(fcs))
         const lineHeight = parseFloat(fcs.lineHeight) || parseFloat(fcs.fontSize) * 1.4
-        baseline = first.getBoundingClientRect().top - origin.top + (lineHeight - m.height) / 2 + m.ascent
+        baseline =
+          first.getBoundingClientRect().top - origin.top + (lineHeight - m.height) / 2 + m.ascent
       }
       if (baseline === null) return
       markers.push({
@@ -260,10 +267,7 @@ export function layoutNote(doc: RichNode, width: number, appearance: NoteAppeara
 }
 
 /** Splits a text node into pieces that each sit on one line. */
-function linePieces(
-  node: Text,
-  range: Range
-): { start: number; end: number; rect: DOMRect }[] {
+function linePieces(node: Text, range: Range): { start: number; end: number; rect: DOMRect }[] {
   range.selectNodeContents(node)
   const whole = visibleRects(range)
   if (whole.length === 0) return []
@@ -299,7 +303,12 @@ function linePieces(
       last.end = piece.end
       if (piece.rect) {
         const right = Math.max(last.rect.right, piece.rect.right)
-        last.rect = new DOMRect(last.rect.left, last.rect.top, right - last.rect.left, last.rect.height)
+        last.rect = new DOMRect(
+          last.rect.left,
+          last.rect.top,
+          right - last.rect.left,
+          last.rect.height
+        )
       }
     } else if (piece.rect) {
       merged.push({ start: piece.start, end: piece.end, rect: piece.rect })
@@ -327,12 +336,24 @@ export function counterText(n: number, depth: number): string {
   if (style === 0 || n <= 0) return String(n)
   if (style === 1) {
     let s = ''
-    for (let v = n; v > 0; v = Math.floor((v - 1) / 26)) s = String.fromCharCode(97 + ((v - 1) % 26)) + s
+    for (let v = n; v > 0; v = Math.floor((v - 1) / 26))
+      s = String.fromCharCode(97 + ((v - 1) % 26)) + s
     return s
   }
   const numerals: [number, string][] = [
-    [1000, 'm'], [900, 'cm'], [500, 'd'], [400, 'cd'], [100, 'c'], [90, 'xc'],
-    [50, 'l'], [40, 'xl'], [10, 'x'], [9, 'ix'], [5, 'v'], [4, 'iv'], [1, 'i']
+    [1000, 'm'],
+    [900, 'cm'],
+    [500, 'd'],
+    [400, 'cd'],
+    [100, 'c'],
+    [90, 'xc'],
+    [50, 'l'],
+    [40, 'xl'],
+    [10, 'x'],
+    [9, 'ix'],
+    [5, 'v'],
+    [4, 'iv'],
+    [1, 'i']
   ]
   let s = ''
   let v = n

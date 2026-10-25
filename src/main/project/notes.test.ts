@@ -43,9 +43,18 @@ describe('NoteRepository', () => {
 
   it('saves text based on the current revision', () => {
     const note = newNote()
-    const first = project.notes.saveContent({ id: note.id, baseRevision: 0, content: content('Hello'), height: 90 })
+    const first = project.notes.saveContent({
+      id: note.id,
+      baseRevision: 0,
+      content: content('Hello'),
+      height: 90
+    })
     expect(first).toEqual({ ok: true, revision: 1 })
-    const second = project.notes.saveContent({ id: note.id, baseRevision: 1, content: content('Hello again') })
+    const second = project.notes.saveContent({
+      id: note.id,
+      baseRevision: 1,
+      content: content('Hello again')
+    })
     expect(second).toEqual({ ok: true, revision: 2 })
     expect(textOf(note.id)).toBe('Hello again')
     expect(project.notes.get([note.id])[0].height).toBe(90)
@@ -54,7 +63,11 @@ describe('NoteRepository', () => {
   it('refuses a save based on an older revision and returns the other version', () => {
     const note = newNote()
     project.notes.saveContent({ id: note.id, baseRevision: 0, content: content('Window A') })
-    const stale = project.notes.saveContent({ id: note.id, baseRevision: 0, content: content('Window B') })
+    const stale = project.notes.saveContent({
+      id: note.id,
+      baseRevision: 0,
+      content: content('Window B')
+    })
     expect(stale).toMatchObject({ ok: false, reason: 'conflict', revision: 1 })
     if (!stale.ok && stale.reason === 'conflict') {
       expect(stale.content?.doc.content?.[0].content?.[0].text).toBe('Window A')
@@ -91,7 +104,11 @@ describe('NoteRepository', () => {
     ])
     const [after] = project.notes.get([note.id])
     const read = readNote(after.data)
-    expect(read.ok && read.note.appearance).toMatchObject({ mode: 'floating', padding: 4, radius: 10 })
+    expect(read.ok && read.note.appearance).toMatchObject({
+      mode: 'floating',
+      padding: 4,
+      radius: 10
+    })
     expect(read.ok && read.note.sizing).toBe('fixed')
     expect(textOf(note.id)).toBe('Keep me')
     expect(after.height).toBe(300)
@@ -119,7 +136,9 @@ describe('NoteRepository', () => {
     const child = project.boards.create(project.mainBoardId, 'Child')
     project.objects.moveToBoard([note.id], child.id)
     const [cardCopy] = project.objects.copyTo([child.objectId], project.mainBoardId, { x: 0, y: 0 })
-    const copiedBoard = project.boards.get(project.mainBoardId).objects.find((o) => o.id === cardCopy)!
+    const copiedBoard = project.boards
+      .get(project.mainBoardId)
+      .objects.find((o) => o.id === cardCopy)!
     const inside = project.boards.get(copiedBoard.linkedBoardId!).objects
     expect(inside.map((o) => o.type)).toEqual(['text'])
   })

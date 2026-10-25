@@ -6,6 +6,22 @@ import { useWorkspaceStore } from '../store/workspaceStore'
 import * as actions from './actions'
 import { contextPoint } from './CanvasView'
 import { isViewable } from './objectTypes'
+import { readNote } from '@shared/notes'
+import type { CanvasObject } from '@shared/types'
+import { isAutoHeightNote } from '../notes/measure'
+import {
+  createNote,
+  fitNotesToContent,
+  isNote,
+  resetNoteAppearance,
+  updateNoteStyle
+} from '../notes/noteActions'
+import { beginEditing } from '../notes/session'
+
+const noteMode = (o: CanvasObject) => {
+  const read = readNote(o.data)
+  return read.ok ? read.note.appearance.mode : 'card'
+}
 
 /** Shortcut labels use ⌘/⌥ on macOS and Ctrl/Alt elsewhere (both modifiers work everywhere). */
 const isMac = navigator.platform.toLowerCase().includes('mac')
@@ -80,6 +96,9 @@ function MenuItems() {
         <Item onSelect={() => void actions.createBoardOnCanvas(contextPoint.current ?? undefined)}>
           New board here
         </Item>
+        <Item shortcut="T" onSelect={() => void createNote(contextPoint.current ?? undefined)}>
+          New text here
+        </Item>
         <Item onSelect={() => void actions.addImagesFromPicker(contextPoint.current ?? undefined)}>
           Add images here…
         </Item>
@@ -112,9 +131,49 @@ function MenuItems() {
   const viewable = single && isViewable(single) ? single : undefined
   const unlockedImages = unlocked.filter((o) => o.type === 'image' && o.asset?.width)
   const rotated = unlocked.filter((o) => o.rotation !== 0)
+  const notes = unlocked.filter(isNote)
+  const noteIds = notes.map((o) => o.id)
+  const fixedNotes = notes.filter((o) => !isAutoHeightNote(o))
+  const allFloating = notes.length > 0 && notes.every((o) => noteMode(o) === 'floating')
 
   return (
     <>
+      {single?.type === 'text' && !single.locked && (
+        <>
+          <Item shortcut="Enter" onSelect={() => void beginEditing(single.id)}>
+            Edit text
+          </Item>
+          <Item
+            shortcut="Ctrl+Shift+E"
+            onSelect={() => void beginEditing(single.id, { mode: 'expanded' })}
+          >
+            Expand note
+          </Item>
+          <Separator />
+        </>
+      )}
+      {notes.length > 0 && (
+        <>
+          <Item
+            onSelect={() =>
+              void updateNoteStyle(
+                noteIds,
+                { appearance: { mode: allFloating ? 'card' : 'floating' } },
+                allFloating ? 'Show as card' : 'Show as floating text'
+              )
+            }
+          >
+            {allFloating ? 'Show as card' : 'Show as floating text'}
+          </Item>
+          {fixedNotes.length > 0 && (
+            <Item onSelect={() => void fitNotesToContent(fixedNotes.map((o) => o.id))}>
+              Fit to content
+            </Item>
+          )}
+          <Item onSelect={() => void resetNoteAppearance(noteIds)}>Reset appearance</Item>
+          <Separator />
+        </>
+      )}
       {viewable && (
         <>
           <Item shortcut="Enter" onSelect={() => setViewerObjectId(viewable.id)}>

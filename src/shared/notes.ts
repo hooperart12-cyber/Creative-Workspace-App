@@ -176,7 +176,9 @@ const str = (v: unknown, max = 200): string | null =>
 export function sanitizeDoc(raw: unknown): RichNode {
   if (!isRecord(raw) || raw.type !== 'doc') throw new NoteContentError('Invalid note content.')
   if (JSON.stringify(raw).length > MAX_NOTE_BYTES) {
-    throw new NoteContentError('This note is too long to save. Try splitting it into several notes.')
+    throw new NoteContentError(
+      'This note is too long to save. Try splitting it into several notes.'
+    )
   }
   const blocks = children(raw).map((b) => block(b, 0))
   return { type: 'doc', content: blocks.length ? blocks : [block({ type: 'paragraph' }, 0)] }
@@ -276,7 +278,8 @@ function cleanMarks(raw: unknown): RichMark[] {
         fontSize: fontSize(attrs.fontSize)
       }
       // A text style with nothing set means nothing; ProseMirror drops it too.
-      if (style.color || style.fontFamily || style.fontSize) clean = { type: 'textStyle', attrs: style }
+      if (style.color || style.fontFamily || style.fontSize)
+        clean = { type: 'textStyle', attrs: style }
     }
     if (clean) {
       seen.add(mark.type)

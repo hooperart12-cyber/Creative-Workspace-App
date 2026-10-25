@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { NoteContent } from '@shared/notes'
+import type { CanvasObject } from '@shared/types'
 
 export type SaveStatus = 'saved' | 'unsaved' | 'saving' | 'error'
 
@@ -22,6 +23,11 @@ export interface NoteEditing {
 
 interface NoteState {
   editing: NoteEditing | null
+  /**
+   * The edited note as last seen on the board. If another window removes it, the editor
+   * keeps showing this copy until the user decides what to do with the text.
+   */
+  lastCopy: CanvasObject | null
   /** Notes other windows are editing right now. */
   editedElsewhere: Set<string>
   /** A note the user tried to edit while another window was editing it. */
@@ -42,6 +48,7 @@ interface NoteState {
 
 export const useNoteStore = create<NoteState>((set, get) => ({
   editing: null,
+  lastCopy: null,
   editedElsewhere: new Set(),
   blocked: null,
   panelOpen: false,

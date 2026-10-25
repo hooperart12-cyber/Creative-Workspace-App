@@ -4,10 +4,9 @@ import { readNote } from '@shared/notes'
 import { worldToScreen } from '../canvas/geometry'
 import { COLORS } from '../canvas/BoardCardNode'
 import { useCanvasStore } from '../store/canvasStore'
-import { useWorkspaceStore } from '../store/workspaceStore'
 import { noteBoxCss } from './NoteNode'
 import { useNoteStore } from './noteStore'
-import { endEditing, useNoteEditor } from './session'
+import { endEditing, placePendingCaret, useEditedObject, useNoteEditor } from './session'
 
 /**
  * The inline editor (§4): the note's real editor placed exactly over its canvas drawing.
@@ -18,9 +17,7 @@ import { endEditing, useNoteEditor } from './session'
 export function NoteEditorOverlay() {
   const editing = useNoteStore((s) => s.editing)
   const editor = useNoteEditor()
-  const object = useWorkspaceStore((s) =>
-    editing ? s.board?.objects.find((o) => o.id === editing.objectId) : undefined
-  )
+  const object = useEditedObject()
   const viewport = useCanvasStore((s) => s.viewport)
   const scroll = useNoteStore((s) => (editing ? (s.scroll[editing.objectId] ?? 0) : 0))
   const box = useRef<HTMLDivElement>(null)
@@ -29,11 +26,13 @@ export function NoteEditorOverlay() {
   const read = object ? readNote(object.data) : null
   const fixed = read?.ok === true && read.note.sizing === 'fixed'
 
-  // Fixed-height notes scroll inside: start where the canvas drawing was scrolled to.
+  // Fixed-height notes scroll inside: start where the canvas drawing was scrolled to. Then the
+  // cursor goes where the note was double-clicked.
   useLayoutEffect(() => {
     if (inline && fixed && box.current) box.current.scrollTop = scroll
+    if (inline) placePendingCaret()
     // Only when the editor appears; afterwards the editor's own scrolling leads.
-  }, [inline, fixed]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [inline, fixed, editor]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // The wheel scrolls a fixed-height note's text; otherwise it moves the canvas as usual.
   useEffect(() => {

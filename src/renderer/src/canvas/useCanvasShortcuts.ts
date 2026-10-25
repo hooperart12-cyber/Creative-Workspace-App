@@ -88,7 +88,8 @@ export function useCanvasShortcuts(): void {
           return handled(() => actions.zoomStepAtCenter(-1))
         }
         if (e.code === 'Quote') return handled(canvas.toggleGrid)
-        if (e.code === 'KeyE' && e.shiftKey && editSelectedNote('expanded')) return e.preventDefault()
+        if (e.code === 'KeyE' && e.shiftKey && editSelectedNote('expanded'))
+          return e.preventDefault()
         return
       }
 

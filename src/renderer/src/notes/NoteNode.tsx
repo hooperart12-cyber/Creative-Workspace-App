@@ -75,8 +75,24 @@ export const NoteNode = memo(function NoteNode({
 
   if (!read.ok || !layout || !appearance) {
     return (
-      <Group id={object.id} name="object" x={x} y={y} width={width} height={boxHeight} rotation={object.rotation} opacity={faded ? 0.4 : 1}>
-        <Rect width={width} height={boxHeight} fill="#fbf4f2" stroke="#d9a8a0" strokeWidth={hairline} cornerRadius={8} />
+      <Group
+        id={object.id}
+        name="object"
+        x={x}
+        y={y}
+        width={width}
+        height={boxHeight}
+        rotation={object.rotation}
+        opacity={faded ? 0.4 : 1}
+      >
+        <Rect
+          width={width}
+          height={boxHeight}
+          fill="#fbf4f2"
+          stroke="#d9a8a0"
+          strokeWidth={hairline}
+          cornerRadius={8}
+        />
         <Text
           text={`This note couldn’t be displayed.\n${read.ok ? '' : read.plainText}`}
           width={width}
@@ -118,7 +134,11 @@ export const NoteNode = memo(function NoteNode({
         perfectDrawEnabled={false}
       />
       {card && !editing && appearance.borderWidth > 0 && (
-        <Rect {...cardBorder(appearance, width, boxHeight)} listening={false} perfectDrawEnabled={false} />
+        <Rect
+          {...cardBorder(appearance, width, boxHeight)}
+          listening={false}
+          perfectDrawEnabled={false}
+        />
       )}
       {!editing && (
         <Shape
@@ -136,7 +156,18 @@ export const NoteNode = memo(function NoteNode({
             if (greek) drawGreeked(ctx, layout)
             else drawText(ctx, layout, zoom)
             ctx.restore()
-            if (!auto && maxScroll > 0) drawOverflowHint(ctx, width, boxHeight, scroll, maxScroll, layout.height, zoom, appearance, card)
+            if (!auto && maxScroll > 0)
+              drawOverflowHint(
+                ctx,
+                width,
+                boxHeight,
+                scroll,
+                maxScroll,
+                layout.height,
+                zoom,
+                appearance,
+                card
+              )
           }}
         />
       )}
@@ -209,7 +240,9 @@ export function noteBoxCss(appearance: NoteAppearance): React.CSSProperties {
     borderStyle: 'solid',
     borderColor: card ? appearance.borderColor : 'transparent',
     borderRadius: appearance.radius,
-    background: card ? withOpacity(appearance.background, appearance.backgroundOpacity) : 'transparent',
+    background: card
+      ? withOpacity(appearance.background, appearance.backgroundOpacity)
+      : 'transparent',
     boxShadow: card && appearance.shadow ? '0 2px 10px rgba(0, 0, 0, 0.08)' : undefined
   }
 }
@@ -238,8 +271,7 @@ function drawText(ctx: CanvasRenderingContext2D, layout: NoteLayout, zoom: numbe
   // shift by a pixel when editing starts). Only when upright: rotated text can't snap.
   const m = ctx.getTransform()
   const upright = m.b === 0 && m.c === 0 && m.d > 0
-  const snap = (y: number) =>
-    upright ? (Math.round(m.f) + Math.round(m.d * y) - m.f) / m.d : y
+  const snap = (y: number) => (upright ? (Math.round(m.f) + Math.round(m.d * y) - m.f) / m.d : y)
   for (const run of layout.runs) {
     if (run.highlight) {
       ctx.fillStyle = run.highlight
@@ -258,7 +290,9 @@ function drawText(ctx: CanvasRenderingContext2D, layout: NoteLayout, zoom: numbe
         : Math.max(run.fontSize * 0.07, 1 / zoom)
       // Underline: the editor's text-underline-offset (rounded down the page, as the browser
       // does). Strike-through: through the middle of the lower-case letters.
-      const underline = upright ? snap(baseline + run.fontSize * 0.15 + 0.5 / m.d) : baseline + run.fontSize * 0.15
+      const underline = upright
+        ? snap(baseline + run.fontSize * 0.15 + 0.5 / m.d)
+        : baseline + run.fontSize * 0.15
       if (run.underline) ctx.fillRect(run.x, underline, run.width, thickness)
       if (run.strike) ctx.fillRect(run.x, snap(baseline - run.fontSize * 0.2), run.width, thickness)
     }
@@ -297,7 +331,12 @@ function drawOverflowHint(
     gradient.addColorStop(0, withOpacity(appearance.background, 0))
     gradient.addColorStop(1, withOpacity(appearance.background, appearance.backgroundOpacity))
     ctx.fillStyle = gradient
-    ctx.fillRect(appearance.borderWidth, height - fade, width - appearance.borderWidth * 2, fade - appearance.borderWidth)
+    ctx.fillRect(
+      appearance.borderWidth,
+      height - fade,
+      width - appearance.borderWidth * 2,
+      fade - appearance.borderWidth
+    )
   }
   const barWidth = 3 / zoom
   const track = height - 8 / zoom
@@ -309,7 +348,14 @@ function drawOverflowHint(
   ctx.fill()
 }
 
-function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+function roundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number
+): void {
   const radius = Math.max(0, Math.min(r, w / 2, h / 2))
   ctx.moveTo(x + radius, y)
   ctx.arcTo(x + w, y, x + w, y + h, radius)
