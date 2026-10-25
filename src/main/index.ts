@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { app, BrowserWindow } from 'electron'
+import { handleAssetRequests, registerAssetScheme } from './assetProtocol'
 import { registerIpcHandlers, trackWindow } from './ipc'
 import { installAppMenu } from './menu'
 import { ProjectRegistry } from './project/projectRegistry'
@@ -12,6 +13,7 @@ const migrationsFolder = app.isPackaged
   : join(app.getAppPath(), 'drizzle')
 
 const registry = new ProjectRegistry(migrationsFolder)
+registerAssetScheme()
 
 // Automated UI tests run with their own settings folder so they never touch real
 // recent-projects lists (must happen before the single-instance lock, which is per folder).
@@ -32,6 +34,7 @@ if (!app.requestSingleInstanceLock()) {
   void app.whenReady().then(() => {
     const recent = new RecentProjects(join(app.getPath('userData'), 'recent-projects.json'))
     installAppMenu()
+    handleAssetRequests(registry)
     registerIpcHandlers(registry, recent)
     trackWindow(createWindow(), registry)
 

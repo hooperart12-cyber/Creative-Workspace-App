@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import { IPC_CHANNELS, type Api, type IpcChannel } from '@shared/ipc'
 
 const allowed = new Set<string>(IPC_CHANNELS)
@@ -13,6 +13,13 @@ const api: Api = {
       listener(payload)
     ipcRenderer.on(event, wrapped)
     return () => ipcRenderer.removeListener(event, wrapped)
+  },
+  pathForFile(file) {
+    try {
+      return webUtils.getPathForFile(file)
+    } catch {
+      return ''
+    }
   }
 }
 

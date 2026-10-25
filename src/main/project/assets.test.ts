@@ -174,6 +174,30 @@ describe('AssetRepository.importFile', () => {
   })
 })
 
+describe('AssetRepository.importFiles', () => {
+  it('imports a batch in order, lists skipped files with reasons, and places duplicates once', async () => {
+    const paths: string[] = []
+    for (let i = 0; i < 5; i++) {
+      paths.push(
+        (await makeImage(`img${i}.png`, { width: 20 + i, height: 20, format: 'png' })).path
+      )
+    }
+    const psd = join(dir, 'layers.psd')
+    writeFileSync(psd, '8BPS fake photoshop file')
+    const result = await project.assets.importFiles([paths[0], psd, ...paths.slice(1), paths[2]])
+    expect(result.imported.map((a) => a.originalName)).toEqual([
+      'img0.png',
+      'img1.png',
+      'img2.png',
+      'img3.png',
+      'img4.png'
+    ])
+    expect(result.skipped).toEqual([
+      { name: 'layers.psd', reason: 'Not a JPG, PNG or WebP image.' }
+    ])
+  })
+})
+
 describe('AssetRepository.importBytes', () => {
   it('stores pasted bytes like a file and names them', async () => {
     const bytes = await sharp({

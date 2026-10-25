@@ -8,7 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { eq, inArray } from 'drizzle-orm'
 import sharp from 'sharp'
 import { SUPPORTED_IMAGES_LABEL, THUMBNAIL_SIZES } from '@shared/assets'
-import type { AssetInfo, AssetVariant } from '@shared/types'
+import type { AssetInfo, AssetVariant, ImportBytesInput, ImportResult } from '@shared/types'
 import type { ProjectDb } from '../db/client'
 import { assets } from '../db/schema'
 
@@ -24,6 +24,9 @@ const IMAGE_FORMATS: Record<string, { mime: string; ext: string }> = {
 }
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/
+
+/** Files imported at the same time; keeps memory use steady for big batches. */
+const IMPORT_CONCURRENCY = 3
 
 /** A file that can't be imported, with a message for the user. */
 export class UnsupportedFileError extends Error {}
@@ -79,6 +82,19 @@ export class AssetRepository {
   /** Stores bytes that didn't come from a file on disk (screenshots, browser images). */
   importBytes(name: string, bytes: Uint8Array, options: ImportOptions = {}): Promise<AssetInfo> {
     return this.ingest(name, () => Readable.from([Buffer.from(bytes)]), options)
+  }
+
+  /** Imports several files from disk. Files that can't be imported are reported, not thrown. */
+  importFiles(paths: string[], options: ImportOptions = {}): Promise<ImportResult> {
+    return this.importEach(paths, basename, (path) => this.importFile(path, options))
+  }
+
+  importByteFiles(files: ImportBytesInput[], options: ImportOptions = {}): Promise<ImportResult> {
+    return this.importEach(
+      files,
+      (file) => file.name || 'Pasted image',
+      (file) => this.importBytes(file.name, file.bytes, options)
+    )
   }
 
   get(id: string): AssetInfo {
@@ -154,6 +170,41 @@ export class AssetRepository {
     })()
     this.pendingThumbnails.set(path, job)
     return job
+  }
+
+  /** Runs imports a few at a time (hashing and thumbnails run off the main thread) and keeps their order. */
+  private async importEach<T>(
+    items: T[],
+    nameOf: (item: T) => string,
+    importOne: (item: T) => Promise<AssetInfo>
+  ): Promise<ImportResult> {
+    const results: ({ asset: AssetInfo } | { name: string; reason: string })[] = []
+    let next = 0
+    const worker = async () => {
+      while (next < items.length) {
+        const index = next++
+        const item = items[index]
+        try {
+          results[index] = { asset: await importOne(item) }
+        } catch (error) {
+          const reason =
+            error instanceof UnsupportedFileError
+              ? error.message
+              : `Could not be imported (${error instanceof Error ? error.message : String(error)}).`
+          results[index] = { name: nameOf(item), reason }
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(IMPORT_CONCURRENCY, items.length) }, worker))
+    const imported: AssetInfo[] = []
+    const skipped: ImportResult['skipped'] = []
+    for (const result of results) {
+      if ('asset' in result) {
+        // The same file twice in one import is placed once.
+        if (!imported.some((a) => a.id === result.asset.id)) imported.push(result.asset)
+      } else skipped.push(result)
+    }
+    return { imported, skipped }
   }
 
   private async ingest(
