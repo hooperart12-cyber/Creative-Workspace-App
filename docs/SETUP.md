@@ -116,6 +116,8 @@ src/
   renderer/        React UI
     src/canvas/      The board canvas: CanvasView (Konva stage + pointer handling), actions (every
                      undoable edit), arrange/geometry/history (pure logic + tests), toolbar & menus
+    src/notes/       Text notes: editing session and autosave (session.ts), layout and Konva
+                     drawing, inline and expanded editors, toolbar and formatting panel
     src/components/  Screens and UI pieces (sidebar, breadcrumb, dialogs)
     src/store/       Zustand stores: projectStore (open project), workspaceStore (per-window
                      navigation, tree, current board), canvasStore (camera, selection, drag, undo)
@@ -160,6 +162,9 @@ docs/              Requirements, decisions, roadmap, handoff, this guide
 | `radix-ui` | ^1.8 | Accessible context menus and dialogs (bundled into the renderer) |
 | `konva`, `react-konva` | ^10 / ^19 | Canvas rendering, hit detection and resize handles (bundled into the renderer) |
 | `sharp` | ^0.35 | Checks imported images, reads their size and transparency, and makes thumbnails (main process). Installs a prebuilt native library for your platform (`@img/sharp-*`); installers unpack it from the asar |
+| `@tiptap/*` (`react`, `core`, `pm`, `starter-kit`, `extensions`, `extension-text-style`, `extension-highlight`, `extension-text-align`) | ^3.32 | Rich text editor for notes, built on ProseMirror (bundled into the renderer) |
+| `dompurify` | ^3.4 | Cleans pasted HTML before it reaches a note (bundled into the renderer) |
+| `@fontsource/inter`, `lora`, `jetbrains-mono`, `caveat` | ^5.3 | The four fonts included for notes (SIL Open Font License), bundled as font files |
 | `@playwright/test` | ^1.64 | End-to-end UI tests that drive the Electron app |
 | `drizzle-kit` | ^0.31 | Generates SQL migrations from the schema (`npm run db:generate`) |
 | `vitest` | ^5 | Unit test runner |

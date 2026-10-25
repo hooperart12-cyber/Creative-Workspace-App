@@ -4,7 +4,7 @@ A PC desktop creative workspace, inspired by Milanote (boards and organization) 
 
 It combines infinite visual canvases, interconnected boards, notes, reference images, document viewing, artwork management, and project organization in one flexible environment. The goal is to support the whole creative process, from brainstorming and research through planning, review, and organizing finished work, without forcing a rigid workflow.
 
-> **Status:** M3A complete: images on boards. You can drop, paste or pick JPG, PNG and WebP images, resize them proportionally, rotate them, and open them in a full-size viewer. Originals are stored untouched. This sits on M2's Figma-style canvas and M1's nested boards and folders. Next up is M3B (text notes, board covers), then M3C (PDFs).
+> **Status:** M3B complete: rich text notes. Type straight onto the canvas, with headings, lists, fonts, colours, links and card or floating-text styles; notes autosave and stay safe across windows. M3A added images (drop, paste or pick JPG, PNG and WebP; proportional resize, rotation, a full-size viewer; originals stored untouched). Both sit on M2's Figma-style canvas and M1's nested boards and folders. Next up is M3C (PDFs and file cards).
 > This README summarizes the full feature vision. The complete, **living** specification is [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md). The original PDF (v1.0) is archived at [`docs/archive/`](docs/archive/Creative%20Workspace%20App%20v1.0.pdf).
 
 ## Project Docs
@@ -165,6 +165,7 @@ The open questions from the spec (§23) have been answered. The full reasoning, 
 | Canvas | Konva via react-konva |
 | Database | One SQLite file per project: better-sqlite3 + Drizzle ORM (FTS5 for search) |
 | Files | Originals copied into the project, content-addressed (SHA-256), never modified |
+| Text notes | Tiptap (ProseMirror) editor, drawn on the canvas by Konva |
 | Images / PDF | sharp (thumbnails, metadata), pdf.js (viewer, search, outline) |
 | Cloud (later, for collaboration only) | Supabase (Postgres, Auth, Realtime) + Cloudflare R2 |
 
@@ -183,7 +184,7 @@ Spec stages 1–4 (inventory, feasibility, scope, architecture) are **done**. St
 1. ~~**M0 — Scaffold.** Electron + React app, database, project create/open.~~ ✅ Done
 2. ~~**M1 — Nested boards and folders** (§3).~~ ✅ Done
 3. ~~**M2 — Canvas navigation and manipulation** (§4).~~ ✅ Done
-4. **M3 — Board objects** (§5, §7): ~~M3A images (JPEG/JPG, PNG, WebP)~~ ✅ Done; M3B text notes and board covers; M3C PDFs and file cards.
+4. **M3 — Board objects** (§5, §7): ~~M3A images (JPEG/JPG, PNG, WebP)~~ ✅ Done; ~~M3B rich text notes~~ ✅ Done; M3C PDFs and file cards. (Board covers moved to later.)
 5. **M4 — Project asset library** (§8).
 6. **M5 — Reliability polish.** Autosave status, backups, command palette, search.
 

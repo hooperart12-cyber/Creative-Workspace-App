@@ -74,9 +74,15 @@ M3 is built in three parts, each with its own branch and PR.
 - [x] Image context menu: view full size, save original as…, reset to original size, reset rotation
 - [x] Undo/redo and multi-window sync for everything above; packaged builds include `sharp`
 
-### M3B — Text notes and board covers
-- [ ] Text note object: place, resize, rotate, basic formatting, font size, text/background color
-- [ ] Nested board card: custom cover image (moved from M1, then from M3A)
+### M3B — Rich text notes ✅ (ADR-014)
+- [x] Text note object: create with **T**, the **Text** tool, "New text here" or a double-click on empty canvas; move, resize (text reflows, never stretches), rotate, layers, copy/duplicate, delete/restore, group, align, undo/redo
+- [x] Card or floating text, background, opacity, border, corners, shadow, padding, reset appearance; auto height or fixed height with scrolling and "Fit to content"
+- [x] Inline editing on the canvas (double-click; click outside or Esc to finish) and an expanded editor for long text
+- [x] Formatting: bold, italic, underline, strikethrough, colour, highlight, font (4 bundled + system fonts), size, headings, lists, alignment, line and paragraph spacing, clear formatting; quick toolbar and advanced panel
+- [x] Safe links (Ctrl/Cmd+click opens), cleaned paste, Ctrl+Shift+V plain paste; images stay on the canvas, not inside notes
+- [x] Keyboard isolation while typing, separate typing undo, autosave with a per-note status, damaged notes shown as placeholders
+- [x] Multiple windows: one editor at a time with "Edit here instead", revision-checked saves and a conflict bar (no silent overwrites)
+- Board covers moved to **Later** (item 10)
 
 ### M3C — Documents and other files
 - [ ] PDF import → document card with first-page cover
@@ -97,7 +103,7 @@ M3 is built in three parts, each with its own branch and PR.
 - [ ] Trash view: restore or permanently delete objects and assets
 
 ## M5 — Reliability & Productivity Polish (§19–21)
-- [ ] Visible save status indicator
+- [ ] Visible save status indicator (text notes already have one, M3B)
 - [ ] Rolling DB backups in `backups/` + "Export project as .zip"
 - [ ] Command palette (Ctrl+K / Ctrl+P) via cmdk
 - [ ] Project-wide search (FTS5): board names, notes, file names, PDF text
@@ -116,6 +122,7 @@ M3 is built in three parts, each with its own branch and PR.
 7. Board snapshots (§20)
 8. More formats: TIFF, PSD, .procreate, .clip, DOCX (§7, §6)
 9. Drop images straight into a nested board card; paste image URLs from the web
-10. Custom fonts, covers everywhere (§17)
+10. Custom fonts, covers everywhere (§17), including custom cover images for nested board cards (moved from M1, M3A and M3B)
+    - Notes: images, tables and checklists inside notes; right-to-left text
 11. **Cloud hybrid + collaboration (§15)**: Supabase + Cloudflare R2 (ADR-006)
 12. Plot roadmaps (§16, optional)
