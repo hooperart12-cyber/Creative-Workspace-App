@@ -55,7 +55,7 @@ RULES:
 > Outgoing agent: replace this section each session. Keep it short and factual.
 
 **Last updated:** 2026-10-25
-**Branches:** `feat/m3a-images` (PR #6 → `main`), `feat/m3b-text-notes` (PR #7 → `feat/m3a-images`), `feat/m3c-documents` (PR #8 → `feat/m3b-text-notes`), `feat/m4-asset-library` (PR into `feat/m3c-documents`). Do not merge any of them automatically. Merge M3A, then M3B, then M3C, then M4, retargeting each onto `main` after the one below it merges.
+**Branches:** `feat/m3a-images` (PR #6 → `main`), `feat/m3b-text-notes` (PR #7 → `feat/m3a-images`), `feat/m3c-documents` (PR #8 → `feat/m3b-text-notes`), `feat/m4-asset-library` ([PR #9](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/9) → `feat/m3c-documents`). Do not merge any of them automatically. Merge M3A, then M3B, then M3C, then M4, retargeting each onto `main` after the one below it merges.
 **Phase:** M4 (the asset library) is implemented on `feat/m4-asset-library`. M3A–M3C are still awaiting review. Board covers stay Later. Next milestone is M5.
 
 **Done**
