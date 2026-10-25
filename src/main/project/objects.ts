@@ -1,14 +1,71 @@
 import { randomUUID } from 'node:crypto'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
-import type { ObjectPatch, Point } from '@shared/types'
+import type { Box } from '@shared/geometry'
+import type { CreateImagesInput, ObjectPatch, Point } from '@shared/types'
 import type { ProjectDb } from '../db/client'
-import { boardObjects, boards } from '../db/schema'
+import { assets, boardObjects, boards } from '../db/schema'
 import { deletionTime, remap, type BoardRepository } from './boards'
 
 const PATCHABLE = ['x', 'y', 'width', 'height', 'rotation', 'zIndex', 'locked', 'groupId'] as const
 
 /** Smallest allowed object size, so nothing can be resized out of existence. */
 export const MIN_OBJECT_SIZE = 24
+
+/** Longest side of a newly placed image, in canvas units. It can be resized freely afterwards. */
+export const MAX_INITIAL_IMAGE_SIZE = 800
+
+/** Space between images placed together. */
+export const IMAGE_GAP = 24
+
+const round2 = (value: number) => Math.round(value * 100) / 100
+
+/**
+ * Display size for an image that keeps its aspect ratio: scaled to `width` (or `height`
+ * if no width is given), and never so small that its longest side is under the minimum.
+ */
+export function proportionalSize(
+  ratio: number,
+  size: { width?: number; height?: number }
+): { width: number; height: number } {
+  let width = size.width ?? (size.height ?? 0) * ratio
+  if (!(Math.max(width, width / ratio) >= MIN_OBJECT_SIZE)) {
+    // Too small (or invalid): grow the longest side to the minimum.
+    width = ratio >= 1 ? MIN_OBJECT_SIZE : MIN_OBJECT_SIZE * ratio
+  }
+  return { width: round2(width), height: round2(width / ratio) }
+}
+
+/** Size an image gets when first placed: its pixel size, scaled down to fit the maximum. */
+export function initialImageSize(width: number, height: number): { width: number; height: number } {
+  const scale = Math.min(1, MAX_INITIAL_IMAGE_SIZE / Math.max(width, height))
+  return proportionalSize(width / height, { width: width * scale })
+}
+
+/** Lays images out in rows (roughly square overall). Positions are relative to the top-left. */
+export function layoutImages(sizes: { width: number; height: number }[]): {
+  positions: Point[]
+  width: number
+  height: number
+} {
+  const columns = Math.max(1, Math.ceil(Math.sqrt(sizes.length)))
+  const positions: Point[] = []
+  let y = 0
+  let width = 0
+  for (let start = 0; start < sizes.length; start += columns) {
+    const row = sizes.slice(start, start + columns)
+    let x = 0
+    for (const size of row) {
+      positions.push({ x, y })
+      x += size.width + IMAGE_GAP
+    }
+    width = Math.max(width, x - IMAGE_GAP)
+    y += Math.max(...row.map((s) => s.height)) + IMAGE_GAP
+  }
+  return { positions, width, height: Math.max(0, y - IMAGE_GAP) }
+}
+
+const overlaps = (a: Box, b: Box) =>
+  a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
 
 /**
  * Operations on objects placed on board canvases (§4). Board cards are special:
@@ -20,9 +77,15 @@ export class ObjectRepository {
     private readonly boards: BoardRepository
   ) {}
 
-  /** Applies placement/arrangement changes to several objects in one transaction. */
+  /**
+   * Applies placement/arrangement changes to several objects in one transaction.
+   * Images always keep their aspect ratio: a new width sets the height (or the reverse).
+   */
   update(patches: ObjectPatch[]): void {
     if (patches.length === 0) return
+    const ratios = this.imageRatios(
+      patches.filter((p) => p.width !== undefined || p.height !== undefined).map((p) => p.id)
+    )
     const now = new Date()
     this.db.transaction((tx) => {
       for (const patch of patches) {
@@ -30,8 +93,13 @@ export class ObjectRepository {
         for (const key of PATCHABLE) {
           if (patch[key] !== undefined) Object.assign(values, { [key]: patch[key] })
         }
-        if (values.width !== undefined) values.width = Math.max(MIN_OBJECT_SIZE, values.width)
-        if (values.height !== undefined) values.height = Math.max(MIN_OBJECT_SIZE, values.height)
+        const ratio = ratios.get(patch.id)
+        if (ratio && (values.width !== undefined || values.height !== undefined)) {
+          Object.assign(values, proportionalSize(ratio, values))
+        } else {
+          if (values.width !== undefined) values.width = Math.max(MIN_OBJECT_SIZE, values.width)
+          if (values.height !== undefined) values.height = Math.max(MIN_OBJECT_SIZE, values.height)
+        }
         const result = tx
           .update(boardObjects)
           .set(values)
@@ -164,6 +232,58 @@ export class ObjectRepository {
     return ids.filter((id) => newIds.has(id)).map((id) => newIds.get(id)!)
   }
 
+  /**
+   * Places library images on a board, centred on a point and laid out in rows, each at its
+   * initial size. Returns the new object ids in the same order as `assetIds`.
+   */
+  createImages({ boardId, assetIds, center, avoidOverlap }: CreateImagesInput): string[] {
+    this.boards.require(boardId)
+    if (assetIds.length === 0) return []
+    const rows = this.db.select().from(assets).where(inArray(assets.id, assetIds)).all()
+    const byId = new Map(rows.map((row) => [row.id, row]))
+    const images = assetIds.map((id) => {
+      const asset = byId.get(id)
+      if (!asset?.width || !asset.height) throw new Error('Only images can be placed on a board.')
+      return asset
+    })
+    const sizes = images.map((a) => initialImageSize(a.width!, a.height!))
+    const layout = layoutImages(sizes)
+    const origin = {
+      x: Math.round(center.x - layout.width / 2),
+      y: Math.round(center.y - layout.height / 2)
+    }
+    if (avoidOverlap) {
+      const existing = this.boards.contentBounds(boardId)
+      const area = () => ({ ...origin, width: layout.width, height: layout.height })
+      for (let tries = 0; tries < 50 && existing.some((b) => overlaps(b, area())); tries++) {
+        origin.x += Math.round(layout.width + IMAGE_GAP)
+      }
+    }
+
+    const now = new Date()
+    const ids = images.map(() => randomUUID())
+    this.db.transaction((tx) => {
+      let z = this.boards.topZ(boardId)
+      images.forEach((asset, i) => {
+        tx.insert(boardObjects)
+          .values({
+            id: ids[i],
+            boardId,
+            type: 'image',
+            assetId: asset.id,
+            x: origin.x + layout.positions[i].x,
+            y: origin.y + layout.positions[i].y,
+            ...sizes[i],
+            zIndex: ++z,
+            createdAt: now,
+            updatedAt: now
+          })
+          .run()
+      })
+    })
+    return ids
+  }
+
   /** The board an object lives on (used to check clipboard pastes). */
   boardOf(id: string): string | undefined {
     return this.db
@@ -172,6 +292,20 @@ export class ObjectRepository {
       .innerJoin(boards, eq(boards.id, boardObjects.boardId))
       .where(and(eq(boardObjects.id, id), isNull(boardObjects.deletedAt), isNull(boards.deletedAt)))
       .get()?.boardId
+  }
+
+  /** Width ÷ height of the images among `ids` (objects that must keep their proportions). */
+  private imageRatios(ids: string[]): Map<string, number> {
+    if (ids.length === 0) return new Map()
+    const rows = this.db
+      .select({ id: boardObjects.id, width: assets.width, height: assets.height })
+      .from(boardObjects)
+      .innerJoin(assets, eq(assets.id, boardObjects.assetId))
+      .where(and(inArray(boardObjects.id, ids), eq(boardObjects.type, 'image')))
+      .all()
+    return new Map(
+      rows.flatMap((r) => (r.width && r.height ? [[r.id, r.width / r.height] as const] : []))
+    )
   }
 
   private rows(ids: string[], { includeDeleted }: { includeDeleted: boolean }) {

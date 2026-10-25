@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { and, asc, count, eq, inArray, isNull, max, or } from 'drizzle-orm'
+import { rotatedBounds } from '@shared/geometry'
 import type { BoardDetail, BoardListItem, CanvasObject, Point, Viewport } from '@shared/types'
 import type { ProjectDb } from '../db/client'
-import { boardObjects, boards } from '../db/schema'
+import { assets, boardObjects, boards } from '../db/schema'
+import { toAssetInfo } from './assets'
 
 export const DEFAULT_BOARD_TITLE = 'Untitled board'
 
@@ -83,6 +85,14 @@ export class BoardRepository {
       .orderBy(asc(boardObjects.zIndex), asc(boardObjects.createdAt))
       .all()
 
+    const assetIds = [...new Set(rows.flatMap((r) => (r.assetId ? [r.assetId] : [])))]
+    const assetsById = new Map(
+      (assetIds.length
+        ? this.db.select().from(assets).where(inArray(assets.id, assetIds)).all()
+        : []
+      ).map((a) => [a.id, toAssetInfo(a)])
+    )
+
     const objects: CanvasObject[] = []
     for (const objectRow of rows) {
       const object = toCanvasObject(objectRow)
@@ -90,6 +100,11 @@ export class BoardRepository {
         const linked = object.linkedBoardId ? this.find(object.linkedBoardId) : undefined
         if (!linked) continue // card whose board is gone; never shown
         object.board = { title: linked.title, childBoardCount: this.childCount(linked.id) }
+      }
+      if (object.assetId) {
+        const asset = assetsById.get(object.assetId)
+        if (!asset) continue // its file record is gone; nothing to show
+        object.asset = asset
       }
       objects.push(object)
     }
@@ -375,16 +390,28 @@ export class BoardRepository {
 
   /** Top-left for new content: below everything already on the board, aligned to its left edge. */
   placementBelowContent(boardId: string): Point {
-    const rows = this.db
-      .select({ x: boardObjects.x, y: boardObjects.y, height: boardObjects.height })
-      .from(boardObjects)
-      .where(and(eq(boardObjects.boardId, boardId), isNull(boardObjects.deletedAt)))
-      .all()
+    const rows = this.contentBounds(boardId)
     if (rows.length === 0) return { x: 0, y: 0 }
     return {
       x: Math.min(...rows.map((r) => r.x)),
       y: Math.max(...rows.map((r) => r.y + r.height)) + PLACEMENT_GAP
     }
+  }
+
+  /** Where each object on a board is drawn (rotated objects take up their rotated bounds). */
+  contentBounds(boardId: string) {
+    return this.db
+      .select({
+        x: boardObjects.x,
+        y: boardObjects.y,
+        width: boardObjects.width,
+        height: boardObjects.height,
+        rotation: boardObjects.rotation
+      })
+      .from(boardObjects)
+      .where(and(eq(boardObjects.boardId, boardId), isNull(boardObjects.deletedAt)))
+      .all()
+      .map(rotatedBounds)
   }
 
   topZ(boardId: string): number {
