@@ -55,7 +55,7 @@ RULES:
 > Outgoing agent: replace this section each session. Keep it short and factual.
 
 **Last updated:** 2026-10-25
-**Branches:** `feat/m3a-images` (PR #6 → `main`), `feat/m3b-text-notes` (PR #7 → `feat/m3a-images`), `feat/m3c-documents` (PR → `feat/m3b-text-notes`). Merge in that order. Don't merge automatically. After a lower PR merges, retarget the next one onto `main`.
+**Branches:** `feat/m3a-images` (PR #6 → `main`), `feat/m3b-text-notes` (PR #7 → `feat/m3a-images`), `feat/m3c-documents` (PR #8 → `feat/m3b-text-notes`). Merge in that order. Don't merge automatically. After a lower PR merges, retarget the next one onto `main`.
 **Phase:** M3A, M3B and M3C are complete and awaiting review. Board covers stay Later. Next milestone is M4 (the asset library).
 
 **Done**
