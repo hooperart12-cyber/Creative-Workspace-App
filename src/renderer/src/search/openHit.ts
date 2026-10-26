@@ -3,6 +3,21 @@ import { fitViewport } from '../canvas/geometry'
 import { useCanvasStore } from '../store/canvasStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 
+/** The canvas clears its selection when it first gets a size. Select after that. */
+async function afterCanvasLayout(): Promise<void> {
+  const started = Date.now()
+  await new Promise<void>((resolve) => {
+    const check = () => {
+      if (useCanvasStore.getState().viewSize.width > 0 || Date.now() - started > 1000) {
+        requestAnimationFrame(() => resolve())
+        return
+      }
+      requestAnimationFrame(check)
+    }
+    check()
+  })
+}
+
 export async function openSearchHit(hit: SearchHit, query: string): Promise<void> {
   const workspace = useWorkspaceStore.getState()
   const canvas = useCanvasStore.getState()
@@ -18,6 +33,7 @@ export async function openSearchHit(hit: SearchHit, query: string): Promise<void
     const object = await window.api.invoke('objects:read', hit.sourceId)
     if (!object) return
     await workspace.openBoard(object.boardId)
+    await afterCanvasLayout()
     const view = useCanvasStore.getState()
     view.setSelection([object.id])
     view.setViewport(
@@ -44,6 +60,7 @@ export async function openSearchHit(hit: SearchHit, query: string): Promise<void
 export async function openAppearance(appearance: BoardAppearance): Promise<void> {
   const object = await window.api.invoke('objects:read', appearance.objectId)
   await useWorkspaceStore.getState().openBoard(appearance.boardId)
+  await afterCanvasLayout()
   const canvas = useCanvasStore.getState()
   canvas.setSelection([appearance.objectId])
   if (!object) return
