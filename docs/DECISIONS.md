@@ -224,7 +224,7 @@ MyProject.cwproj/
 **Decision.**
 - **Autosave:** every change is written to SQLite in a transaction (debounced ~300–500 ms during drags). There is no "Save" button; a visible status shows "Saving… / Saved".
 - **SQLite WAL mode** for crash safety.
-- **Rolling backups:** on project open and every N minutes, the app copies `project.db` (using SQLite's online backup API) into `backups/`, keeping the last ~10. Assets don't need backups because they are immutable.
+- **Rolling backups:** on project open and every N minutes, the app copies `project.db` (using SQLite's online backup API) into `backups/`, keeping the last ~10. Assets don't need backups because they are immutable. **Superseded for M5 by ADR-017:** recovery points live outside the project and include the stored files. The empty `backups/` folder remains.
 - **Undo/redo:** an in-memory command stack per board in the renderer.
 - **Trash:** soft-deleted rows (`deleted_at`) shown in a Trash view, restorable, and purged after confirmation.
 - **Export:** "Export project as .zip" for manual backups or moving to another PC.
@@ -521,3 +521,25 @@ MyProject.cwproj/
 - Tags, stacks, and project-wide text search are not part of M4.
 - Renaming an entry does not rename the stored file or `original_name`.
 - Empty Trash and permanent delete cannot be undone.
+
+## ADR-017 — Recovery points, crash journals and project search
+
+**Date:** 2026-10-25 · **Status:** ✅ Accepted · **Requirements:** §19, §20, §21 · **Supersedes:** ADR-009’s in-project database copies and “assets don’t need backups”
+
+**Decision.**
+
+- Recovery points live outside the project, in a content-addressed vault (`userData/backup-vaults/<projectId>`, or `<chosen>/Creative Workspace Backups/<projectId>`). If the chosen folder cannot be created, the app uses the local vault when fallback is on, and says which place it used. The same drive or volume is warned about. Nothing is uploaded.
+- A point is a SQLite online backup plus the blobs that snapshot lists. The manifest is written last and the staging folder is renamed into place. A failed copy, including a full disk, leaves no point. Every required blob, including one reused from an older point, must exist at the expected size before the point is accepted. Newly copied blobs are checksummed. Restore and **Verify** checksum every file and run `integrity_check`.
+- `project_state.change_revision` is raised by triggers on boards, objects, assets, library entries, folders, tags, and project rename. Permanent deletion counts. Search index writes do not. An hourly point is created only when that revision changed and 60 minutes have passed while the app is running. Manual and pre-migration points are kept. Automatic points follow hourly, daily, weekly, and monthly limits, and a point is kept once if it fills more than one bucket.
+- Opening a project with pending migrations writes and verifies a protected pre-migration point first. If that fails, the database is not migrated. A brand-new project migrates empty and then gets a baseline.
+- Restore creates a new project with a new `project_meta.id` and the same board, object, and asset ids, so both copies can be open. The source project is not changed. A failed restore deletes the partial folder and keeps the vault point. Garbage collection never deletes a blob a retained point still names, including after the live original was permanently deleted.
+- ZIP export is a self-contained copy with a manifest, not a pointer at the vault. Import rejects path traversal, absolute paths, and symlinks, and assigns a new project id.
+- The header save line follows real writes (unsaved, saving, saved, failed). Backup success or failure is a separate line.
+- Typed note text that has not been saved yet is journaled under `<project>/recovery/`. A journal is discarded only when it matches the saved note, or after the user restores it or chooses to keep the saved note. A newer revision with different text stays and offers restore-as-copy. Canvas gestures that never reached the database are not in the journal. SQLite WAL replays committed writes. An unclean shutdown runs `integrity_check` and does not rewrite the database.
+- Ctrl/Cmd+K is the command palette, Ctrl/Cmd+Shift+F is project search, and Ctrl/Cmd+/ is the shortcut sheet. They do not fire inside fields, the note editor, dialogs, or the PDF reader. Search uses FTS5 (`unicode61` for text, `trigram` for filenames). Trashed rows are excluded. PDF pages are indexed one at a time. Image-only, damaged, and locked PDFs stay searchable by name. The index can be rebuilt without deleting source content.
+- A result opens its board, note, folder, PDF page, image viewer, or file details. An image or PDF can open with no new board card. **Used on boards** lists active appearances only.
+
+**Consequences.**
+
+- Replacing the open project in place is not implemented. Restore always makes a new project.
+- Tags, OCR, bulk rename, shortcut remapping, and cloud backup are out of scope.

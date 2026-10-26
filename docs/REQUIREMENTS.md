@@ -824,7 +824,7 @@ Users should also be able to import files directly into folders in their asset l
 
 ## 19. Keyboard Shortcuts and Quick Commands
 
-> **Status:** 🟢 MVP (core shortcuts in M2, command palette in M5).
+> **Status:** 🟢 MVP (core shortcuts in M2, command palette and shortcut sheet in M5, ADR-017).
 
 The PC application should support efficient keyboard-driven navigation.
 
@@ -852,7 +852,7 @@ This should reduce the need to navigate menus for common operations.
 
 ## 20. Board History and Recovery
 
-> **Status:** 🟢 MVP for undo/redo and trash. Board snapshots are ⚪ Later.
+> **Status:** 🟢 MVP for undo/redo, trash, and project recovery points (M5, ADR-017). Board snapshots are ⚪ Later.
 
 Users should be able to recover from mistakes and unwanted changes.
 
@@ -884,11 +884,11 @@ These features should be considered fundamental usability requirements.
 
 ### Saving and Reliability
 
-- Automatic saving.
-- Visible save status.
-- Protection against accidental data loss.
-- Reliable recovery mechanisms.
-- Backup planning.
+- ✅ Automatic saving. The header shows unsaved, saving, saved, or failed from real writes (M5).
+- ✅ Visible save status, separate from backup success or failure.
+- ✅ Protection against accidental data loss: WAL, a note journal, and recovery points (ADR-017).
+- ✅ Reliable recovery mechanisms. Restore creates a new project. A journal that differs from a newer save is kept.
+- ✅ Backup planning: hourly points only after a real change, plus manual and pre-migration points.
 
 ### Standard Editing Actions
 
@@ -916,20 +916,19 @@ These features should be considered fundamental usability requirements.
 
 ### Accessibility and Navigation
 
-- Keyboard navigation.
+- ✅ Keyboard navigation, including a command palette and a shortcut sheet (M5).
 - Reasonable accessibility support.
 - Clear interaction feedback.
-- Searchable interface commands.
+- ✅ Searchable interface commands (Ctrl/Cmd+K).
 
 ### Project-Wide Search
 
 Search should work across relevant content within a project, including:
 
-- Board names.
-- Text notes.
-- File names.
-- Documents where text is searchable.
-- Tags.
+- ✅ Board names.
+- ✅ Text notes.
+- ✅ File names, including the middle of a name.
+- ✅ Documents where text is searchable. Image-only and locked PDFs match by name. Tags are later.
 - Other indexed metadata.
 
 Search results should allow users to navigate to the matching content.
@@ -967,7 +966,7 @@ The goal is to avoid duplicating functions better handled by dedicated creative 
 | Local, cloud, or hybrid file storage | ✅ Decided | Local-first now, hybrid later; files copied in and content-addressed (ADR-005, ADR-006) |
 | Cloud storage provider | 🟡 Tentative | Cloudflare R2 (no egress fees), or Supabase Storage (ADR-006) |
 | How shared projects are hosted | 🟡 Tentative | Supabase (Postgres + Auth + Realtime), added when §15 starts (ADR-006) |
-| Backup and recovery implementation | ✅ Decided | Autosave + SQLite WAL + rolling DB snapshots in `backups/` + project export to .zip; optional synced folder (ADR-009) |
+| Backup and recovery implementation | ✅ Decided | Autosave + SQLite WAL + recovery points outside the project, including stored files, plus ZIP export (ADR-009, amended by ADR-017) |
 | Supported document formats and limitations | ✅ Decided (v1) | PDF via pdf.js; DOCX/MD/TXT later (ADR-007) |
 | Automatic preview generation for specialized art formats | ⏳ Deferred | Manual preview attachment in v1; PSD (ag-psd), .procreate/.clip embedded thumbnails later (ADR-007) |
 | Custom font handling | ⏳ Deferred | Later: TTF/OTF copied into project, loaded via the FontFace API |
@@ -1031,3 +1030,5 @@ The overarching goal is a **flexible, PC-based visual creative workspace that ca
 | 1.3 | 2026-10-24 | M2 implemented (§4 canvas, canvas shortcuts §19, undo/redo §20); interaction model recorded (ADR-012) |
 | 1.4 | 2026-10-24 | M3A implemented: images on boards (§5), JPEG/PNG/WebP handling and full-size viewer (§7), image paste and drag-and-drop (§18), image rotation (§4); WebP moved into the MVP (ADR-013) |
 | 1.5 | 2026-10-25 | M3C implemented: PDF cards and reader (§5, §6), generic file cards with optional previews (§7), drop and paste of PDFs and other files (§18) (ADR-015) |
+| 1.6 | 2026-10-25 | M4 implemented: library entries, folders, import, and Trash (§8, ADR-016) |
+| 1.7 | 2026-10-25 | M5 implemented: recovery points, crash journals, save status, command palette, and project search (§19–21, ADR-017) |

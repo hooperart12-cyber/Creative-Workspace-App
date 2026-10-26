@@ -55,8 +55,9 @@ RULES:
 > Outgoing agent: replace this section each session. Keep it short and factual.
 
 **Last updated:** 2026-10-25
-**Branches:** `feat/m3a-images` (PR #6 → `main`), `feat/m3b-text-notes` (PR #7 → `feat/m3a-images`), `feat/m3c-documents` (PR #8 → `feat/m3b-text-notes`), `feat/m4-asset-library` ([PR #9](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/9) → `feat/m3c-documents`). Do not merge any of them automatically. Merge M3A, then M3B, then M3C, then M4, retargeting each onto `main` after the one below it merges.
-**Phase:** M4 (the asset library) is implemented on `feat/m4-asset-library`. M3A–M3C are still awaiting review. Board covers stay Later. Next milestone is M5.
+**Branches:** `feat/m3a-images` (PR #6 → `main`), `feat/m3b-text-notes` (PR #7 → `feat/m3a-images`), `feat/m3c-documents` (PR #8 → `feat/m3b-text-notes`), `feat/m4-asset-library` ([PR #9](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/9) → `feat/m3c-documents`), `feat/m5-reliability-productivity` (PR targeting `feat/m4-asset-library`; link added when the PR is open). Do not merge any of them automatically. Merge M3A, then M3B, then M3C, then M4, then M5, retargeting each onto `main` after the one below it merges.
+**Phase:** M5 is implemented on `feat/m5-reliability-productivity` from `feat/m4-asset-library` at `7cdb374`. Earlier branches were not merged or rewritten. Board covers stay Later.
+**Stack discrepancy (reconcile before release):** `origin/feat/m3a-images` is at `62fec97` (“M3A: refuse network file links on paste; imports no longer block other edits”). That commit is **not** an ancestor of M3B, M3C, M4, or M5. Do not rebase or merge it into those branches during M5. When the stacked PRs are integrated, bring `62fec97` in before release and retest paste of network links and import cancellation.
 
 **Done**
 - M0 scaffold, M1 boards/folders, testing guide, M2 canvas (PR #5, ADR-012).
@@ -87,7 +88,7 @@ RULES:
 - M3C PDFs and generic files, see ADR-015:
   - **Main process:** `describeFile` in `assets.ts` classifies each import (image, readable PDF, or generic file). Migration `0002_pdf_page_count`. `assets:readRange` serves PDF bytes. `assets:saveCover`, `assets:recordPdfInfo`, `assets:setPreview`, `assets:openCopy`. Dangerous extensions cannot be launched (`src/shared/files.ts`).
   - **Renderer:** `DocumentNode` / `FileNode`, `PdfReader.tsx` (pdf.js, range transport, virtualized pages), `pdfCover.ts`, `FileDetails.tsx`. A reader window is `window:openReader` with `#pdf=<objectId>`.
-- Tests: 131 unit tests; 34 Playwright end-to-end tests (canvas, images, 18 for notes, 2 for documents).
+- Tests before M5: 131 unit tests; 34 Playwright end-to-end tests (canvas, images, 18 for notes, 2 for documents). M5 adds backup, journal, search, and reliability end-to-end tests.
 - `docs/TESTING.md` has checklists for M4, M3C, M3B and M3A.
 - M4 library, see ADR-016:
   - Migration `0003_library_entries` copies each old asset into one `library_entries` row, then rebuilds `assets` without `folder_id`. Foreign keys are off only while migrations run, because SQLite cannot change that pragma inside the migration transaction.
@@ -95,21 +96,28 @@ RULES:
   - Import: `importPaths` / `importTree` in `assets.ts`. Skip or another entry is chosen before the copy. A canvas drop still creates one active entry and does not restore a trashed one.
   - Renderer: `LibraryView.tsx`, `TrashView.tsx`, sidebar file rows, import dialog. The canvas stays mounted while the library is open. Undo of library move, rename, trash, and restore uses the same per-window stack.
 
+**Done this session (M5, ADR-017)**
+- Migration `0004_reliability`: `project_state.change_revision` triggers, FTS5 `search_text` (unicode61) and `search_names` (trigram), PDF job queue.
+- `src/main/project/backup.ts`, `restore.ts`, `projectZip.ts`, `journal.ts`, `search.ts`, `backupService.ts`. Pre-migration point before `migrate()`. Restore assigns a new `project_meta.id`.
+- Renderer: save indicator, Backup dialog, command palette, shortcut sheet, Search, PDF indexer, draft dialog. Note session writes `recovery/` and clears a draft only after a successful save.
+
 **In progress**
-- Nothing in the working tree once the M4 PR is open.
+- Nothing once the M5 PR is open. Do not merge it.
 
 **Next steps**
 1. Project owner reviews the M3A PR and runs the M3A checklist, then merges.
 2. After M3A merges, retarget the M3B PR to `main`, review it, then merge.
 3. After M3B merges, retarget the M3C PR to `main`, run the M3C checklist (a long PDF and **Open a copy** are the key checks), then merge.
 4. Retarget the M4 PR onto `main` after M3C merges, and run the M4 checklist (a large folder and Empty Trash are the key checks).
-5. Later: M5, then board covers (`boards.cover_asset_id` drawn in `BoardCardNode`).
+5. Retarget the M5 PR onto `main` after M4 merges. Before release, reconcile `62fec97` from `feat/m3a-images` (see the stack discrepancy above) and run the M5 checklist, including the packaged Windows install (5.13–5.14). That install has not been done by hand.
+6. Later: board covers (`boards.cover_asset_id` drawn in `BoardCardNode`).
 
 **Known issues / open questions**
 - Undo history is per window and not saved across restarts (by design for now).
 - Windows installer not code-signed; no app icon yet.
 - Dropping files onto a board card doesn't import into that board. Library import does not place cards.
-- Permanent delete and Empty Trash cannot be undone. A file stays on disk while any entry, card, cover, or preview still points at it, including items in Trash.
+- Permanent delete and Empty Trash cannot be undone. A file stays on disk while any entry, card, cover, preview, or retained recovery point still points at it, including items in Trash.
+- Recovery does not include canvas drags or keystrokes that never reached the note journal. Replace-in-place restore is not implemented. OCR, tags, bulk rename, shortcut remapping, and cloud backup are out of scope. PDF text indexing is resumable; image-only and locked PDFs match by name only. The sidebar still lists 40 files. Undo stays per window.
 - Copying objects in the app replaces the system clipboard text with a short note (by design, ADR-013).
 - Notes: known display approximations and other limits are listed at the end of ADR-014. A note moved to another board by another window while you're editing shows the "moved to the trash" choices.
 - PDFs: the reader asks the main process for byte ranges because `fetch` of `cw-asset://` fails in Chromium. Limits are at the end of ADR-015. PDF and file cards do not rotate. A password is remembered only until that reader window closes.

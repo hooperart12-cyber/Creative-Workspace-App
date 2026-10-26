@@ -50,6 +50,41 @@ To test a specific pull request instead of `main`: `git fetch origin && git chec
 
 Work through each step, and tick the box if the **Expected** result happens. If it doesn't, write down the step number and report it (Part 3). Keyboard shortcuts say **Ctrl** for Windows; on macOS use **Cmd** where Ctrl is listed, and **Option** for Alt.
 
+### M5 — Recovery, search and commands (≈30 minutes)
+
+Use a fresh project. Have ready: a text PDF, a PNG, and a text file. The Windows installer steps use a packaged build, not `npm run dev`.
+
+**Saving and recovery**
+
+| # | Do this | Expected |
+|---|---|---|
+| 5.1 | Type in a note and watch the header. | It shows Saving…, then Saved. There is no Save button. |
+| 5.2 | Open **Backup**. | It names the vault folder, how much it stores, and whether that folder is on the same drive as the project. |
+| 5.3 | Choose **Back up now**, then **Verify** on that point. | A manual point appears. Verify says it passed. |
+| 5.4 | Trash a file, delete it permanently, then restore an earlier point as a new project. | The original project stays without that file. The new project has the file and can be opened beside the original. |
+| 5.5 | Export a ZIP, then import it as a new project. | The copy opens and contains the files. It does not point at the vault. |
+| 5.6 | Type in a note and force-quit before it says Saved. Reopen the project. | The draft is offered. If you saved a different version in another window first, you can restore the draft as a copy. A harmless quit shows no dialog. |
+| 5.7 | Leave the app open for an hour after a change, and for an hour with no changes. | A point appears only after the hour that had a change. |
+
+**Search and commands**
+
+| # | Do this | Expected |
+|---|---|---|
+| 5.8 | Press Ctrl+K (Cmd+K on macOS) and run a command. Press Ctrl+/ . | The palette finds commands and files. The shortcut sheet lists them. Neither opens while you are typing in a note. |
+| 5.9 | Press Ctrl+Shift+F and search a note. | The board opens with that note selected. |
+| 5.10 | Search a PDF phrase, and an image that is only in the library. | The PDF opens on the matching page with the words highlighted. The image opens in the viewer and no new card appears. |
+| 5.11 | On a file that is on a board, choose **Used on boards**. | The list shows active boards only. Choosing one opens that board and frames the card. |
+| 5.12 | Trash a file, then search its name. | It does not appear. |
+
+**Packaged Windows install**
+
+These steps are not claimed as already done. Run them on a real PC with the installer from CI.
+
+| # | Do this | Expected |
+|---|---|---|
+| 5.13 | Install the `.exe`, create a project, import a PNG, and make a recovery point. | The app starts. The point verifies. |
+| 5.14 | Quit from the window close button, reopen, and search the PNG by part of its name. | No recovery dialog. The image is found. |
+
 ### M4 — Project asset library (≈35 minutes)
 
 Use a fresh project. Have ready: a folder of mixed files (a JPG, a PDF, a text file, and an empty subfolder), one file larger than 100 MB if you have one, and a second copy of the JPG under another name.
