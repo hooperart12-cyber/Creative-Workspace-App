@@ -260,7 +260,7 @@ describe('library entries', () => {
 })
 
 describe('library migration from M3C', () => {
-  it('keeps asset ids, hashes, previews and board references', () => {
+  it('keeps asset ids, hashes, previews and board references', async () => {
     project.close()
     const oldMigrations = join(dir, 'migrations-0002')
     cpSync(migrations, oldMigrations, { recursive: true })
@@ -268,17 +268,23 @@ describe('library migration from M3C', () => {
     const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as {
       entries: { tag: string }[]
     }
-    journal.entries = journal.entries.filter((entry) => entry.tag !== '0003_library_entries')
+    journal.entries = journal.entries.filter((entry) =>
+      ['0000_init', '0001_note_revision', '0002_pdf_page_count'].includes(entry.tag)
+    )
     writeFileSync(journalPath, JSON.stringify(journal))
     const legacy = Project.create(dir, 'Legacy', oldMigrations)
     const folder = legacy.folders.create(null, 'Old')
     const assetId = randomUUID()
     const previewId = randomUUID()
     const sha = createHash('sha256').update('original-bytes').digest('hex')
-    const previewSha = createHash('sha256').update('preview-bytes').digest('hex')
+    const previewBody = 'preview-bytes'
+    const previewSha = createHash('sha256').update(previewBody).digest('hex')
     const file = join(legacy.path, 'assets', sha.slice(0, 2))
     mkdirSync(file, { recursive: true })
     writeFileSync(join(file, `${sha}.txt`), 'original-bytes')
+    const previewFile = join(legacy.path, 'assets', previewSha.slice(0, 2))
+    mkdirSync(previewFile, { recursive: true })
+    writeFileSync(join(previewFile, `${previewSha}.png`), previewBody)
     const now = Date.now()
     legacy.db.run(sql`
       insert into assets (id, sha256, original_name, mime, ext, bytes, folder_id, created_at, updated_at, deleted_at)
@@ -286,7 +292,7 @@ describe('library migration from M3C', () => {
     `)
     legacy.db.run(sql`
       insert into assets (id, sha256, original_name, mime, ext, bytes, width, height, created_at, updated_at)
-      values (${previewId}, ${previewSha}, 'cover.png', 'image/png', 'png', 4, 8, 8, ${now}, ${now})
+      values (${previewId}, ${previewSha}, 'cover.png', 'image/png', 'png', ${previewBody.length}, 8, 8, ${now}, ${now})
     `)
     legacy.db.run(sql`update assets set preview_asset_id = ${previewId} where id = ${assetId}`)
     legacy.db.run(sql`
@@ -299,7 +305,9 @@ describe('library migration from M3C', () => {
     const legacyPath = legacy.path
     legacy.close()
 
-    project = Project.open(legacyPath, migrations)
+    project = await Project.open(legacyPath, migrations, {
+      vaultFor: () => join(dir, 'premigration-vault')
+    })
     const asset = project.db.select().from(assets).where(eq(assets.id, assetId)).get()
     expect(asset?.sha256).toBe(sha)
     expect(asset?.previewAssetId).toBe(previewId)

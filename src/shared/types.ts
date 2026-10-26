@@ -304,3 +304,81 @@ export interface NoteStylePatch {
 }
 
 export type NoteLeaseAction = 'acquire' | 'release' | 'takeOver'
+
+export type RecoveryKind = 'baseline' | 'hourly' | 'manual' | 'premigration'
+
+export interface RecoveryAsset {
+  sha256: string
+  ext: string
+  bytes: number
+}
+
+export interface RecoveryManifest {
+  formatVersion: 1
+  id: string
+  projectId: string
+  projectName: string
+  createdAt: number
+  kind: RecoveryKind
+  protected: boolean
+  changeRevision: number | null
+  assets: RecoveryAsset[]
+  database: { sha256: string; bytes: number }
+}
+
+export interface RetentionLimits {
+  hourly: number
+  daily: number
+  weekly: number
+  monthly: number
+}
+
+export interface BackupSettings {
+  customRoot: string | null
+  fallbackToDefault: boolean
+  retention: RetentionLimits
+}
+
+export interface BackupStatus {
+  location: string
+  usingFallback: boolean
+  lastSuccessAt: number | null
+  lastError: string | null
+  nextEligibleAt: number | null
+  bytes: number
+  sameVolume: boolean
+  inProgress: boolean
+  points: RecoveryManifest[]
+}
+
+export type SearchKind = 'board' | 'note' | 'entry' | 'folder' | 'pdf-page' | 'asset'
+export type SearchFilter = 'all' | 'board' | 'note' | 'pdf' | 'image' | 'file' | 'folder'
+
+export interface SearchHit {
+  kind: SearchKind
+  sourceId: string
+  assetId: string | null
+  page: number | null
+  title: string
+  snippet: string
+  location: string
+}
+
+export interface BoardAppearance {
+  objectId: string
+  boardId: string
+  boardTitle: string
+  path: string
+  x: number
+  y: number
+}
+
+export interface NoteDraftInfo {
+  objectId: string
+  baseRevision: number
+  plainText: string
+  writtenAt: number
+  assessment: 'restore' | 'conflict' | 'missing'
+  boardId: string | null
+  contentJson: string
+}

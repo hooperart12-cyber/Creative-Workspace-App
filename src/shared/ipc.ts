@@ -24,6 +24,13 @@ import type {
   ProjectSummary,
   ProjectTree,
   PurgeResult,
+  BackupSettings,
+  BackupStatus,
+  BoardAppearance,
+  NoteDraftInfo,
+  RecoveryManifest,
+  SearchFilter,
+  SearchHit,
   StorageReport,
   RecentProject,
   SaveNoteInput,
@@ -187,6 +194,53 @@ export interface IpcRequests {
   'links:open': { args: [url: string]; result: void }
   /** The window finished saving after `window:flushRequest`, and may close. */
   'window:flushed': { args: []; result: void }
+  'backup:status': { args: []; result: BackupStatus }
+  'backup:create': { args: []; result: RecoveryManifest }
+  'backup:verify': { args: [id: string]; result: { ok: true } | { ok: false; errors: string[] } }
+  'backup:delete': { args: [id: string]; result: void }
+  'backup:restore': {
+    args: [id: string, parentDir: string, name: string]
+    result: { path: string }
+  }
+  'backup:settings': { args: []; result: BackupSettings }
+  'backup:saveSettings': { args: [patch: Partial<BackupSettings>]; result: BackupSettings }
+  'project:exportZip': { args: [destination: string]; result: void }
+  'project:importZip': { args: [zipPath: string, parentDir: string, name: string]; result: string }
+  'dialog:pickSaveZip': { args: []; result: string | null }
+  'dialog:pickZip': { args: []; result: string | null }
+  'search:query': {
+    args: [text: string, filter: SearchFilter, phrase: boolean]
+    result: SearchHit[]
+  }
+  'search:appearances': { args: [assetId: string]; result: BoardAppearance[] }
+  'search:rebuild': { args: []; result: void }
+  'search:nextPdf': {
+    args: []
+    result: { assetId: string; pagesDone: number; bytes: number; name: string } | null
+  }
+  'search:addPdfPage': {
+    args: [assetId: string, page: number, text: string, title: string]
+    result: void
+  }
+  'search:finishPdf': {
+    args: [assetId: string, state: 'done' | 'no-text' | 'locked' | 'failed', note?: string]
+    result: void
+  }
+  'assets:get': { args: [id: string]; result: import('./types').AssetInfo }
+  'recovery:writeDraft': {
+    args: [
+      draft: {
+        objectId: string
+        baseRevision: number
+        content: import('./notes').NoteContent
+        plainText: string
+        writtenAt: number
+      }
+    ]
+    result: void
+  }
+  'recovery:clearDraft': { args: [objectId: string]; result: void }
+  'recovery:list': { args: []; result: NoteDraftInfo[] }
 }
 
 /** Events pushed from the main process to renderer windows. */
@@ -205,6 +259,8 @@ export interface IpcEvents {
   'notes:leaseLost': { objectId: string }
   /** The window is closing: save open notes, then call `window:flushed`. */
   'window:flushRequest': null
+  /** A project write finished or failed. Backup errors are not reported here. */
+  'save:state': { phase: 'saving' | 'saved' | 'failed'; error: string | null; at?: number }
 }
 
 export type IpcChannel = keyof IpcRequests
@@ -281,7 +337,28 @@ export const IPC_CHANNELS = [
   'notes:editedElsewhere',
   'notes:handedOver',
   'links:open',
-  'window:flushed'
+  'window:flushed',
+  'backup:status',
+  'backup:create',
+  'backup:verify',
+  'backup:delete',
+  'backup:restore',
+  'backup:settings',
+  'backup:saveSettings',
+  'project:exportZip',
+  'project:importZip',
+  'dialog:pickSaveZip',
+  'dialog:pickZip',
+  'search:query',
+  'search:appearances',
+  'search:rebuild',
+  'search:nextPdf',
+  'search:addPdfPage',
+  'search:finishPdf',
+  'assets:get',
+  'recovery:writeDraft',
+  'recovery:clearDraft',
+  'recovery:list'
 ] as const satisfies readonly IpcChannel[]
 
 /** The API exposed to the renderer as `window.api`. */
