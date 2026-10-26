@@ -1,5 +1,4 @@
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import {
   app,
   BrowserWindow,
@@ -11,7 +10,8 @@ import {
 } from 'electron'
 import { IMAGE_EXTENSIONS, SUPPORTED_IMAGES_LABEL } from '@shared/assets'
 import type { IpcChannel, IpcEventChannel, IpcEvents, IpcRequests } from '@shared/ipc'
-import type { ClipboardContents, ImportBytesInput } from '@shared/types'
+import type { ClipboardContents, ImportBytesInput, ImportResult } from '@shared/types'
+import { localPathsFromUriList, REMOTE_FILE_REASON } from './clipboardFiles'
 import type { Project } from './project/project'
 import type { ProjectRegistry } from './project/projectRegistry'
 import type { RecentProjects } from './project/recentProjects'
@@ -286,10 +286,14 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
     if (await ownClipboard()) return null
     const content = await readExternalClipboard()
     if (!content) return null
-    const result =
-      content.kind === 'files'
-        ? await project.assets.importFiles(content.paths)
-        : await project.assets.importByteFiles([content.file])
+    let result: ImportResult
+    if (content.kind === 'files') {
+      result = await project.assets.importFiles(content.paths)
+      // Links to other computers were never opened (see localPathsFromUriList).
+      result.skipped.push(...content.remote.map((name) => ({ name, reason: REMOTE_FILE_REASON })))
+    } else {
+      result = await project.assets.importByteFiles([content.file])
+    }
     broadcastChanged(project)
     return result
   })
@@ -338,19 +342,17 @@ const CLIPBOARD_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp']
  * or an image. Files win, because copying a file can also carry its icon as an image.
  */
 async function readExternalClipboard(): Promise<
-  { kind: 'files'; paths: string[] } | { kind: 'image'; file: ImportBytesInput } | null
+  | { kind: 'files'; paths: string[]; remote: string[] }
+  | { kind: 'image'; file: ImportBytesInput }
+  | null
 > {
   try {
     const items = await readSystemClipboard()
     for (const item of items) {
       if (!item.types.includes('text/uri-list')) continue
       const list = await (await item.getType('text/uri-list')).text()
-      const paths = list
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter((line) => line.startsWith('file:'))
-        .map((url) => fileURLToPath(url))
-      if (paths.length) return { kind: 'files', paths }
+      const { paths, remote } = localPathsFromUriList(list)
+      if (paths.length || remote.length) return { kind: 'files', paths, remote }
     }
     for (const item of items) {
       const type = CLIPBOARD_IMAGE_TYPES.find((t) => item.types.includes(t))

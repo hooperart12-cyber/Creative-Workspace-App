@@ -317,6 +317,18 @@ test('paste screenshots, Explorer files and copied images', async () => {
     expect(names).toContain('from explorer.png')
     expect(storedOriginals()).toHaveLength(2)
   }
+
+  // A link to a file on another computer (copied from a web page) is refused without being
+  // opened: opening it would make Windows offer the user's login to that host.
+  const before = (await images()).length
+  await t.app.evaluate(async ({ clipboard, ClipboardItem }) => {
+    const list = 'file://attacker.invalid/share/trap.png\r\nfile:////attacker.invalid/share/b.png'
+    await clipboard.write([new ClipboardItem({ 'text/uri-list': new Blob([list]) })])
+  })
+  await t.page.keyboard.press('ControlOrMeta+v')
+  await expect(t.page.getByRole('status')).toContainText('trap.png')
+  await expect(t.page.getByRole('status')).toContainText('network locations')
+  expect(await images()).toHaveLength(before)
 })
 
 test('the viewer ignores the double-click that opened it, even on a slow machine', async () => {
