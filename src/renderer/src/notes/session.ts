@@ -242,10 +242,29 @@ export function setMode(mode: 'inline' | 'expanded'): void {
 
 // ── Saving ───────────────────────────────────────────────────────────────────
 
+let draftTimer: ReturnType<typeof setTimeout> | undefined
+
+function queueDraft(): void {
+  clearTimeout(draftTimer)
+  draftTimer = setTimeout(() => {
+    const editing = notes().editing
+    if (!editing || !editor) return
+    const doc = editor.getJSON() as RichNode
+    void api().invoke('recovery:writeDraft', {
+      objectId: editing.objectId,
+      baseRevision,
+      content: { schemaVersion: NOTE_SCHEMA_VERSION, doc },
+      plainText: plainTextOf(doc),
+      writtenAt: Date.now()
+    })
+  }, 100)
+}
+
 function onChange(): void {
   const editing = notes().editing
   if (!editing || editing.readOnly) return
   if (editing.status === 'saved') notes().updateEditing({ status: 'unsaved' })
+  queueDraft()
   const now = Date.now()
   if (!dirtySince) dirtySince = now
   clearTimeout(saveTimer)
@@ -305,6 +324,7 @@ async function saveNow(): Promise<void> {
     const stillDirty = docJson() !== savedJson
     notes().updateEditing({ status: stillDirty ? 'unsaved' : 'saved', error: null })
     if (stillDirty) onChange()
+    else void api().invoke('recovery:clearDraft', editing.objectId)
   } else if (result.reason === 'conflict') {
     notes().updateEditing({
       status: 'error',

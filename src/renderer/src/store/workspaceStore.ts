@@ -27,7 +27,7 @@ export type RenameTarget = ItemRef & { source: ItemSource }
 export type WorkspaceDialog =
   { kind: 'move'; target: ItemRef } | { kind: 'delete'; target: ItemRef } | { kind: 'import' }
 
-export type WorkspaceSurface = 'canvas' | 'library' | 'trash'
+export type WorkspaceSurface = 'canvas' | 'library' | 'trash' | 'search'
 
 interface WorkspaceState {
   tree: ProjectTree | null
@@ -83,6 +83,7 @@ interface WorkspaceState {
 
   openLibrary: (folderId?: string | null, focusId?: string | null) => void
   openTrash: () => void
+  openSearch: () => void
   showCanvas: () => void
   reloadLibrary: (append?: boolean) => Promise<void>
   reloadStorage: () => Promise<void>
@@ -227,7 +228,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
     openBoard: (id) =>
       guard(async () => {
         const current = get().board?.id
-        if (current === id) return
+        if (current === id) {
+          set({ surface: 'canvas' })
+          return
+        }
         if (!(await show(id))) return
         set({ surface: 'canvas' })
         if (current) set({ back: [...get().back, current], forward: [] })
@@ -354,6 +358,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
       void get().reloadTrash()
     },
     showCanvas: () => set({ surface: 'canvas' }),
+    openSearch: () => set({ surface: 'search' }),
     reloadLibrary: async (append = false) => {
       const request = ++libraryRequest
       const state = get()

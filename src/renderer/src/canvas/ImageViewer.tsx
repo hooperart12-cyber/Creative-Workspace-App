@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Dialog } from 'radix-ui'
 import { assetUrl, THUMBNAIL_SIZES } from '@shared/assets'
-import type { CanvasObject } from '@shared/types'
+import type { AssetInfo, CanvasObject } from '@shared/types'
 import { useCanvasStore } from '../store/canvasStore'
 import { useProjectStore } from '../store/projectStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
@@ -29,8 +29,21 @@ function formatBytes(bytes: number): string {
 /** Full-size image viewer (§7): the original file at any zoom, with pan, fit and download. */
 export function ImageViewer() {
   const viewerObjectId = useCanvasStore((s) => s.viewerObjectId)
+  const viewerAssetId = useCanvasStore((s) => s.viewerAssetId)
   const setViewerObjectId = useCanvasStore((s) => s.setViewerObjectId)
+  const setViewerAssetId = useCanvasStore((s) => s.setViewerAssetId)
   const objects = useWorkspaceStore((s) => s.board?.objects)
+  const [assetObject, setAssetObject] = useState<CanvasObject | null>(null)
+  useEffect(() => {
+    if (!viewerAssetId) return
+    let dead = false
+    void window.api.invoke('assets:get', viewerAssetId).then((asset) => {
+      if (!dead) setAssetObject(objectForAsset(asset))
+    })
+    return () => {
+      dead = true
+    }
+  }, [viewerAssetId])
 
   // Images on the board in reading order, for ← / →.
   const images = useMemo(
@@ -47,18 +60,48 @@ export function ImageViewer() {
     if (viewerObjectId && objects && !object) setViewerObjectId(null)
   }, [viewerObjectId, objects, object, setViewerObjectId])
 
+  const direct = viewerAssetId && assetObject?.asset?.id === viewerAssetId ? assetObject : null
+  const shown = object ?? direct
   return (
-    <Dialog.Root open={!!object} onOpenChange={(open) => !open && setViewerObjectId(null)}>
-      {object && (
+    <Dialog.Root
+      open={!!shown}
+      onOpenChange={(open) => {
+        if (open) return
+        setViewerObjectId(null)
+        setViewerAssetId(null)
+      }}
+    >
+      {shown && (
         <ViewerContent
-          key={object.id}
-          object={object}
-          images={images}
+          key={shown.id}
+          object={shown}
+          images={object ? images : [shown]}
           onNavigate={(id) => setViewerObjectId(id)}
         />
       )}
     </Dialog.Root>
   )
+}
+
+function objectForAsset(asset: AssetInfo): CanvasObject {
+  return {
+    id: asset.id,
+    boardId: '',
+    type: 'image',
+    x: 0,
+    y: 0,
+    width: asset.width ?? 100,
+    height: asset.height ?? 100,
+    rotation: 0,
+    zIndex: 0,
+    locked: false,
+    groupId: null,
+    linkedBoardId: null,
+    assetId: asset.id,
+    data: {},
+    revision: 0,
+    asset
+  }
 }
 
 function ViewerContent({

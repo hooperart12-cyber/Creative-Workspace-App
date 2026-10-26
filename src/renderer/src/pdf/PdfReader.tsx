@@ -42,7 +42,19 @@ const GAP = 16
  * Read-only PDF reader. Page, zoom and scroll belong to this window only.
  * A password stays in memory for this window and is never written down.
  */
-export function PdfReader({ objectId, onClose }: { objectId: string; onClose: () => void }) {
+export function PdfReader({
+  objectId,
+  assetId: directAssetId,
+  initialPage = 1,
+  initialQuery = '',
+  onClose
+}: {
+  objectId?: string
+  assetId?: string
+  initialPage?: number
+  initialQuery?: string
+  onClose: () => void
+}) {
   const rootRef = useRef<HTMLDivElement>(null)
   const [object, setObject] = useState<CanvasObject | null>(null)
   const [missing, setMissing] = useState(false)
@@ -54,14 +66,14 @@ export function PdfReader({ objectId, onClose }: { objectId: string; onClose: ()
   const [attempt, setAttempt] = useState<{ password?: string; n: number }>({ n: 0 })
   const [pages, setPages] = useState<PageBox[]>([])
   const [outline, setOutline] = useState<OutlineNode[]>([])
-  const [page, setPage] = useState(1)
-  const [pageDraft, setPageDraft] = useState('1')
+  const [page, setPage] = useState(initialPage)
+  const [pageDraft, setPageDraft] = useState(String(initialPage))
   const [mode, setMode] = useState<Mode>('continuous')
   const [direction, setDirection] = useState<Direction>('ltr')
   const [zoomMode, setZoomMode] = useState<ZoomMode>('fit-width')
   const [customScale, setCustomScale] = useState(1)
   const [sidebar, setSidebar] = useState<'pages' | 'outline' | null>('pages')
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(initialQuery)
   const [hits, setHits] = useState<Hit[] | null>(null)
   const [hitIndex, setHitIndex] = useState(0)
   const [searchNote, setSearchNote] = useState('')
@@ -72,6 +84,7 @@ export function PdfReader({ objectId, onClose }: { objectId: string; onClose: ()
   }, [])
 
   useEffect(() => {
+    if (!objectId) return
     let dead = false
     const load = () =>
       window.api
@@ -92,8 +105,19 @@ export function PdfReader({ objectId, onClose }: { objectId: string; onClose: ()
     }
   }, [objectId])
 
-  const assetId = object?.asset?.id
-  const bytes = object?.asset?.bytes ?? 0
+  const [directAsset, setDirectAsset] = useState<CanvasObject['asset'] | null>(null)
+  useEffect(() => {
+    if (!directAssetId) return
+    let dead = false
+    void window.api.invoke('assets:get', directAssetId).then((asset) => {
+      if (!dead) setDirectAsset(asset)
+    })
+    return () => {
+      dead = true
+    }
+  }, [directAssetId])
+  const assetId = object?.asset?.id ?? directAsset?.id
+  const bytes = object?.asset?.bytes ?? directAsset?.bytes ?? 0
   useEffect(() => {
     if (!assetId || bytes <= 0) return
     let dead = false
@@ -220,6 +244,7 @@ export function PdfReader({ objectId, onClose }: { objectId: string; onClose: ()
     if (found) reveal(found)
   }
 
+  const seeded = useRef(false)
   const runSearch = async () => {
     if (!doc) return
     const needle = query.trim()
@@ -257,6 +282,16 @@ export function PdfReader({ objectId, onClose }: { objectId: string; onClose: ()
       reveal(found[0].page)
     }
   }
+
+  const searchRef = useRef(runSearch)
+  useEffect(() => {
+    searchRef.current = runSearch
+  })
+  useEffect(() => {
+    if (!doc || !initialQuery || seeded.current) return
+    seeded.current = true
+    void searchRef.current()
+  }, [doc, initialQuery])
 
   const goToHit = (index: number) => {
     if (!hits?.length) return
@@ -433,13 +468,15 @@ export function PdfReader({ objectId, onClose }: { objectId: string; onClose: ()
             Save original as
           </button>
         )}
-        <button
-          type="button"
-          className={toolClass}
-          onClick={() => void window.api.invoke('window:openReader', { objectId })}
-        >
-          Open in new window
-        </button>
+        {objectId && (
+          <button
+            type="button"
+            className={toolClass}
+            onClick={() => void window.api.invoke('window:openReader', { objectId })}
+          >
+            Open in new window
+          </button>
+        )}
       </header>
 
       <div className="flex items-center gap-2 border-b border-line bg-surface px-3 py-1.5">
