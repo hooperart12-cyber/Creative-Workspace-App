@@ -31,8 +31,10 @@ export function localPathsFromUriList(list: string): { paths: string[]; remote: 
     } catch {
       continue
     }
-    const name = basename(decodeURIComponent(url.pathname)) || entry
-    if (url.hostname !== '' && url.hostname !== 'localhost') {
+    const pathname = safeDecode(url.pathname)
+    const name = basename(pathname.replace(/\\/g, '/')) || entry
+    // `file:////server/share` (empty host, path starting with two slashes) also names a server.
+    if ((url.hostname !== '' && url.hostname !== 'localhost') || isNetworkPath(pathname)) {
       remote.push(name)
       continue
     }
@@ -46,4 +48,12 @@ export function localPathsFromUriList(list: string): { paths: string[]; remote: 
     else paths.push(path)
   }
   return { paths, remote }
+}
+
+function safeDecode(text: string): string {
+  try {
+    return decodeURIComponent(text)
+  } catch {
+    return text
+  }
 }

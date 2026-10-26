@@ -17,10 +17,9 @@ describe('isNetworkPath', () => {
 
 describe('localPathsFromUriList', () => {
   it('keeps local file links and skips comments and other schemes', () => {
-    const local =
-      process.platform === 'win32' ? 'file:///C:/pics/a%20b.png' : 'file:///pics/a%20b.png'
+    const dir = process.platform === 'win32' ? '/C:/pics' : '/pics'
     const result = localPathsFromUriList(
-      `# copied\r\n${local}\r\nhttps://example.com/x.png\r\n\r\nfile://localhost/pics/c.png`
+      `# copied\r\nfile://${dir}/a%20b.png\r\nhttps://example.com/x.png\r\n\r\nfile://localhost${dir}/c.png`
     )
     expect(result.remote).toEqual([])
     expect(result.paths).toHaveLength(2)
@@ -29,9 +28,10 @@ describe('localPathsFromUriList', () => {
 
   it('never turns a link to another computer into a path', () => {
     const result = localPathsFromUriList(
-      'file://attacker.example/share/a.png\nfile:////attacker.example/share/b.png'
+      'file://attacker.example/share/a.png\nfile:////attacker.example/share/b.png\n' +
+        'file:///%5C%5Cattacker.example%5Cshare%5Cc.png'
     )
     expect(result.paths).toEqual([])
-    expect(result.remote).toEqual(['a.png', 'b.png'])
+    expect(result.remote).toEqual(['a.png', 'b.png', 'c.png'])
   })
 })
