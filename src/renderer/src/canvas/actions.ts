@@ -259,15 +259,16 @@ export function copySelection(mode: 'copy' | 'cut'): Promise<void> {
  * If something else was copied since (an image in a browser, files in File Explorer, a
  * screenshot), that is imported instead.
  */
-export function paste(at?: Point): Promise<void> {
-  return run(async () => {
+export async function paste(at?: Point): Promise<void> {
+  // Set when the clipboard holds something from another program; imported after the queued step.
+  let external = null as { boardId: string; center: Point } | null
+  await run(async () => {
     const board = workspace().board
     if (!board) return
     const clip = await api().invoke('clipboard:get')
     if (!clip) {
       canvas().setCut([])
-      const result = await withProgress(() => api().invoke('clipboard:importExternal'))
-      if (result) await placeImported(result, board.id, at ?? viewCenter(), !at)
+      external = { boardId: board.id, center: at ?? viewCenter() }
       return
     }
     const target = at ?? defaultPastePoint(clip.objectIds, clip.sourceBoardId === board.id)
@@ -304,6 +305,10 @@ export function paste(at?: Point): Promise<void> {
       }
     })
   })
+  if (external) {
+    const { boardId, center } = external
+    await importThenPlace(boardId, () => api().invoke('clipboard:importExternal'), center, !at)
+  }
 }
 
 export function duplicateSelection(): Promise<void> {
@@ -364,19 +369,20 @@ export function placeExistingAssets(assetIds: string[], at: Point): Promise<void
 
 /** Imports files dropped from File Explorer / Finder or a browser, centred on `at`. */
 export function importDroppedFiles(files: File[], at: Point): Promise<void> {
-  return run(async () => {
-    const board = workspace().board
-    if (!board || files.length === 0) return
-    // Files on disk are imported by path (no copy through the renderer). Things without a
-    // path, like an image dragged out of a browser, are sent as bytes.
-    const paths: string[] = []
-    const unsaved: File[] = []
-    for (const file of files) {
-      const path = api().pathForFile(file)
-      if (path) paths.push(path)
-      else unsaved.push(file)
-    }
-    const result = await withProgress(async () => {
+  const board = workspace().board
+  if (!board || files.length === 0) return Promise.resolve()
+  return importThenPlace(
+    board.id,
+    async () => {
+      // Files on disk are imported by path (no copy through the renderer). Things without a
+      // path, like an image dragged out of a browser, are sent as bytes.
+      const paths: string[] = []
+      const unsaved: File[] = []
+      for (const file of files) {
+        const path = api().pathForFile(file)
+        if (path) paths.push(path)
+        else unsaved.push(file)
+      }
       const fromDisk = paths.length
         ? await api().invoke('assets:importFiles', paths)
         : { imported: [], skipped: [], warnings: [], entryIds: [] }
@@ -394,9 +400,10 @@ export function importDroppedFiles(files: File[], at: Point): Promise<void> {
         warnings: [...fromDisk.warnings, ...fromMemory.warnings],
         entryIds: [...fromDisk.entryIds, ...fromMemory.entryIds]
       }
-    })
-    await placeImported(result, board.id, at, false)
-  })
+    },
+    at,
+    false
+  )
 }
 
 /** Asks for image files and places them at `at` (or the middle of the view, next to what's there). */
@@ -409,14 +416,14 @@ export async function addImagesFromPicker(at?: Point): Promise<void> {
       return []
     })
   if (paths.length === 0) return
-  return run(async () => {
-    const board = workspace().board
-    if (!board) return
-    const result = await withProgress(() =>
-      api().invoke('assets:importFiles', paths, { imagesOnly: true })
-    )
-    await placeImported(result, board.id, at ?? viewCenter(), !at)
-  })
+  const board = workspace().board
+  if (!board) return
+  return importThenPlace(
+    board.id,
+    () => api().invoke('assets:importFiles', paths, { imagesOnly: true }),
+    at ?? viewCenter(),
+    !at
+  )
 }
 
 /** Asks for any files and places them: images, PDFs, and everything else the library can store. */
@@ -428,22 +435,55 @@ export async function addFilesFromPicker(at?: Point): Promise<void> {
       return []
     })
   if (paths.length === 0) return
-  return run(async () => {
-    const board = workspace().board
-    if (!board) return
-    const result = await withProgress(() => api().invoke('assets:importFiles', paths))
-    await placeImported(result, board.id, at ?? viewCenter(), !at)
-  })
+  const board = workspace().board
+  if (!board) return
+  return importThenPlace(
+    board.id,
+    () => api().invoke('assets:importFiles', paths),
+    at ?? viewCenter(),
+    !at
+  )
 }
+
+/**
+ * Copying files in (hashing, decoding, thumbnails) can take seconds, so it runs outside the
+ * edit queue: dragging, undo and delete keep working meanwhile. Only putting the finished
+ * import on the board is a queued, undoable edit.
+ */
+async function importThenPlace(
+  boardId: string,
+  importWork: () => Promise<ImportResult | null>,
+  center: Point,
+  avoidOverlap: boolean
+): Promise<void> {
+  let result: ImportResult | null
+  try {
+    result = await withProgress(importWork)
+  } catch (error) {
+    reportError(error)
+    return
+  }
+  if (result) {
+    const imported = result
+    await run(() => placeImported(imported, boardId, center, avoidOverlap))
+  }
+}
+
+/** Imports in progress; "Importing…" stays up until the last one finishes. */
+let importsRunning = 0
 
 /** Shows "Importing…" if an import takes more than a moment. */
 async function withProgress<T>(work: () => Promise<T>): Promise<T> {
+  importsRunning++
   const timer = setTimeout(() => showNotice('Importing…', 0), 400)
   try {
     return await work()
   } finally {
     clearTimeout(timer)
-    if (useProjectStore.getState().notice === 'Importing…') showNotice(null)
+    importsRunning--
+    if (importsRunning === 0 && useProjectStore.getState().notice === 'Importing…') {
+      showNotice(null)
+    }
   }
 }
 

@@ -57,7 +57,7 @@ RULES:
 **Last updated:** 2026-10-25
 **Branches:** `feat/m3a-images` (PR #6 → `main`), `feat/m3b-text-notes` (PR #7 → `feat/m3a-images`), `feat/m3c-documents` (PR #8 → `feat/m3b-text-notes`), `feat/m4-asset-library` ([PR #9](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/9) → `feat/m3c-documents`), `feat/m5-reliability-productivity` ([PR #10](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/10) → `feat/m4-asset-library`). Do not merge any of them automatically. Merge M3A, then M3B, then M3C, then M4, then M5, retargeting each onto `main` after the one below it merges.
 **Phase:** M5 is implemented on `feat/m5-reliability-productivity` from `feat/m4-asset-library` at `7cdb374`. Earlier branches were not merged or rewritten. Board covers stay Later.
-**Stack discrepancy (reconcile before release):** `origin/feat/m3a-images` is at `62fec97` (“M3A: refuse network file links on paste; imports no longer block other edits”). That commit is **not** an ancestor of M3B, M3C, M4, or M5. Do not rebase or merge it into those branches during M5. When the stacked PRs are integrated, bring `62fec97` in before release and retest paste of network links and import cancellation.
+**Stack integration:** `feat/m3a-images` commits `62fec97` and `73993d4` (network-link paste safety, imports outside the edit queue, and the `file:////server` check) were merged into `feat/m3b-text-notes` and then into M3C, M4, and M5. The original commits are unchanged. Image and file pickers use `importThenPlace`.
 
 **Done**
 - M0 scaffold, M1 boards/folders, testing guide, M2 canvas (PR #5, ADR-012).
@@ -109,7 +109,7 @@ RULES:
 2. After M3A merges, retarget the M3B PR to `main`, review it, then merge.
 3. After M3B merges, retarget the M3C PR to `main`, run the M3C checklist (a long PDF and **Open a copy** are the key checks), then merge.
 4. Retarget the M4 PR onto `main` after M3C merges, and run the M4 checklist (a large folder and Empty Trash are the key checks).
-5. Retarget the M5 PR onto `main` after M4 merges. Before release, reconcile `62fec97` from `feat/m3a-images` (see the stack discrepancy above) and run the M5 checklist, including the packaged Windows install (5.13–5.14). That install has not been done by hand.
+5. Retarget the M5 PR onto `main` after M4 merges. The M3A paste and import fixes are already merged through the stack. The packaged Windows install (TESTING 5.13–5.14) has not been done by hand.
 6. Later: board covers (`boards.cover_asset_id` drawn in `BoardCardNode`).
 
 **Known issues / open questions**
