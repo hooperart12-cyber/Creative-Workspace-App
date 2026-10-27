@@ -49,6 +49,21 @@ const SAVE_CHANNELS = new Set<string>([
   'objects:createImages',
   'objects:createFromAssets',
   'objects:setFileAppearance',
+  'stacks:createEmpty',
+  'stacks:createFromObjects',
+  'stacks:createFromAssets',
+  'stacks:add',
+  'stacks:remove',
+  'stacks:extract',
+  'stacks:reorder',
+  'stacks:setCover',
+  'stacks:setDisplayed',
+  'stacks:updateSettings',
+  'stacks:unstack',
+  'stacks:setSlideCrop',
+  'stacks:setImageCrop',
+  'stacks:undoImageCrop',
+  'stacks:undo',
   'assets:importFiles',
   'assets:importBytes',
   'assets:saveCover',
@@ -227,7 +242,7 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
 
   handle('board:get', (event, id) => {
     const project = requireProject(event)
-    return project.tags.decorateBoard(project.boards.get(id))
+    return project.tags.decorateBoard(project.stacks.attach(project.boards.get(id)))
   })
 
   handle('board:create', (event, input) => {
@@ -323,6 +338,93 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
     const project = requireProject(event)
     project.objects.setFileAppearance(id, appearance)
     broadcastContent(project)
+  })
+
+  const stackWrite = (event: IpcMainInvokeEvent, run: (project: Project) => void): void => {
+    const project = requireProject(event)
+    run(project)
+    broadcastContent(project)
+  }
+  handle('stacks:createEmpty', (event, boardId, at) => {
+    const project = requireProject(event)
+    const result = project.stacks.createEmpty(boardId, at)
+    broadcastContent(project)
+    return result
+  })
+  handle('stacks:createFromObjects', (event, objectIds, mode) => {
+    const project = requireProject(event)
+    const result = project.stacks.createFromObjects(objectIds, mode)
+    broadcastContent(project)
+    return result
+  })
+  handle('stacks:createFromAssets', (event, boardId, assetIds, at) => {
+    const project = requireProject(event)
+    const result = project.stacks.createFromAssets(boardId, assetIds, at)
+    broadcastContent(project)
+    return result
+  })
+  handle('stacks:add', (event, input) => {
+    const project = requireProject(event)
+    const result = project.stacks.add(input)
+    broadcastContent(project)
+    return result
+  })
+  handle('stacks:remove', (event, stackId, slideId, expectedRevision) => {
+    const project = requireProject(event)
+    const result = project.stacks.remove(stackId, slideId, expectedRevision)
+    broadcastContent(project)
+    return result
+  })
+  handle('stacks:extract', (event, stackId, slideId, expectedRevision) => {
+    const project = requireProject(event)
+    const result = project.stacks.extract(stackId, slideId, expectedRevision)
+    broadcastContent(project)
+    return result
+  })
+  handle('stacks:reorder', (event, stackId, slideIds, expectedRevision) => {
+    const project = requireProject(event)
+    const result = project.stacks.reorder(stackId, slideIds, expectedRevision)
+    broadcastContent(project)
+    return result
+  })
+  handle('stacks:setCover', (event, stackId, slideId, expectedRevision) => {
+    const project = requireProject(event)
+    const result = project.stacks.setCover(stackId, slideId, expectedRevision)
+    broadcastContent(project)
+    return result
+  })
+  handle('stacks:setDisplayed', (event, stackId, slideId, expectedShown) => {
+    stackWrite(event, (project) => project.stacks.setDisplayed(stackId, slideId, expectedShown))
+  })
+  handle('stacks:updateSettings', (event, stackId, patch, expectedRevision) => {
+    const project = requireProject(event)
+    const result = project.stacks.updateSettings(stackId, patch, expectedRevision)
+    broadcastContent(project)
+    return result
+  })
+  handle('stacks:unstack', (event, stackId, mode, expectedRevision) => {
+    const project = requireProject(event)
+    const result = project.stacks.unstack(stackId, mode, expectedRevision)
+    broadcastContent(project)
+    return result
+  })
+  handle('stacks:setSlideCrop', (event, stackId, slideId, crop, expectedRevision) => {
+    const project = requireProject(event)
+    const result = project.stacks.setSlideCrop(stackId, slideId, crop, expectedRevision)
+    broadcastContent(project)
+    return result
+  })
+  handle('stacks:setImageCrop', (event, objectId, crop, expectedRevision) => {
+    const project = requireProject(event)
+    const result = project.stacks.setImageCrop(objectId, crop, expectedRevision)
+    broadcastContent(project)
+    return result
+  })
+  handle('stacks:undoImageCrop', (event, undo) => {
+    stackWrite(event, (project) => project.stacks.undoImageCrop(undo))
+  })
+  handle('stacks:undo', (event, undo) => {
+    stackWrite(event, (project) => project.stacks.undo(undo))
   })
 
   handle('assets:importFiles', async (event, paths, options) => {

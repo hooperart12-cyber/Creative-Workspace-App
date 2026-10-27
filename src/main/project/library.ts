@@ -10,7 +10,7 @@ import type {
   TrashItem
 } from '@shared/types'
 import type { ProjectDb } from '../db/client'
-import { assets, boardObjects, boards, folders, libraryEntries } from '../db/schema'
+import { assets, boardObjects, boards, folders, libraryEntries, stackSlides } from '../db/schema'
 import { deletionTime } from './boards'
 import { toAssetInfo, attachPreviews } from './assets'
 
@@ -571,6 +571,12 @@ export class LibraryRepository {
       .where(eq(boardObjects.assetId, assetId))
       .get()
     if (object) return 'A board appearance still uses it, including items in Trash.'
+    const slide = this.db
+      .select({ id: stackSlides.id })
+      .from(stackSlides)
+      .where(eq(stackSlides.assetId, assetId))
+      .get()
+    if (slide) return 'An image stack still uses it.'
     const cover = this.db
       .select({ id: boards.id })
       .from(boards)

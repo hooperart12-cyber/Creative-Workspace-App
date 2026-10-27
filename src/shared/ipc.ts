@@ -1,3 +1,5 @@
+import type { ImageCrop } from './crop'
+import type { StackSettings } from './stacks'
 import type {
   BoardDetail,
   BoardListItem,
@@ -31,6 +33,8 @@ import type {
   RecoveryManifest,
   SearchPage,
   SearchRequest,
+  StackResult,
+  StackUndo,
   PromoteTagResult,
   RestoreTagResult,
   TagAssignment,
@@ -82,6 +86,89 @@ export interface IpcRequests {
     args: [id: string, appearance: 'compact' | 'preview']
     result: void
   }
+  'stacks:createEmpty': { args: [boardId: string, at: Point]; result: StackResult }
+  'stacks:createFromObjects': {
+    args: [objectIds: string[], mode: 'combine' | 'copy']
+    result: StackResult
+  }
+  'stacks:createFromAssets': {
+    args: [boardId: string, assetIds: string[], at: Point]
+    result: StackResult
+  }
+  'stacks:add': {
+    args: [
+      input: {
+        stackId: string
+        expectedRevision: number
+        assetIds?: string[]
+        objectIds?: string[]
+        mode: 'move' | 'copy'
+      }
+    ]
+    result: StackResult
+  }
+  'stacks:remove': {
+    args: [stackId: string, slideId: string, expectedRevision: number]
+    result: StackResult
+  }
+  'stacks:extract': {
+    args: [stackId: string, slideId: string, expectedRevision: number]
+    result: StackResult
+  }
+  'stacks:reorder': {
+    args: [stackId: string, slideIds: string[], expectedRevision: number]
+    result: StackResult
+  }
+  'stacks:setCover': {
+    args: [stackId: string, slideId: string, expectedRevision: number]
+    result: StackResult
+  }
+  'stacks:setDisplayed': {
+    args: [stackId: string, slideId: string | null, expectedShown: string | null]
+    result: void
+  }
+  'stacks:updateSettings': {
+    args: [
+      stackId: string,
+      patch: { sizing?: StackSettings['sizing']; rememberLast?: boolean; name?: string | null },
+      expectedRevision: number
+    ]
+    result: StackResult
+  }
+  'stacks:unstack': {
+    args: [stackId: string, mode: 'separate' | 'restore', expectedRevision: number]
+    result: StackResult
+  }
+  'stacks:setSlideCrop': {
+    args: [stackId: string, slideId: string, crop: ImageCrop | null, expectedRevision: number]
+    result: StackResult
+  }
+  'stacks:setImageCrop': {
+    args: [objectId: string, crop: ImageCrop | null, expectedRevision: number]
+    result: {
+      revision: number
+      undo: {
+        objectId: string
+        revision: number
+        crop: ImageCrop | null
+        width: number
+        height: number
+      }
+    }
+  }
+  'stacks:undoImageCrop': {
+    args: [
+      undo: {
+        objectId: string
+        revision: number
+        crop: ImageCrop | null
+        width: number
+        height: number
+      }
+    ]
+    result: void
+  }
+  'stacks:undo': { args: [undo: StackUndo]; result: void }
   /**
    * Copies files into the library. `imagesOnly` is the Image tool: other files are skipped.
    * Drop, paste and the File tool omit it and also store PDFs and generic files.
@@ -343,6 +430,21 @@ export const IPC_CHANNELS = [
   'objects:createFromAssets',
   'objects:read',
   'objects:setFileAppearance',
+  'stacks:createEmpty',
+  'stacks:createFromObjects',
+  'stacks:createFromAssets',
+  'stacks:add',
+  'stacks:remove',
+  'stacks:extract',
+  'stacks:reorder',
+  'stacks:setCover',
+  'stacks:setDisplayed',
+  'stacks:updateSettings',
+  'stacks:unstack',
+  'stacks:setSlideCrop',
+  'stacks:setImageCrop',
+  'stacks:undoImageCrop',
+  'stacks:undo',
   'assets:importFiles',
   'assets:importBytes',
   'assets:saveOriginal',

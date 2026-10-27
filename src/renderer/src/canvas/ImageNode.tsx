@@ -1,6 +1,7 @@
 import { memo, useEffect, useState } from 'react'
 import { Group, Rect, Shape, Text } from 'react-konva'
 import { assetUrl, pickVariant } from '@shared/assets'
+import { cropFraction, cropOf, cropPixels } from '@shared/crop'
 import type { CanvasObject } from '@shared/types'
 import { useProjectStore } from '../store/projectStore'
 import { COLORS } from './BoardCardNode'
@@ -23,11 +24,20 @@ interface Props {
 export const ImageNode = memo(function ImageNode({ object, x, y, faded, zoom }: Props) {
   const projectId = useProjectStore((s) => s.project?.id)
   const { width, height, asset } = object
+  const crop = asset?.width && asset.height ? cropOf(object.data) : null
   const naturalLongSide = Math.max(asset?.width ?? 0, asset?.height ?? 0)
   const displayedPx = Math.max(width, height) * zoom * window.devicePixelRatio
   const url =
     projectId && asset
-      ? assetUrl(projectId, asset.sha256, pickVariant(naturalLongSide, displayedPx))
+      ? assetUrl(
+          projectId,
+          asset.sha256,
+          pickVariant(
+            naturalLongSide,
+            displayedPx,
+            asset.width && asset.height ? cropFraction(crop, asset.width, asset.height) : 1
+          )
+        )
       : undefined
 
   const wanted = useImage(url)
@@ -66,7 +76,23 @@ export const ImageNode = memo(function ImageNode({ object, x, y, faded, zoom }: 
             // Scaling a large image down needs high-quality filtering to stay crisp.
             ctx.imageSmoothingEnabled = true
             ctx.imageSmoothingQuality = 'high'
-            ctx.drawImage(image, 0, 0, width, height)
+            const pixels =
+              asset?.width && asset.height
+                ? cropPixels(crop, asset.width, asset.height)
+                : { x: 0, y: 0, width: image.naturalWidth, height: image.naturalHeight }
+            const scaleX = asset?.width ? image.naturalWidth / asset.width : 1
+            const scaleY = asset?.height ? image.naturalHeight / asset.height : 1
+            ctx.drawImage(
+              image,
+              pixels.x * scaleX,
+              pixels.y * scaleY,
+              pixels.width * scaleX,
+              pixels.height * scaleY,
+              0,
+              0,
+              width,
+              height
+            )
           }}
           // Transparent areas still select the image.
           hitFunc={(context, shape) => {

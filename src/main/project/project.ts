@@ -21,6 +21,7 @@ import { NoteRepository } from './notes'
 import { ObjectRepository } from './objects'
 import { pendingMigrationTags, readChangeRevision, readProjectIdentity } from './schemaInfo'
 import { SearchRepository } from './search'
+import { StackRepository } from './stacks'
 import { TagRepository } from './tags'
 
 export const PROJECT_EXTENSION = '.cwproj'
@@ -44,6 +45,7 @@ export class Project {
   readonly assets: AssetRepository
   readonly search: SearchRepository
   readonly tags: TagRepository
+  readonly stacks: StackRepository
 
   private constructor(
     readonly path: string,
@@ -65,6 +67,8 @@ export class Project {
     this.assets = new AssetRepository(db, path)
     this.search = new SearchRepository(db)
     this.tags = new TagRepository(db)
+    this.stacks = new StackRepository(db, this.boards)
+    this.stacks.normalizeDisplayed()
   }
 
   /** The open connection, for snapshots and recovery points. */

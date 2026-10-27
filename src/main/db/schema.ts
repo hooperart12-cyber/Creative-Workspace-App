@@ -155,6 +155,40 @@ export const boardObjects = sqliteTable(
   ]
 )
 
+/** One image inside a stack (§9). Crop and layout belong to this appearance, not the asset. */
+export const stackSlides = sqliteTable(
+  'stack_slides',
+  {
+    id: text('id').primaryKey(),
+    stackId: text('stack_id')
+      .notNull()
+      .references(() => boardObjects.id, { onDelete: 'cascade' }),
+    assetId: text('asset_id')
+      .notNull()
+      .references(() => assets.id),
+    position: real('position').notNull().default(0),
+    cropX: integer('crop_x'),
+    cropY: integer('crop_y'),
+    cropW: integer('crop_w'),
+    cropH: integer('crop_h'),
+    layoutX: real('layout_x'),
+    layoutY: real('layout_y'),
+    layoutWidth: real('layout_width'),
+    layoutHeight: real('layout_height'),
+    layoutRotation: real('layout_rotation'),
+    layoutCropX: integer('layout_crop_x'),
+    layoutCropY: integer('layout_crop_y'),
+    layoutCropW: integer('layout_crop_w'),
+    layoutCropH: integer('layout_crop_h'),
+    sourceObjectId: text('source_object_id'),
+    ...timestamps
+  },
+  (t) => [
+    index('stack_slides_stack_idx').on(t.stackId, t.position),
+    index('stack_slides_asset_idx').on(t.assetId)
+  ]
+)
+
 /**
  * Tag library (§12). Partial unique indexes live in `0005_tags.sql` because Drizzle cannot
  * express them. `reusable = false` is a one-off owned by exactly one item.

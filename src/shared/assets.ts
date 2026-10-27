@@ -20,10 +20,15 @@ export function assetUrl(projectId: string, sha256: string, variant: AssetVarian
  * The smallest stored file that still looks sharp when the image is drawn
  * `displayedPx` device pixels along its longest side.
  */
-export function pickVariant(naturalLongSide: number, displayedPx: number): AssetVariant {
+export function pickVariant(
+  naturalLongSide: number,
+  displayedPx: number,
+  visibleFraction = 1
+): AssetVariant {
+  const needed = displayedPx / Math.min(1, Math.max(0.05, visibleFraction))
   for (const size of THUMBNAIL_SIZES) {
     // A thumbnail only exists when it's smaller than the original.
-    if (naturalLongSide > size && displayedPx <= size) return size
+    if (naturalLongSide > size && needed <= size) return size
   }
   return 'original'
 }

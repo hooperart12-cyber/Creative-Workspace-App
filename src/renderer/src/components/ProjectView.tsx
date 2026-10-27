@@ -17,6 +17,7 @@ import { TrashView } from '../library/TrashView'
 import { BackupDialog } from '../backup/BackupDialog'
 import { CommandPalette } from '../commands/CommandPalette'
 import { TagDialogs } from '../tags/TagManager'
+import { StackDialogs } from '../stacks/StackDialogs'
 import { ShortcutSheet } from '../commands/ShortcutSheet'
 import { DraftDialog } from '../recovery/DraftDialog'
 import { useSaveStatus } from '../saveStatus'
@@ -215,6 +216,7 @@ export function ProjectView({ project }: { project: ProjectSummary }) {
       <WorkspaceDialogs />
       <CommandPalette />
       <TagDialogs />
+      <StackDialogs />
       <ShortcutSheet />
       <BackupDialog />
       <DraftDialog />

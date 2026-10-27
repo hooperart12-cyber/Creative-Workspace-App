@@ -6,7 +6,7 @@ import { EditableTitle } from '../components/EditableTitle'
 import { GRID_SIZE, useCanvasStore } from '../store/canvasStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import * as actions from './actions'
-import { expandToGroups, findDropTarget, smartSnap, snapToGrid } from './arrange'
+import { expandToGroups, findDropTarget, findStackDrop, smartSnap, snapToGrid } from './arrange'
 import { BoardCardNode, COLORS, TITLE_FONT_SIZE, TITLE_GAP } from './BoardCardNode'
 import {
   boundsOf,
@@ -21,6 +21,8 @@ import {
 import { DocumentNode } from './DocumentNode'
 import { FileNode } from './FileNode'
 import { ImageNode } from './ImageNode'
+import { StackNode } from '../stacks/StackNode'
+import { showSlide } from '../stacks/stackActions'
 import { TagMarks } from '../tags/TagMarks'
 import { canRotate, isViewable, lockedAspectRatio } from './objectTypes'
 import { useCanvasShortcuts, isSpaceHeld } from './useCanvasShortcuts'
@@ -311,6 +313,28 @@ export function CanvasView() {
     }
     if (evt.button !== 0) return
 
+    const previousArrow = e.target.hasName('stack-prev') || e.target.findAncestor('.stack-prev')
+    const nextArrow = e.target.hasName('stack-next') || e.target.findAncestor('.stack-next')
+    if (previousArrow || nextArrow) {
+      const stackId = objectIdOf(e.target)
+      const stack = (useWorkspaceStore.getState().board?.objects ?? []).find(
+        (object) => object.id === stackId
+      )
+      if (stack?.type === 'stack' && stack.slides && stack.slides.length > 1) {
+        const settingsId =
+          (typeof stack.data.displayedSlideId === 'string' && stack.data.displayedSlideId) ||
+          stack.slides[0].id
+        const index = Math.max(
+          0,
+          stack.slides.findIndex((slide) => slide.id === settingsId)
+        )
+        const step = previousArrow ? -1 : 1
+        const next = (index + step + stack.slides.length) % stack.slides.length
+        void showSlide(stack.id, stack.slides[next].id, settingsId)
+      }
+      return
+    }
+
     const world = screenToWorld(screen, vp)
     const id = objectIdOf(e.target)
     const objectsNow = useWorkspaceStore.getState().board?.objects ?? []
@@ -445,6 +469,11 @@ export function CanvasView() {
     const dropBoardId =
       domTarget && domTarget !== board.id && !draggedBoards.has(domTarget) ? domTarget : undefined
     const dropCard = dropBoardId ? undefined : findDropTarget(objectsNow, dragged, world)
+    const imagesOnly = [...dragged].every(
+      (id) => objectsNow.find((object) => object.id === id)?.type === 'image'
+    )
+    const dropStack =
+      dropCard || dropBoardId || !imagesOnly ? undefined : findStackDrop(objectsNow, dragged, world)
 
     state.setDrag({
       ids: g.ids,
@@ -452,7 +481,8 @@ export function CanvasView() {
       dy,
       guides: dropCard || dropBoardId ? [] : guides,
       dropCardId: dropCard?.id,
-      dropBoardId
+      dropBoardId,
+      dropStackId: dropStack?.id
     })
   }
 
@@ -486,6 +516,22 @@ export function CanvasView() {
     const finished = state.drag
     if (finished?.dropBoardId) {
       void actions.nestObjects(g.ids, finished.dropBoardId)
+    } else if (finished?.dropStackId) {
+      const images = g.ids.filter(
+        (id) => board.objects.find((object) => object.id === id)?.type === 'image'
+      )
+      if (images.length) {
+        state.setStackDrop({
+          stackId: finished.dropStackId,
+          objectIds: images,
+          dx: finished.dx,
+          dy: finished.dy,
+          origins: images.map((id) => {
+            const origin = g.origins.get(id)!
+            return { id, x: origin.x, y: origin.y }
+          })
+        })
+      }
     } else if (finished?.dropCardId) {
       const target = board.objects.find((o) => o.id === finished.dropCardId)?.linkedBoardId
       if (target) void actions.nestObjects(g.ids, target)
@@ -516,6 +562,13 @@ export function CanvasView() {
       state.setViewerObjectId(null)
       state.setPdfReaderId(null)
       state.setFileDetailsId(object.id)
+    } else if (object?.type === 'stack') {
+      const slideId =
+        (typeof object.data.displayedSlideId === 'string' && object.data.displayedSlideId) ||
+        object.slides?.[0]?.id
+      if (slideId) {
+        useCanvasStore.getState().setStackViewer({ objectId: object.id, mode: 'gallery', slideId })
+      }
     } else if (object && isViewable(object)) useCanvasStore.getState().setViewerObjectId(object.id)
     else if (object?.type === 'text') {
       // A quick second Ctrl+click is for links, not for editing.
@@ -602,10 +655,26 @@ export function CanvasView() {
       e.preventDefault()
       try {
         const items = JSON.parse(entryPayload) as { assetId: string }[]
-        void actions.placeExistingAssets(
-          items.map((item) => item.assetId),
+        const stack = findStackDrop(
+          useWorkspaceStore.getState().board?.objects ?? [],
+          new Set(),
           world
         )
+        if (stack) {
+          void import('../stacks/stackActions').then(({ addToStack }) =>
+            addToStack({
+              stackId: stack.id,
+              expectedRevision: stack.revision,
+              assetIds: items.map((item) => item.assetId),
+              mode: 'copy'
+            })
+          )
+        } else {
+          void actions.placeExistingAssets(
+            items.map((item) => item.assetId),
+            world
+          )
+        }
       } catch {
         // A drop that isn't a library entry is ignored.
       }
@@ -718,6 +787,15 @@ export function CanvasView() {
                     editedElsewhere={editedElsewhere.has(o.id)}
                     scrollTop={noteScroll[o.id] ?? 0}
                     onMeasured={syncMeasuredHeight}
+                  />
+                ) : o.type === 'stack' ? (
+                  <StackNode
+                    key={o.id}
+                    object={o}
+                    {...positionOf(o)}
+                    faded={cut.has(o.id)}
+                    zoom={viewport.zoom}
+                    active={selection.has(o.id) || hoverId === o.id}
                   />
                 ) : o.type === 'image' ? (
                   <ImageNode
