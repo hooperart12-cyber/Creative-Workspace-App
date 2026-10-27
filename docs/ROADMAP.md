@@ -118,10 +118,17 @@ M3 is built in three parts, each with its own branch and PR.
 - [x] Undo refuses to reverse a newer assignment from another window
 - [ ] Windows installer build tested on a real PC (same manual step as M5)
 
+## M7 — Image stacks and cropping (§7, §9) ✅
+- [x] Image stacks: combine, copy, reorder, cover, arrows, empty placeholder, separate, and restore layout (ADR-019)
+- [x] Stack editor, gallery and focus viewer, and move or copy when a card is dropped on a stack
+- [x] Non-destructive crop on one card or one stack slide; the original file stays unchanged
+- [x] Slide tags stay separate from stack tags and from sibling slides; search can use the parent stack as context
+- [x] Undo refuses when another window changed that stack
+- [ ] Windows installer build tested on a real PC (same manual step as M5)
+
 ---
 
 ## Later (post-MVP), in suggested order
-1. Image stacks (§9)
 3. Connections/arrows, comments, link cards (§5)
 4. Page collections, planner, reader mode (§10)
 5. Linked TOC, named anchors, pinned panel (§13, §14)

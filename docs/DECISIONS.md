@@ -22,6 +22,7 @@ Statuses: ✅ Accepted · 🟡 Tentative (will be confirmed when the feature is 
 | [014](#adr-014--rich-text-notes-editor-display-saving-and-multiple-windows) | Rich text notes: editor, display, saving and multiple windows | ✅ |
 | [015](#adr-015--pdfs-and-generic-file-cards) | PDFs and generic file cards | ✅ |
 | [018](#adr-018--scoped-tags-and-tag-search) | Scoped tags and tag search | ✅ |
+| [019](#adr-019--image-stacks-and-appearance-crops) | Image stacks and appearance crops | ✅ |
 
 ---
 
@@ -566,3 +567,23 @@ MyProject.cwproj/
 - Folder tags, inheriting a linked board’s tags onto its card, OCR, and page collections are not in M6. A new target type can be added later for page collections.
 - Rename, recolor, merge, archive, trash, restore, and permanent delete are confirmed manager actions. They are not canvas undo steps.
 - Restoring a trashed tag whose name is taken requires an explicit new name or cancel. The app does not merge the two tags.
+
+## ADR-019 — Image stacks and appearance crops
+
+**Date:** 2026-10-27 · **Status:** ✅ Accepted · **Requirements:** §7, §9 · **Extends:** ADR-013 (originals stay untouched) and ADR-018 (a slide is a new tag target)
+
+**Decision.**
+
+- A stack is a `board_objects` row of type `stack`. Its images are `stack_slides` rows: order, asset, crop, and the layout captured when images were combined. Migration `0006_image_stacks` adds that table and rebuilds `tags` and `taggings` so a slide can own tags. Every existing tag row is copied. An unknown target aborts the migration. Cleanup triggers are dropped for that rebuild and created again afterwards, because SQLite re-reads them when a table is renamed.
+- Fixed sizing letterboxes the current image inside the stack’s box. Adaptive sizing keeps the center and the scale of the image that was showing. Neighbors do not move.
+- Combine replaces the selected cards and stores their layout, so Restore original layout can put those cards back with the crop they had before stacking. Create stack copy leaves the cards and does not offer restore. Separate here makes a card for each slide and keeps that slide’s current crop. Neither path deletes the file.
+- The cover and the canvas image are different. Reordering does not change the cover. With “remember last viewed” off, opening the project shows the cover again. While the project stays open, the last canvas image is kept and shared with other windows. Arrow clicks do not bump the stack’s content revision. A structural undo keeps the canvas image when that slide still exists.
+- The expanded viewer does not write the canvas image. Search can open a temporary preview of a matching slide. Keep displayed is the explicit commit. Closing the preview restores the previous slide.
+- A crop is source pixels on one card (`board_objects.data.crop`) or one slide. The original file is not rewritten. Cropping one use does not crop another. Extract and Separate here keep the slide’s current crop. Restore layout uses the pre-stack crop.
+- Stack tags, slide tags, and asset tags stay independent. Effective search for a slide includes that slide, its asset, and the parent stack. It does not include sibling slides. Direct-only search ignores the stack.
+- Undo of a stack edit sends the revision it started from. If another window has changed the stack, undo is refused and the history step is dropped. Dragging and resizing still use the existing geometry undo and do not bump the content revision.
+- A file used only by a slide is kept. Nested stacks, PDFs, and other file cards cannot be slides. One-image and empty stacks remain stacks.
+
+**Consequences.**
+
+- Aspect-ratio presets, page collections, annotations, OCR, filters, and cropped thumbnail files are not in M7. Search pages are still rows, so one stack’s slides can split across Load more. The asset viewer still shows the whole original.
