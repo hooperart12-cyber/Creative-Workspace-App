@@ -21,6 +21,7 @@ Statuses: ✅ Accepted · 🟡 Tentative (will be confirmed when the feature is 
 | [013](#adr-013--images-import-pipeline-display-and-rotation) | Images: import pipeline, display and rotation | ✅ |
 | [014](#adr-014--rich-text-notes-editor-display-saving-and-multiple-windows) | Rich text notes: editor, display, saving and multiple windows | ✅ |
 | [015](#adr-015--pdfs-and-generic-file-cards) | PDFs and generic file cards | ✅ |
+| [018](#adr-018--scoped-tags-and-tag-search) | Scoped tags and tag search | ✅ |
 
 ---
 
@@ -524,7 +525,7 @@ MyProject.cwproj/
 
 ## ADR-017 — Recovery points, crash journals and project search
 
-**Date:** 2026-10-25 · **Status:** ✅ Accepted · **Requirements:** §19, §20, §21 · **Supersedes:** ADR-009’s in-project database copies and “assets don’t need backups”
+**Date:** 2026-10-25 · **Status:** ✅ Accepted · **Requirements:** §19, §20, §21 · **Supersedes:** ADR-009’s in-project database copies and “assets don’t need backups”. The “tags are out of scope” consequence is superseded by ADR-018.
 
 **Decision.**
 
@@ -542,4 +543,26 @@ MyProject.cwproj/
 **Consequences.**
 
 - Replacing the open project in place is not implemented. Restore always makes a new project.
-- Tags, OCR, bulk rename, shortcut remapping, and cloud backup are out of scope.
+- OCR, bulk rename, shortcut remapping, and cloud backup are out of scope. Tags are decided in ADR-018.
+
+## ADR-018 — Scoped tags and tag search
+
+**Date:** 2026-10-26 · **Status:** ✅ Accepted · **Requirements:** §12 · **Supersedes:** ADR-017’s note that tags are out of scope
+
+**Context.** The original `tags` and `taggings` tables had no unique names, no owner for a one-off tag, and no cleanup when an item was permanently deleted. Search capped text matches before any later filter could see them. SQLite cannot add a CHECK or a new primary key with `ALTER TABLE`, and it cannot point one foreign key at four different parent tables.
+
+**Decision.**
+
+- Migration `0005_tags` rebuilds `tags` and `taggings` inside the migration transaction and copies every existing row. If a row cannot be represented, the migration aborts and deletes nothing. `boards.tag_visibility` is a new column with a constant default. A pre-migration recovery point still runs before this migration.
+- A reusable tag’s folded name is unique among tags that are not in Tag Trash, including archived tags. The folded name is computed in JavaScript (Unicode NFC and English case-fold), not with SQLite `lower()`. A one-off tag stores its owner and has no assignment row, so it cannot be shared. Promoting it asks before using an existing tag, and asks again before restoring one from Tag Trash.
+- Assignments are `asset`, `entry`, `object`, or `board`. An image, PDF, or file card shows its own tags plus the original file’s tags. A note, a board, and a board card do not inherit another item’s tags. A board card and the board it opens are tagged separately. Effective tags are calculated when they are read. They are not copied onto other rows.
+- Each assignment has its own id. Undo deletes or restores that id. If another window has removed it, or has added the same tag again, or has changed the direct set that a replace wrote, undo is refused and nothing is written.
+- Hard-deleting an asset, library entry, canvas object, or board deletes its assignments and its one-off tags. A reusable tag used anywhere else remains. Soft delete keeps tags.
+- Search still uses the M5 text index. Tag conditions run in SQL on the full candidate set, and only then is the page of results taken. A PDF page hit records which asset, entry, or appearance satisfied the tags on its own. Tag-only search returns those items, not every page. An asset hit and an entry hit are both kept when each one matched. A bare asset is omitted from a text search with no tags when a library entry already represents that file.
+- Canvas pills are Konva labels drawn beside the object, with hit testing left on the object. Hidden, hover, and always visible are stored on the board. Below 35% zoom, always visible uses compact dots.
+
+**Consequences.**
+
+- Folder tags, inheriting a linked board’s tags onto its card, OCR, and page collections are not in M6. A new target type can be added later for page collections.
+- Rename, recolor, merge, archive, trash, restore, and permanent delete are confirmed manager actions. They are not canvas undo steps.
+- Restoring a trashed tag whose name is taken requires an explicit new name or cancel. The app does not merge the two tags.

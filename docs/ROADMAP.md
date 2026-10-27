@@ -110,11 +110,18 @@ M3 is built in three parts, each with its own branch and PR.
 - [x] Keyboard shortcut reference sheet (Ctrl/Cmd+/)
 - [ ] Windows installer build tested on a real PC (CI builds the installer; this box is the manual install)
 
+## M6 — Tags and advanced search (§12) ✅
+- [x] Reusable tags and one-off tags, with archive, Tag Trash, restore, and permanent delete (ADR-018)
+- [x] Separate tags for an original file, a library entry, a board appearance, a board card, and a linked board
+- [x] Tag Manager, canvas pills (hidden, hover, or always visible), and bulk add, remove, and replace
+- [x] Tag filters inside project search, before pagination, including PDF pages tied to one matching item
+- [x] Undo refuses to reverse a newer assignment from another window
+- [ ] Windows installer build tested on a real PC (same manual step as M5)
+
 ---
 
 ## Later (post-MVP), in suggested order
-1. Tags and tag search (§12): schema is already in place
-2. Image stacks (§9)
+1. Image stacks (§9)
 3. Connections/arrows, comments, link cards (§5)
 4. Page collections, planner, reader mode (§10)
 5. Linked TOC, named anchors, pinned panel (§13, §14)

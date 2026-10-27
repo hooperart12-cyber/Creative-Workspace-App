@@ -54,9 +54,9 @@ RULES:
 
 > Outgoing agent: replace this section each session. Keep it short and factual.
 
-**Last updated:** 2026-10-25
-**Branches:** `feat/m3a-images` (PR #6 → `main`), `feat/m3b-text-notes` (PR #7 → `feat/m3a-images`), `feat/m3c-documents` (PR #8 → `feat/m3b-text-notes`), `feat/m4-asset-library` ([PR #9](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/9) → `feat/m3c-documents`), `feat/m5-reliability-productivity` ([PR #10](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/10) → `feat/m4-asset-library`). Do not merge any of them automatically. Merge M3A, then M3B, then M3C, then M4, then M5, retargeting each onto `main` after the one below it merges.
-**Phase:** M5 is implemented on `feat/m5-reliability-productivity` from `feat/m4-asset-library` at `7cdb374`. Earlier branches were not merged or rewritten. Board covers stay Later.
+**Last updated:** 2026-10-26
+**Branches:** M0–M5 are on `main` (PR #10 merge `169a7b5`). M6 is `feat/m6-tags-search`, branched from that `main`. Do not merge the M6 PR automatically.
+**Phase:** M6 tags and tag search are implemented (ADR-018). Board covers stay Later. The packaged Windows install (TESTING 5.13–5.14) has not been done by hand.
 **Stack integration:** `feat/m3a-images` commits `62fec97` and `73993d4` (network-link paste safety, imports outside the edit queue, and the `file:////server` check) were merged into `feat/m3b-text-notes` and then into M3C, M4, and M5. The original commits are unchanged. Image and file pickers use `importThenPlace`.
 
 **Done**
@@ -101,23 +101,26 @@ RULES:
 - `src/main/project/backup.ts`, `restore.ts`, `projectZip.ts`, `journal.ts`, `search.ts`, `backupService.ts`. Pre-migration point before `migrate()`. Restore assigns a new `project_meta.id`.
 - Renderer: save indicator, Backup dialog, command palette, shortcut sheet, Search, PDF indexer, draft dialog. Note session writes `recovery/` and clears a draft only after a successful save.
 
+**Done this session (M6, ADR-018)**
+- Migration `0005_tags` rebuilds `tags` and `taggings` and copies every existing row. `boards.tag_visibility` is a new column. Hard-delete triggers remove assignments and one-off tags only.
+- `TagRepository` (`src/main/project/tags.ts`): reusable and one-off tags, archive, Tag Trash, restore-with-rename, merge, promote, and assignment ids for undo.
+- Search filters tags in SQL before pagination. A PDF page hit names the asset, entry, or appearance that matched. Tag-only search does not emit a page per page.
+- Renderer: Tag manager, Tag Trash, canvas pills, library and canvas tagging, search chips. Undo refuses when another window changed that assignment.
+
 **In progress**
-- Nothing once the M5 PR is open. Do not merge it.
+- The M6 pull request. Do not merge it.
 
 **Next steps**
-1. Project owner reviews the M3A PR and runs the M3A checklist, then merges.
-2. After M3A merges, retarget the M3B PR to `main`, review it, then merge.
-3. After M3B merges, retarget the M3C PR to `main`, run the M3C checklist (a long PDF and **Open a copy** are the key checks), then merge.
-4. Retarget the M4 PR onto `main` after M3C merges, and run the M4 checklist (a large folder and Empty Trash are the key checks).
-5. Retarget the M5 PR onto `main` after M4 merges. The M3A paste and import fixes are already merged through the stack. The packaged Windows install (TESTING 5.13–5.14) has not been done by hand.
-6. Later: board covers (`boards.cover_asset_id` drawn in `BoardCardNode`).
+1. Review the M6 PR and run the M6 checklist in `docs/TESTING.md`.
+2. The packaged Windows install (TESTING 5.13–5.14) has still not been done by hand.
+3. Later: board covers (`boards.cover_asset_id` drawn in `BoardCardNode`). Folder tags and inheriting a linked board’s tags onto its card are not in M6.
 
 **Known issues / open questions**
 - Undo history is per window and not saved across restarts (by design for now).
 - Windows installer not code-signed; no app icon yet.
 - Dropping files onto a board card doesn't import into that board. Library import does not place cards.
 - Permanent delete and Empty Trash cannot be undone. A file stays on disk while any entry, card, cover, preview, or retained recovery point still points at it, including items in Trash.
-- Recovery does not include canvas drags or keystrokes that never reached the note journal. Replace-in-place restore is not implemented. OCR, tags, bulk rename, shortcut remapping, and cloud backup are out of scope. PDF text indexing is resumable; image-only and locked PDFs match by name only. The sidebar still lists 40 files. Undo stays per window.
+- Recovery does not include canvas drags or keystrokes that never reached the note journal. Replace-in-place restore is not implemented. OCR, folder tags, bulk rename, shortcut remapping, and cloud backup are out of scope. Project tags and tag search shipped in M6. PDF text indexing is resumable; image-only and locked PDFs match by name only. The sidebar still lists 40 files. Undo stays per window. Tag manager actions (rename, recolor, merge, archive, trash) are not on the canvas undo stack.
 - Copying objects in the app replaces the system clipboard text with a short note (by design, ADR-013).
 - Notes: known display approximations and other limits are listed at the end of ADR-014. A note moved to another board by another window while you're editing shows the "moved to the trash" choices.
 - PDFs: the reader asks the main process for byte ranges because `fetch` of `cw-asset://` fails in Chromium. Limits are at the end of ADR-015. PDF and file cards do not rotate. A password is remembered only until that reader window closes.

@@ -85,6 +85,43 @@ These steps are not claimed as already done. Run them on a real PC with the inst
 | 5.13 | Install the `.exe`, create a project, import a PNG, and make a recovery point. | The app starts. The point verifies. |
 | 5.14 | Quit from the window close button, reopen, and search the PNG by part of its name. | No recovery dialog. The image is found. |
 
+### M6 — Tags and advanced search (≈40 minutes)
+
+Use a fresh project. Have ready: one PDF with text on two pages, and one image. Open the project in two windows for the undo steps.
+
+**Creating and scoping tags**
+
+| # | Do this | Expected |
+|---|---|---|
+| 6.1 | Press Ctrl+K and open **Tag manager**. Create a reusable tag named `Hero`. | It appears in the list with 0 uses. |
+| 6.2 | Create `hero` again. | The app says that name already exists. |
+| 6.3 | Archive `Hero`, then try to create `hero`. Unarchive it. | The archived tag keeps the name. After unarchive, new assignments can suggest it again. |
+| 6.4 | Import the image twice so the library has two entries of one original. Tag only the first entry `Cover`. Tag the original `Hero` with **On the original**. | The first entry shows both. The second shows `Hero` only. A card of that file shows `Hero`, not `Cover`. |
+| 6.5 | Place the PDF on two boards. Tag the first card `Alpha` and the second `Beta`. | Each card shows only its own tag. |
+| 6.6 | Right-click a board card. Use **Tag this board card**, then **Tag linked board** with a different tag. | The card does not pick up the linked board’s tag. Opening the linked board shows only its own tag. |
+| 6.7 | On one item, create a one-off tag. In Tag manager, promote it. | It becomes a reusable tag on that item. If a reusable tag with that name is in Tag Trash, the app asks before restoring it. |
+
+**Search**
+
+| # | Do this | Expected |
+|---|---|---|
+| 6.8 | Search with no words and the tag `Alpha`. | The first PDF card appears once. The other card does not, and there is not a row for every page. |
+| 6.9 | Search the PDF’s words together with `Alpha`, using **Direct only**. | The matching page opens on the first card’s board, with the page and highlight kept. The second card is not a result. |
+| 6.10 | Search `Hero` with **Including original**, then again with **Direct only**. | Including original lists the original and the entries or cards that show it. Direct only lists the item the tag was actually assigned to. |
+| 6.11 | Search two tags with **All tags**, then **Any tag**, then **Not**. Choose **This board**, then **This folder**. | All requires every tag. Any requires one. Not excludes that tag. Board and folder results stay inside that scope. |
+| 6.12 | Tag more than 50 notes with one tag and search for that tag. Choose **Load more**. | The first page is 50 notes. The rest appear after Load more, without the untagged note. |
+
+**Canvas, trash, and undo**
+
+| # | Do this | Expected |
+|---|---|---|
+| 6.13 | Set **Tag visibility** to Hover, Always, then Hide. Zoom out below 35% while Always is on. Reopen the project. | Hover shows tags on the selected or hovered card. Always shows labels, and dots when zoomed far out. Hide shows none. The choice is still there after a restart. Dragging and resizing still grab the card, not the label. |
+| 6.14 | Select several cards, some already tagged. Add a tag, remove a tag, and replace direct tags. | Add leaves other tags. Remove takes only the chosen tag. Replace asks first and changes only the direct tags. |
+| 6.15 | In one window, add a tag. In the other window, remove that same tag. Undo in the first window. | Undo does not put the tag back over the other window’s removal. A message says the tags changed in another window. |
+| 6.16 | Trash a tagged file and restore it. Then delete it permanently. | Restore keeps the tags. Permanent delete removes that item’s assignments and its one-off tag. A reusable tag used on something else remains. |
+| 6.17 | Move a tag to Tag Trash, create a new tag with the same name, and restore the trashed one. | Restore offers a new name or cancel. It does not overwrite the new tag. Permanent delete removes the trashed tag and its assignments. |
+| 6.18 | Make a recovery point, then open a copy of an older project file if you have one. Export a ZIP and import it. | The copy contains the tags. An older project is backed up before its database is updated, and existing tags are not dropped. |
+
 ### M4 — Project asset library (≈35 minutes)
 
 Use a fresh project. Have ready: a folder of mixed files (a JPG, a PDF, a text file, and an empty subfolder), one file larger than 100 MB if you have one, and a second copy of the JPG under another name.
