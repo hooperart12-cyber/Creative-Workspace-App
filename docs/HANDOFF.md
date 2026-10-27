@@ -55,7 +55,7 @@ RULES:
 > Outgoing agent: replace this section each session. Keep it short and factual.
 
 **Last updated:** 2026-10-26
-**Branches:** M0–M5 are on `main` (PR #10 merge `169a7b5`). M6 is `feat/m6-tags-search`, branched from that `main`. Do not merge the M6 PR automatically.
+**Branches:** M0–M5 are on `main` (PR #10 merge `169a7b5`). M6 is `feat/m6-tags-search` ([PR #11](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/11) → `main`). Do not merge it automatically.
 **Phase:** M6 tags and tag search are implemented (ADR-018). Board covers stay Later. The packaged Windows install (TESTING 5.13–5.14) has not been done by hand.
 **Stack integration:** `feat/m3a-images` commits `62fec97` and `73993d4` (network-link paste safety, imports outside the edit queue, and the `file:////server` check) were merged into `feat/m3b-text-notes` and then into M3C, M4, and M5. The original commits are unchanged. Image and file pickers use `importThenPlace`.
 
@@ -108,7 +108,7 @@ RULES:
 - Renderer: Tag manager, Tag Trash, canvas pills, library and canvas tagging, search chips. Undo refuses when another window changed that assignment.
 
 **In progress**
-- The M6 pull request. Do not merge it.
+- [PR #11](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/11) is open. Do not merge it.
 
 **Next steps**
 1. Review the M6 PR and run the M6 checklist in `docs/TESTING.md`.
