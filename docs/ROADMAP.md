@@ -90,17 +90,17 @@ M3 is built in three parts, each with its own branch and PR.
 - [x] Generic file card for other types, compact or preview, with "attach preview image"; originals saved or opened only as a separate copy
 - [ ] *Deprioritized (after the above):* checklists, headers/dividers, containers
 
-## M4 — Project Asset Library (§8, §18)
-- [ ] Library panel: grid/list view of assets with thumbnails and metadata
-- [ ] Library folders (DB-only, nested); move assets between folders without breaking references
-- [ ] Search and filter by name, type, and folder
-- [ ] Drag an asset from the library onto a board (one asset → many appearances)
-- [ ] Mass import: multi-select, drag-drop, **whole folder with structure preserved**, choose destination folder
-- [ ] Import directly to the library without placing on a board
-- [ ] Deduplicate identical files by hash
-- [ ] "Still referenced on N boards" warning before deleting an asset
-- [ ] Storage usage: per-asset size, project total, large-file warnings
-- [ ] Trash view: restore or permanently delete objects and assets
+## M4 — Project Asset Library (§8, §18) ✅ (ADR-016)
+- [x] Library panel: grid/list view of assets with thumbnails and metadata
+- [x] Library folders (DB-only, nested); move assets between folders without breaking references
+- [x] Search and filter by name, type, and folder
+- [x] Drag an asset from the library onto a board (one asset → many appearances)
+- [x] Mass import: multi-select, drag-drop, **whole folder with structure preserved**, choose destination folder
+- [x] Import directly to the library without placing on a board
+- [x] Deduplicate identical files by hash
+- [x] "Still referenced on N boards" warning before deleting an asset
+- [x] Storage usage: per-asset size, project total, large-file warnings
+- [x] Trash view: restore or permanently delete objects and assets
 
 ## M5 — Reliability & Productivity Polish (§19–21)
 - [ ] Visible save status indicator (text notes already have one, M3B)

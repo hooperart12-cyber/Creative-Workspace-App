@@ -55,8 +55,8 @@ RULES:
 > Outgoing agent: replace this section each session. Keep it short and factual.
 
 **Last updated:** 2026-10-25
-**Branches:** `feat/m3a-images` (PR #6 → `main`), `feat/m3b-text-notes` (PR #7 → `feat/m3a-images`), `feat/m3c-documents` (PR #8 → `feat/m3b-text-notes`). Merge in that order. Don't merge automatically. After a lower PR merges, retarget the next one onto `main`.
-**Phase:** M3A, M3B and M3C are complete and awaiting review. Board covers stay Later. Next milestone is M4 (the asset library).
+**Branches:** `feat/m3a-images` (PR #6 → `main`), `feat/m3b-text-notes` (PR #7 → `feat/m3a-images`), `feat/m3c-documents` (PR #8 → `feat/m3b-text-notes`), `feat/m4-asset-library` ([PR #9](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/9) → `feat/m3c-documents`). Do not merge any of them automatically. Merge M3A, then M3B, then M3C, then M4, retargeting each onto `main` after the one below it merges.
+**Phase:** M4 (the asset library) is implemented on `feat/m4-asset-library`. M3A–M3C are still awaiting review. Board covers stay Later. Next milestone is M5.
 
 **Done**
 - M0 scaffold, M1 boards/folders, testing guide, M2 canvas (PR #5, ADR-012).
@@ -88,26 +88,29 @@ RULES:
   - **Main process:** `describeFile` in `assets.ts` classifies each import (image, readable PDF, or generic file). Migration `0002_pdf_page_count`. `assets:readRange` serves PDF bytes. `assets:saveCover`, `assets:recordPdfInfo`, `assets:setPreview`, `assets:openCopy`. Dangerous extensions cannot be launched (`src/shared/files.ts`).
   - **Renderer:** `DocumentNode` / `FileNode`, `PdfReader.tsx` (pdf.js, range transport, virtualized pages), `pdfCover.ts`, `FileDetails.tsx`. A reader window is `window:openReader` with `#pdf=<objectId>`.
 - Tests: 131 unit tests; 34 Playwright end-to-end tests (canvas, images, 18 for notes, 2 for documents).
-- `docs/TESTING.md` has checklists for M3C, M3B and M3A.
+- `docs/TESTING.md` has checklists for M4, M3C, M3B and M3A.
+- M4 library, see ADR-016:
+  - Migration `0003_library_entries` copies each old asset into one `library_entries` row, then rebuilds `assets` without `folder_id`. Foreign keys are off only while migrations run, because SQLite cannot change that pragma inside the migration transaction.
+  - `LibraryRepository` (`src/main/project/library.ts`): list, details, move, rename, trash, restore, folder dissolve, purge, storage.
+  - Import: `importPaths` / `importTree` in `assets.ts`. Skip or another entry is chosen before the copy. A canvas drop still creates one active entry and does not restore a trashed one.
+  - Renderer: `LibraryView.tsx`, `TrashView.tsx`, sidebar file rows, import dialog. The canvas stays mounted while the library is open. Undo of library move, rename, trash, and restore uses the same per-window stack.
 
 **In progress**
-- Nothing.
+- Nothing in the working tree once the M4 PR is open.
 
 **Next steps**
 1. Project owner reviews the M3A PR and runs the M3A checklist, then merges.
 2. After M3A merges, retarget the M3B PR to `main`, review it, then merge.
 3. After M3B merges, retarget the M3C PR to `main`, run the M3C checklist (a long PDF and **Open a copy** are the key checks), then merge.
-4. Discuss ADR-011 (separate vs. unified tree) with the team before M4.
-5. Then **M4**: the asset library. `ImportOptions.folderId` and `assets.preview_asset_id` are already in place.
-6. Later: board covers (pick an image asset for `boards.cover_asset_id` and draw it in `BoardCardNode` via `useImage` and `assetUrl`).
+4. Retarget the M4 PR onto `main` after M3C merges, and run the M4 checklist (a large folder and Empty Trash are the key checks).
+5. Later: M5, then board covers (`boards.cover_asset_id` drawn in `BoardCardNode`).
 
 **Known issues / open questions**
-- Trashed items can only be restored with undo (in the same session) until the Trash view (M4).
 - Undo history is per window and not saved across restarts (by design for now).
 - Windows installer not code-signed; no app icon yet.
-- Images go to the library's top level and onto the open board only; there's no library panel until M4. Dropping images onto a board card doesn't import into that board yet.
+- Dropping files onto a board card doesn't import into that board. Library import does not place cards.
+- Permanent delete and Empty Trash cannot be undone. A file stays on disk while any entry, card, cover, or preview still points at it, including items in Trash.
 - Copying objects in the app replaces the system clipboard text with a short note (by design, ADR-013).
-- Unused thumbnails and originals of permanently deleted assets aren't cleaned up yet (needs the M4 Trash view).
 - Notes: known display approximations and other limits are listed at the end of ADR-014. A note moved to another board by another window while you're editing shows the "moved to the trash" choices.
 - PDFs: the reader asks the main process for byte ranges because `fetch` of `cw-asset://` fails in Chromium. Limits are at the end of ADR-015. PDF and file cards do not rotate. A password is remembered only until that reader window closes.
 - Notes rely on two private details: Konva's `stage._lastClicks` (reset after a drag so the drag's mouse-up doesn't pair with the next click as a double-click), and ProseMirror's view for placing the cursor. Recheck both when upgrading Konva or Tiptap.

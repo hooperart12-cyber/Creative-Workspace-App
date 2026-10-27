@@ -16,6 +16,7 @@ import {
   resetNoteAppearance,
   updateNoteStyle
 } from '../notes/noteActions'
+import { showInLibrary } from '../library/libraryActions'
 import { beginEditing } from '../notes/session'
 
 const noteMode = (o: CanvasObject) => {
@@ -205,6 +206,9 @@ function MenuItems() {
           <Item onSelect={() => void actions.saveOriginal(single)}>Save original as…</Item>
           <Separator />
         </>
+      )}
+      {single?.assetId && (
+        <Item onSelect={() => void showInLibrary(single.assetId!)}>Show in library</Item>
       )}
       {viewable && (
         <>

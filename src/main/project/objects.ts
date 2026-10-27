@@ -151,8 +151,9 @@ export class ObjectRepository {
   }
 
   /** Brings trashed objects back (undo of delete). */
-  restore(ids: string[]): void {
+  restore(ids: string[], boardId?: string): void {
     const rows = this.rows(ids, { includeDeleted: true })
+    if (boardId) this.boards.require(boardId)
     const now = new Date()
     this.db.transaction((tx) => {
       for (const row of rows) {
@@ -160,9 +161,10 @@ export class ObjectRepository {
         if (row.type === 'board' && row.linkedBoardId) {
           this.boards.restore(row.linkedBoardId)
         } else {
-          this.boards.require(row.boardId)
+          const target = boardId ?? row.boardId
+          this.boards.require(target)
           tx.update(boardObjects)
-            .set({ deletedAt: null, updatedAt: now })
+            .set({ deletedAt: null, boardId: target, updatedAt: now })
             .where(eq(boardObjects.id, row.id))
             .run()
         }

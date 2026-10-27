@@ -1,6 +1,20 @@
 import { create } from 'zustand'
 import { useCanvasStore } from './canvasStore'
-import type { BoardDetail, CanvasObject, ObjectPatch, ProjectTree } from '@shared/types'
+import type {
+  BoardDetail,
+  CanvasObject,
+  ImportProgress,
+  LibraryPage,
+  LibraryQuery,
+  LibraryScope,
+  LibrarySort,
+  LibraryTypeFilter,
+  ObjectPatch,
+  ProjectTree,
+  StorageReport,
+  TrashItem,
+  TrashKind
+} from '@shared/types'
 import { reportError } from './projectStore'
 
 export type ItemRef = { type: 'board' | 'folder'; id: string }
@@ -11,7 +25,9 @@ export type ItemSource = 'sidebar' | 'board'
 export type RenameTarget = ItemRef & { source: ItemSource }
 
 export type WorkspaceDialog =
-  { kind: 'move'; target: ItemRef } | { kind: 'delete'; target: ItemRef }
+  { kind: 'move'; target: ItemRef } | { kind: 'delete'; target: ItemRef } | { kind: 'import' }
+
+export type WorkspaceSurface = 'canvas' | 'library' | 'trash'
 
 interface WorkspaceState {
   tree: ProjectTree | null
@@ -24,6 +40,24 @@ interface WorkspaceState {
   selectedFolderId: string | null
   dialog: WorkspaceDialog | null
   sidebarCollapsed: boolean
+  surface: WorkspaceSurface
+  /** Bumped when library rows should be read again (this window or another). */
+  sidebarEpoch: number
+  sidebarFilter: string
+  libraryFolderId: string | null
+  libraryFocusId: string | null
+  libraryQuery: string
+  libraryScope: LibraryScope
+  libraryType: LibraryTypeFilter
+  librarySort: LibrarySort
+  libraryDirection: 'asc' | 'desc'
+  libraryUnfiled: boolean
+  libraryView: 'grid' | 'list'
+  libraryPage: LibraryPage | null
+  importProgress: ImportProgress | null
+  storage: StorageReport | null
+  trashKind: 'all' | TrashKind
+  trashItems: TrashItem[]
 
   load: (initialBoardId?: string) => Promise<void>
   refresh: () => Promise<void>
@@ -45,7 +79,20 @@ interface WorkspaceState {
   createFolder: (parentId: string | null) => Promise<void>
   renameFolder: (id: string, name: string) => Promise<void>
   moveFolder: (id: string, newParentId: string | null) => Promise<void>
-  deleteFolder: (id: string) => Promise<void>
+  deleteFolder: (id: string, mode?: 'tree' | 'dissolve', renameConflicts?: boolean) => Promise<void>
+
+  openLibrary: (folderId?: string | null, focusId?: string | null) => void
+  openTrash: () => void
+  showCanvas: () => void
+  reloadLibrary: (append?: boolean) => Promise<void>
+  reloadStorage: () => Promise<void>
+  reloadTrash: () => Promise<void>
+  setLibraryQuery: (
+    query: Partial<LibraryQuery> & { unfiled?: boolean; view?: 'grid' | 'list' }
+  ) => void
+  setSidebarFilter: (sidebarFilter: string) => void
+  setTrashKind: (trashKind: 'all' | TrashKind) => void
+  setImportProgress: (importProgress: ImportProgress | null) => void
 
   setRenaming: (item: RenameTarget | null) => void
   selectFolder: (folderId: string | null) => void
@@ -54,6 +101,7 @@ interface WorkspaceState {
 }
 
 const SIDEBAR_KEY = 'cw.sidebarCollapsed'
+let libraryRequest = 0
 
 function readSidebarCollapsed(): boolean {
   try {
@@ -128,6 +176,23 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
     selectedFolderId: null,
     dialog: null,
     sidebarCollapsed: readSidebarCollapsed(),
+    surface: 'canvas',
+    sidebarEpoch: 0,
+    sidebarFilter: '',
+    libraryFolderId: null,
+    libraryFocusId: null,
+    libraryQuery: '',
+    libraryScope: 'folder',
+    libraryType: 'all',
+    librarySort: 'name',
+    libraryDirection: 'asc',
+    libraryUnfiled: false,
+    libraryView: 'grid',
+    libraryPage: null,
+    importProgress: null,
+    storage: null,
+    trashKind: 'all',
+    trashItems: [],
 
     load: (initialBoardId) =>
       guard(async () => {
@@ -139,6 +204,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
 
     refresh: () =>
       guard(async () => {
+        set({ sidebarEpoch: get().sidebarEpoch + 1 })
         const tree = await window.api.invoke('tree:get')
         const alive = new Set(tree.boards.map((b) => b.id))
         const { board, back, forward } = get()
@@ -153,6 +219,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
           [...board.breadcrumb].reverse().find((crumb) => alive.has(crumb.id))?.id ??
           tree.mainBoardId
         await show(target, target !== board.id)
+        if (get().surface === 'library') await get().reloadLibrary()
+        if (get().surface === 'trash') await get().reloadTrash()
+        if (get().surface === 'library') await get().reloadStorage()
       }),
 
     openBoard: (id) =>
@@ -160,6 +229,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
         const current = get().board?.id
         if (current === id) return
         if (!(await show(id))) return
+        set({ surface: 'canvas' })
         if (current) set({ back: [...get().back, current], forward: [] })
       }),
 
@@ -169,7 +239,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
         const target = back.at(-1)
         if (!target || !board) return
         if (!(await show(target))) return
-        set({ back: back.slice(0, -1), forward: [board.id, ...get().forward] })
+        set({ surface: 'canvas', back: back.slice(0, -1), forward: [board.id, ...get().forward] })
       }),
 
     goForward: () =>
@@ -178,7 +248,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
         const target = forward[0]
         if (!target || !board) return
         if (!(await show(target))) return
-        set({ forward: forward.slice(1), back: [...get().back, board.id] })
+        set({ surface: 'canvas', forward: forward.slice(1), back: [...get().back, board.id] })
       }),
 
     goUp: async () => {
@@ -258,11 +328,84 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
         await window.api.invoke('folder:move', id, newParentId)
       }),
 
-    deleteFolder: (id) =>
+    deleteFolder: (id, mode = 'tree', renameConflicts = false) =>
       guard(async () => {
         set({ dialog: null, selectedFolderId: null })
-        await window.api.invoke('folder:delete', id)
+        const result = await window.api.invoke('folder:delete', id, mode, renameConflicts)
+        if (result.renamed.length) {
+          const { showNotice } = await import('./projectStore')
+          showNotice(`Renamed ${result.renamed.join(', ')}`)
+        }
       }),
+
+    openLibrary: (folderId = null, focusId = null) => {
+      set({
+        surface: 'library',
+        libraryFolderId: folderId,
+        libraryFocusId: focusId,
+        selectedFolderId: folderId,
+        libraryUnfiled: false
+      })
+      void get().reloadLibrary()
+      void get().reloadStorage()
+    },
+    openTrash: () => {
+      set({ surface: 'trash' })
+      void get().reloadTrash()
+    },
+    showCanvas: () => set({ surface: 'canvas' }),
+    reloadLibrary: async (append = false) => {
+      const request = ++libraryRequest
+      const state = get()
+      const offset = append ? (state.libraryPage?.entries.length ?? 0) : 0
+      const page = await window.api.invoke('library:list', {
+        folderId: state.libraryFolderId,
+        scope: state.libraryScope,
+        direct: false,
+        query: state.libraryQuery,
+        type: state.libraryType,
+        sort: state.librarySort,
+        direction: state.libraryDirection,
+        unfiled: state.libraryUnfiled,
+        offset,
+        limit: 80
+      })
+      if (request !== libraryRequest) return
+      const previous = get().libraryPage
+      set({
+        libraryPage:
+          append && previous ? { ...page, entries: [...previous.entries, ...page.entries] } : page
+      })
+    },
+    reloadStorage: async () => {
+      const storage = await window.api.invoke('library:storage')
+      set({ storage })
+    },
+    reloadTrash: async () => {
+      const trashItems = await window.api.invoke('trash:list', get().trashKind)
+      set({ trashItems })
+    },
+    setLibraryQuery: (query) => {
+      set({
+        libraryFolderId: query.folderId === undefined ? get().libraryFolderId : query.folderId,
+        libraryScope: query.scope ?? get().libraryScope,
+        libraryQuery: query.query ?? get().libraryQuery,
+        libraryType: query.type ?? get().libraryType,
+        librarySort: query.sort ?? get().librarySort,
+        libraryDirection: query.direction ?? get().libraryDirection,
+        libraryUnfiled: query.unfiled ?? get().libraryUnfiled,
+        libraryView: query.view ?? get().libraryView,
+        selectedFolderId: query.folderId === undefined ? get().selectedFolderId : query.folderId
+      })
+      void get().reloadLibrary()
+    },
+    setSidebarFilter: (sidebarFilter) =>
+      set({ sidebarFilter, sidebarEpoch: get().sidebarEpoch + 1 }),
+    setTrashKind: (trashKind) => {
+      set({ trashKind })
+      void get().reloadTrash()
+    },
+    setImportProgress: (importProgress) => set({ importProgress }),
 
     setRenaming: (renaming) => set({ renaming }),
     selectFolder: (selectedFolderId) => set({ selectedFolderId }),
@@ -280,6 +423,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
 })
 
 // Another window (or this one) changed boards or folders: refetch.
+window.api.on('library:importProgress', (importProgress) => {
+  useWorkspaceStore.setState({ importProgress })
+})
+
 window.api.on('project:contentChanged', () => {
   useCanvasStore.getState().bumpCovers()
   if (useWorkspaceStore.getState().tree) void useWorkspaceStore.getState().refresh()

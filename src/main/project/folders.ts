@@ -3,7 +3,7 @@ import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import type { FolderListItem } from '@shared/types'
 import type { ProjectDb } from '../db/client'
 import { deletionTime } from './boards'
-import { folders } from '../db/schema'
+import { folders, libraryEntries } from '../db/schema'
 
 export const DEFAULT_FOLDER_NAME = 'New folder'
 
@@ -68,6 +68,11 @@ export class FolderRepository {
       .update(folders)
       .set({ deletedAt: now, updatedAt: now })
       .where(inArray(folders.id, ids))
+      .run()
+    this.db
+      .update(libraryEntries)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(and(inArray(libraryEntries.folderId, ids), isNull(libraryEntries.deletedAt)))
       .run()
     return { deletedFolderIds: ids }
   }

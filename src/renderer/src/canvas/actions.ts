@@ -347,6 +347,26 @@ export const viewCenter = (): Point => {
   return screenToWorld({ x: viewSize.width / 2, y: viewSize.height / 2 }, viewport)
 }
 
+/** Places library entries that are already stored. One undo step removes the new cards. */
+export function placeExistingAssets(assetIds: string[], at: Point): Promise<void> {
+  return run(async () => {
+    const board = workspace().board
+    if (!board || assetIds.length === 0) return
+    const created = await api().invoke('objects:createFromAssets', {
+      boardId: board.id,
+      assetIds,
+      center: at,
+      avoidOverlap: false
+    })
+    if (workspace().board?.id === board.id) canvas().setSelection(created)
+    record({
+      label: created.length === 1 ? 'Add file' : 'Add files',
+      undo: () => api().invoke('objects:delete', created),
+      redo: () => api().invoke('objects:restore', created)
+    })
+  })
+}
+
 /** Imports files dropped from File Explorer / Finder or a browser, centred on `at`. */
 export function importDroppedFiles(files: File[], at: Point): Promise<void> {
   const board = workspace().board
@@ -365,7 +385,7 @@ export function importDroppedFiles(files: File[], at: Point): Promise<void> {
       }
       const fromDisk = paths.length
         ? await api().invoke('assets:importFiles', paths)
-        : { imported: [], skipped: [] }
+        : { imported: [], skipped: [], warnings: [], entryIds: [] }
       if (unsaved.length === 0) return fromDisk
       const bytes = await Promise.all(
         unsaved.map(async (file) => ({
@@ -376,7 +396,9 @@ export function importDroppedFiles(files: File[], at: Point): Promise<void> {
       const fromMemory = await api().invoke('assets:importBytes', bytes)
       return {
         imported: [...fromDisk.imported, ...fromMemory.imported],
-        skipped: [...fromDisk.skipped, ...fromMemory.skipped]
+        skipped: [...fromDisk.skipped, ...fromMemory.skipped],
+        warnings: [...fromDisk.warnings, ...fromMemory.warnings],
+        entryIds: [...fromDisk.entryIds, ...fromMemory.entryIds]
       }
     },
     at,
@@ -498,7 +520,10 @@ async function placeImported(
   void ensurePdfCovers(result.imported)
 }
 
-function reportSkipped({ imported, skipped }: ImportResult): void {
+function reportSkipped({ imported, skipped, warnings }: ImportResult): void {
+  if (warnings.length > 0 && skipped.length === 0) {
+    showNotice(warnings.map((warning) => warning.message).join('\n'), 12000)
+  }
   if (skipped.length === 0) return
   const lines = skipped.map((s) => `• ${s.name}: ${s.reason}`)
   const head =

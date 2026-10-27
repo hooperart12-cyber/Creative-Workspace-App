@@ -1,18 +1,25 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream, createWriteStream, existsSync } from 'node:fs'
-import { copyFile, mkdir, open, rename, rm, stat } from 'node:fs/promises'
-import { basename, dirname, join } from 'node:path'
+import { copyFile, lstat, mkdir, open, readdir, realpath, rename, rm, stat } from 'node:fs/promises'
+import { basename, dirname, isAbsolute, join, relative } from 'node:path'
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { setTimeout as delay } from 'node:timers/promises'
 import { eq, inArray } from 'drizzle-orm'
 import sharp from 'sharp'
 import { SUPPORTED_IMAGES_LABEL, THUMBNAIL_SIZES } from '@shared/assets'
-import { mimeForExtension, safeExtension } from '@shared/files'
-import type { AssetInfo, AssetVariant, ImportBytesInput, ImportResult } from '@shared/types'
+import { LARGE_FILE_BYTES, largeFileWarning, mimeForExtension, safeExtension } from '@shared/files'
+import type {
+  AssetInfo,
+  AssetVariant,
+  ImportBytesInput,
+  ImportProgress,
+  ImportResult
+} from '@shared/types'
+import { ensureActiveEntry, insertEntry } from './libraryEntries'
 import { inspectPdf } from './pdfInfo'
 import type { ProjectDb } from '../db/client'
-import { assets } from '../db/schema'
+import { assets, folders } from '../db/schema'
 
 // Don't keep decoded files open between operations: on Windows an open handle blocks
 // renaming and deleting, and originals are only read once per thumbnail anyway.
@@ -41,6 +48,14 @@ export interface ImportOptions {
    * Drop, paste and the File tool leave this off and accept PDFs and other files.
    */
   imagesOnly?: boolean
+  /**
+   * `skip` reports an original the project already has.
+   * `entry` adds another library entry for it.
+   * Omitted (canvas drop and paste): keep one active entry, and do not add another.
+   */
+  duplicates?: 'skip' | 'entry'
+  signal?: { cancelled: boolean }
+  onProgress?: (progress: ImportProgress) => void
 }
 
 type AssetRow = typeof assets.$inferSelect
@@ -57,7 +72,6 @@ export function toAssetInfo(row: AssetRow): AssetInfo {
     height: row.height,
     hasAlpha: row.hasAlpha,
     pageCount: row.pageCount,
-    folderId: row.folderId,
     previewAssetId: row.previewAssetId,
     preview: null
   }
@@ -102,24 +116,118 @@ export class AssetRepository {
       throw new UnsupportedFileError('The file could not be found.')
     }
     if (!info.isFile()) throw new UnsupportedFileError('Folders can’t be imported yet.')
-    return this.ingest(basename(path), () => createReadStream(path), options)
+    return (await this.ingest(basename(path), () => createReadStream(path), options)).asset
   }
 
   /** Stores bytes that didn't come from a file on disk (screenshots, browser images). */
-  importBytes(name: string, bytes: Uint8Array, options: ImportOptions = {}): Promise<AssetInfo> {
-    return this.ingest(name, () => Readable.from([Buffer.from(bytes)]), options)
+  async importBytes(
+    name: string,
+    bytes: Uint8Array,
+    options: ImportOptions = {}
+  ): Promise<AssetInfo> {
+    return (await this.ingest(name, () => Readable.from([Buffer.from(bytes)]), options)).asset
   }
 
   /** Imports several files from disk. Files that can't be imported are reported, not thrown. */
+  /** Files and folders dropped or picked together. Folders use `structure` (default: keep folders). */
+  async importPaths(
+    paths: string[],
+    options: ImportOptions & { structure?: 'preserve' | 'flatten' } = {}
+  ): Promise<ImportResult> {
+    const files: string[] = []
+    const dirs: string[] = []
+    const skipped: ImportResult['skipped'] = []
+    for (const path of paths) {
+      const info = await lstat(path).catch(() => null)
+      if (!info) {
+        skipped.push({ name: basename(path), reason: 'The file could not be found.' })
+        continue
+      }
+      if (info.isSymbolicLink()) {
+        skipped.push({ name: basename(path), reason: 'Shortcuts and links are skipped.' })
+        continue
+      }
+      if (info.isDirectory()) dirs.push(path)
+      else if (info.isFile()) files.push(path)
+    }
+    const imported: AssetInfo[] = []
+    const warnings: ImportResult['warnings'] = []
+    const entryIds: string[] = []
+    if (files.length) {
+      const result = await this.importFiles(files, options)
+      imported.push(...result.imported)
+      skipped.push(...result.skipped)
+      warnings.push(...result.warnings)
+      entryIds.push(...result.entryIds)
+    }
+    for (const dir of dirs) {
+      if (options.signal?.cancelled) break
+      const result = await this.importTree(dir, {
+        ...options,
+        structure: options.structure ?? 'preserve'
+      })
+      for (const asset of result.imported) {
+        if (!imported.some((item) => item.id === asset.id)) imported.push(asset)
+      }
+      skipped.push(...result.skipped)
+      warnings.push(...result.warnings)
+      entryIds.push(...result.entryIds)
+    }
+    return { imported, skipped, warnings, entryIds }
+  }
+
   importFiles(paths: string[], options: ImportOptions = {}): Promise<ImportResult> {
-    return this.importEach(paths, basename, (path) => this.importFile(path, options))
+    if (options.onProgress || options.signal) return this.importSequential(paths, options)
+    return this.importEach(paths, basename, (path) =>
+      this.ingest(basename(path), () => createReadStream(path), options)
+    )
+  }
+
+  /** One file at a time, so progress and cancel can run between files. */
+  private async importSequential(paths: string[], options: ImportOptions): Promise<ImportResult> {
+    const progress: ImportProgress = {
+      found: paths.length,
+      processed: 0,
+      imported: 0,
+      skipped: 0,
+      failed: 0,
+      bytes: 0
+    }
+    options.onProgress?.(progress)
+    const results: (
+      { asset: AssetInfo; entryId: string | null } | { name: string; reason: string }
+    )[] = []
+    for (const path of paths) {
+      if (options.signal?.cancelled) break
+      const name = basename(path)
+      try {
+        const info = await stat(path)
+        if (!info.isFile()) throw new UnsupportedFileError('Folders can’t be imported this way.')
+        const one = await this.ingest(name, () => createReadStream(path), options)
+        results.push(one)
+        progress.imported++
+        progress.bytes += one.asset.bytes
+      } catch (error) {
+        const reason =
+          error instanceof UnsupportedFileError
+            ? error.message
+            : `Could not be imported (${error instanceof Error ? error.message : String(error)}).`
+        results.push({ name, reason })
+        if (reason === 'Already in the library.') progress.skipped++
+        else progress.failed++
+      }
+      progress.processed++
+      options.onProgress?.({ ...progress })
+      await new Promise((resolve) => setImmediate(resolve))
+    }
+    return collectImport(results)
   }
 
   importByteFiles(files: ImportBytesInput[], options: ImportOptions = {}): Promise<ImportResult> {
     return this.importEach(
       files,
       (file) => file.name || 'Pasted image',
-      (file) => this.importBytes(file.name, file.bytes, options)
+      (file) => this.ingest(file.name, () => Readable.from([Buffer.from(file.bytes)]), options)
     )
   }
 
@@ -302,16 +410,18 @@ export class AssetRepository {
   private async importEach<T>(
     items: T[],
     nameOf: (item: T) => string,
-    importOne: (item: T) => Promise<AssetInfo>
+    importOne: (item: T) => Promise<{ asset: AssetInfo; entryId: string | null }>
   ): Promise<ImportResult> {
-    const results: ({ asset: AssetInfo } | { name: string; reason: string })[] = []
+    const results: (
+      { asset: AssetInfo; entryId: string | null } | { name: string; reason: string }
+    )[] = []
     let next = 0
     const worker = async () => {
       while (next < items.length) {
         const index = next++
         const item = items[index]
         try {
-          results[index] = { asset: await importOne(item) }
+          results[index] = await importOne(item)
         } catch (error) {
           const reason =
             error instanceof UnsupportedFileError
@@ -322,22 +432,14 @@ export class AssetRepository {
       }
     }
     await Promise.all(Array.from({ length: Math.min(IMPORT_CONCURRENCY, items.length) }, worker))
-    const imported: AssetInfo[] = []
-    const skipped: ImportResult['skipped'] = []
-    for (const result of results) {
-      if ('asset' in result) {
-        // The same file twice in one import is placed once.
-        if (!imported.some((a) => a.id === result.asset.id)) imported.push(result.asset)
-      } else skipped.push(result)
-    }
-    return { imported, skipped }
+    return collectImport(results)
   }
 
   private async ingest(
     name: string,
     source: () => NodeJS.ReadableStream,
     options: ImportOptions
-  ): Promise<AssetInfo> {
+  ): Promise<{ asset: AssetInfo; entryId: string | null }> {
     const incoming = join(this.projectPath, 'assets', '.incoming')
     await mkdir(incoming, { recursive: true })
     const temp = join(incoming, randomUUID())
@@ -360,58 +462,233 @@ export class AssetRepository {
       const sha256 = hash.digest('hex')
       const described = await describeFile(temp, name, options)
       await placeFile(temp, this.originalPath(sha256, described.ext))
-      const asset = this.register({
+      const displayName = cleanName(
+        name,
+        described.ext,
+        described.mime.startsWith('image/') ? 'Image' : 'File'
+      )
+      const { asset, created } = this.register({
         sha256,
-        originalName: cleanName(
-          name,
-          described.ext,
-          described.mime.startsWith('image/') ? 'Image' : 'File'
-        ),
+        originalName: displayName,
         bytes,
-        folderId: options.folderId ?? null,
         ...described
       })
+      if (!created && options.duplicates === 'skip') {
+        throw new UnsupportedFileError('Already in the library.')
+      }
+      // Canvas drops reuse one active entry. Library import either skips or adds another.
+      let entryId: string | null = null
+      if (created || options.duplicates === 'entry') {
+        entryId = insertEntry(this.db, {
+          assetId: asset.id,
+          name: displayName,
+          folderId: options.folderId ?? null
+        })
+      } else {
+        ensureActiveEntry(this.db, {
+          assetId: asset.id,
+          name: displayName,
+          folderId: options.folderId ?? null
+        })
+      }
       // Image thumbnails are ready immediately. PDF covers are rendered by the importing window.
-      if (described.mime.startsWith('image/')) {
+      if (described.mime.startsWith('image/') && created) {
         await Promise.all(
           THUMBNAIL_SIZES.filter((size) => needsThumbnail(asset, size)).map((size) =>
             this.ensureThumbnail(asset, size)
           )
         )
       }
-      return asset
+      return { asset, entryId }
     } finally {
       await rm(temp, { force: true })
     }
   }
 
-  /** Adds the asset row, or returns the existing one for identical content (restoring it if trashed). */
-  private register(input: Omit<AssetInfo, 'id' | 'preview'>): AssetInfo {
+  /** Adds the asset row, or returns the existing one for identical content. A trashed entry is not restored. */
+  private register(input: Omit<AssetInfo, 'id' | 'preview'>): {
+    asset: AssetInfo
+    created: boolean
+  } {
     const existing = this.db.select().from(assets).where(eq(assets.sha256, input.sha256)).get()
-    const now = new Date()
-    if (existing) {
-      if (existing.deletedAt) {
-        this.db
-          .update(assets)
-          .set({ deletedAt: null, updatedAt: now })
-          .where(eq(assets.id, existing.id))
-          .run()
-      }
-      return toAssetInfo({ ...existing, deletedAt: null })
-    }
+    if (existing) return { asset: toAssetInfo(existing), created: false }
     const id = randomUUID()
+    const now = new Date()
     this.db
       .insert(assets)
       .values({ id, ...input, createdAt: now, updatedAt: now })
       .run()
-    return { id, ...input, preview: null }
+    return { asset: { id, ...input, preview: null }, created: true }
+  }
+
+  /**
+   * Imports a folder. `preserve` recreates its folders under the destination.
+   * `flatten` puts every file in the destination. Symbolic links are skipped.
+   */
+  async importTree(
+    root: string,
+    options: ImportOptions & { structure: 'preserve' | 'flatten' }
+  ): Promise<ImportResult> {
+    const rootReal = await realpath(root)
+    const found: { path: string; name: string; folderId: string | null }[] = []
+    const skipped: ImportResult['skipped'] = []
+    const folderCache = new Map<string, string | null>([['', options.folderId ?? null]])
+    const visit = async (dir: string, relDir: string) => {
+      let entries
+      try {
+        entries = await readdir(dir, { withFileTypes: true })
+      } catch (error) {
+        skipped.push({
+          name: relDir || basename(root),
+          reason: `Could not be read (${error instanceof Error ? error.message : String(error)}).`
+        })
+        return
+      }
+      for (const entry of entries) {
+        if (options.signal?.cancelled) return
+        const full = join(dir, entry.name)
+        const info = await lstat(full)
+        if (info.isSymbolicLink()) {
+          skipped.push({ name: entry.name, reason: 'Shortcuts and links are skipped.' })
+          continue
+        }
+        if (info.isDirectory()) {
+          const real = await realpath(full).catch(() => '')
+          const rel = real ? relative(rootReal, real) : '..'
+          if (!real || rel.startsWith('..') || isAbsolute(rel)) {
+            skipped.push({ name: entry.name, reason: 'This folder is outside the one you chose.' })
+            continue
+          }
+          const nextRel = relDir ? `${relDir}/${entry.name}` : entry.name
+          if (options.structure === 'preserve') {
+            await this.ensureFolderPath(nextRel, options.folderId ?? null, folderCache)
+          }
+          await visit(full, options.structure === 'preserve' ? nextRel : '')
+          continue
+        }
+        if (!info.isFile()) continue
+        let folderId = options.folderId ?? null
+        if (options.structure === 'preserve' && relDir) {
+          folderId = await this.ensureFolderPath(relDir, options.folderId ?? null, folderCache)
+        }
+        found.push({ path: full, name: entry.name, folderId })
+      }
+    }
+    const rootInfo = await lstat(root).catch(() => null)
+    if (!rootInfo || !rootInfo.isDirectory() || rootInfo.isSymbolicLink()) {
+      throw new UnsupportedFileError('Choose a folder to import.')
+    }
+    await visit(root, '')
+    const progress: ImportProgress = {
+      found: found.length,
+      processed: 0,
+      imported: 0,
+      skipped: skipped.length,
+      failed: 0,
+      bytes: 0
+    }
+    options.onProgress?.(progress)
+    const results: (
+      { asset: AssetInfo; entryId: string | null } | { name: string; reason: string }
+    )[] = []
+    for (const file of found) {
+      if (options.signal?.cancelled) break
+      try {
+        const one = await this.ingest(file.name, () => createReadStream(file.path), {
+          ...options,
+          folderId: file.folderId
+        })
+        results.push(one)
+        progress.imported++
+        progress.bytes += one.asset.bytes
+      } catch (error) {
+        const reason =
+          error instanceof UnsupportedFileError
+            ? error.message
+            : `Could not be imported (${error instanceof Error ? error.message : String(error)}).`
+        results.push({ name: file.name, reason })
+        if (reason === 'Already in the library.') progress.skipped++
+        else progress.failed++
+      }
+      progress.processed++
+      options.onProgress?.({ ...progress })
+      await new Promise((resolve) => setImmediate(resolve))
+    }
+    const collected = collectImport(results)
+    return { ...collected, skipped: [...skipped, ...collected.skipped] }
+  }
+
+  /** Bytes of generated thumbnails. Originals are counted from the database instead. */
+  async thumbnailBytes(): Promise<number> {
+    const root = join(this.projectPath, 'thumbs')
+    let total = 0
+    const walk = async (dir: string): Promise<void> => {
+      let entries
+      try {
+        entries = await readdir(dir, { withFileTypes: true })
+      } catch {
+        return
+      }
+      for (const entry of entries) {
+        const full = join(dir, entry.name)
+        if (entry.isDirectory()) await walk(full)
+        else if (entry.isFile()) total += (await stat(full)).size
+      }
+    }
+    await walk(root)
+    return total
+  }
+
+  /** Removes an original and its thumbnails from disk. The database row is already gone. */
+  async deleteStoredFiles(sha256: string, ext: string): Promise<void> {
+    await rm(this.originalPath(sha256, ext), { force: true })
+    for (const size of THUMBNAIL_SIZES) await rm(this.thumbnailPath(sha256, size), { force: true })
+    await rm(this.thumbnailPath(sha256, 1024), { force: true })
+  }
+
+  private async ensureFolderPath(
+    relDir: string,
+    rootFolderId: string | null,
+    cache: Map<string, string | null>
+  ): Promise<string | null> {
+    const cached = cache.get(relDir)
+    if (cached !== undefined) return cached
+    const parentRel = relDir.includes('/') ? relDir.slice(0, relDir.lastIndexOf('/')) : ''
+    const parentId =
+      parentRel === '' ? rootFolderId : await this.ensureFolderPath(parentRel, rootFolderId, cache)
+    const name = relDir.slice(relDir.lastIndexOf('/') + 1)
+    const id = randomUUID()
+    const now = new Date()
+    this.db.insert(folders).values({ id, parentId, name, createdAt: now, updatedAt: now }).run()
+    cache.set(relDir, id)
+    return id
   }
 }
 
-type StoredMeta = Omit<
-  AssetInfo,
-  'id' | 'sha256' | 'originalName' | 'bytes' | 'folderId' | 'preview'
->
+function collectImport(
+  results: ({ asset: AssetInfo; entryId: string | null } | { name: string; reason: string })[]
+): ImportResult {
+  const imported: AssetInfo[] = []
+  const skipped: ImportResult['skipped'] = []
+  const warnings: ImportResult['warnings'] = []
+  const entryIds: string[] = []
+  for (const result of results) {
+    if (!result) continue
+    if ('asset' in result) {
+      if (!imported.some((asset) => asset.id === result.asset.id)) imported.push(result.asset)
+      if (result.entryId) entryIds.push(result.entryId)
+      if (result.asset.bytes >= LARGE_FILE_BYTES) {
+        warnings.push({
+          name: result.asset.originalName,
+          message: largeFileWarning(result.asset.originalName)
+        })
+      }
+    } else skipped.push(result)
+  }
+  return { imported, skipped, warnings, entryIds }
+}
+
+type StoredMeta = Omit<AssetInfo, 'id' | 'sha256' | 'originalName' | 'bytes' | 'preview'>
 
 /** Image, PDF, or anything else. Images win when the bytes are a JPG, PNG or WebP. */
 async function describeFile(

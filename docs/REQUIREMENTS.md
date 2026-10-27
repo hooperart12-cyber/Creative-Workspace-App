@@ -32,7 +32,7 @@
 | 5 | Board Object Types | 🟢 **MVP – priority** (✅ images M3A, ✅ text notes M3B, ✅ PDFs and file cards M3C) | Checklists, headers/dividers and containers 🟡 deprioritized |
 | 6 | Document Viewing and Review | 🟢 MVP (✅ PDF viewing in M3C) | Bookmarks, comments and other formats ⚪ Later |
 | 7 | Artwork and Image Handling | 🟢 **MVP – priority** (✅ images M3A, ✅ PDF and stored files M3C) | Automatic previews for TIFF, PSD, .clip and .procreate ⚪ Later |
-| 8 | Project Asset Libraries | 🟢 **MVP – priority** | Storage approach decided (local-first) |
+| 8 | Project Asset Libraries | 🟢 **MVP – priority** (✅ done in M4) | Local-first storage; tags stay ⚪ Later (ADR-016) |
 | 9 | Image Stacks | ⚪ Later | |
 | 10 | Page Collections and Manga Planning | ⚪ Later | |
 | 11 | Artwork Annotation and Review | ⚪ Later | |
@@ -42,9 +42,9 @@
 | 15 | Collaboration and Shared Workspaces | ⚪ Later | **Requires cloud backend** (see DECISIONS ADR-006) |
 | 16 | Plot Roadmaps | 🔵 Optional | |
 | 17 | Covers, Typography, and Appearance | ⚪ Later | Notes already offer bundled and system fonts (M3B); board covers and font import later |
-| 18 | Quick Capture and Importing | 🟢 MVP (✅ images, PDFs and other files can be dropped or pasted) | Direct library import in M4; URL link cards ⚪ Later |
+| 18 | Quick Capture and Importing | 🟢 MVP (✅ drop, paste, and direct library import) | URL link cards ⚪ Later |
 | 19 | Keyboard Shortcuts and Quick Commands | 🟢 MVP | ✅ Canvas shortcuts done in M2; command palette in M5 |
-| 20 | Board History and Recovery | 🟢 MVP (undo/redo, trash) | ✅ Undo/redo done in M2; Trash view M4; snapshots ⚪ Later |
+| 20 | Board History and Recovery | 🟢 MVP (✅ undo/redo and Trash) | Snapshots ⚪ Later |
 | 21 | Essential Quality-of-Life Features | 🟢 MVP | Autosave, save status, backups, project search |
 | 22 | Features Explicitly Outside the Planned Scope | ⛔ | |
 | 23 | Decisions Still to Be Made | ✅ Mostly decided | See [`DECISIONS.md`](DECISIONS.md) |
@@ -403,8 +403,8 @@ The goal is broad file compatibility and preservation, not native editing suppor
 
 ## 8. Project Asset Libraries
 
-> **Status:** 🟢 **MVP – priority** (Milestone M4).
-> **Decision:** Imported files are **copied into the project** and stored by content hash, never modified. Library folders live in the database, so moving assets never breaks references (ADR-005).
+> **Status:** 🟢 **MVP – ✅ implemented in M4** (ADR-016). Tags and bulk rename stay ⚪ Later.
+> **Decision:** Imported files are **copied into the project** and stored by content hash, never modified. A library entry is the named, foldered row; many entries can share one original. Folders live in the database, so moving an entry never breaks board references (ADR-005, ADR-016).
 
 Each project should have its own asset library.
 
@@ -442,7 +442,7 @@ Features:
 - Importing entire folders.
 - Preserving folder structures where possible.
 - Choosing a destination asset folder.
-- Bulk organization and tagging.
+- Bulk organization. Tagging is ⚪ Later.
 
 Mass importing should not require placing every file onto a board.
 
@@ -802,7 +802,7 @@ Font licensing and portability will need consideration during development.
 ## 18. Quick Capture and Importing
 
 > **Status:** 🟢 MVP for images, PDFs and other files (paste, drag-and-drop, file picker, direct library import). URL link cards are ⚪ Later.
-> ✅ **Implemented in M3A for images, and in M3C for PDFs and other files:** paste screenshots, images copied in a browser and files copied in File Explorer; drag one or many files from File Explorer or a browser; file picker. The Image tool stays images-only. Imported files are registered in the project library (top level until M4). Direct library import without a board comes in M4.
+> ✅ **Implemented:** paste screenshots, images copied in a browser and files copied in File Explorer; drag one or many files from File Explorer or a browser; file picker (M3A, M3C). The Image tool stays images-only. **M4** adds import straight into a library folder, including a whole folder, without placing anything on a board.
 
 The application should make collecting creative references easy.
 
@@ -904,15 +904,15 @@ These features should be considered fundamental usability requirements.
 
 ### Trash and Recovery
 
-- Recycle bin or trash system.
-- Restore deleted content.
-- Clear distinction between removing a board object and deleting its underlying file.
+- ✅ Recycle bin: library files, library folders, and board objects, with restore and permanent delete (M4, ADR-016).
+- ✅ Restore deleted content, including a folder and what was inside it.
+- ✅ Removing a board object does not delete the stored file. Trashing a library entry does not remove board appearances.
 
 ### Storage Information
 
-- File-size warnings.
-- Project storage usage information.
-- Visibility into large files and storage consumption.
+- ✅ Files over 100 MB are imported and called out (M4). There is no size cap.
+- ✅ Project storage usage counts each stored original once.
+- ✅ The library shows type, size, and a project total.
 
 ### Accessibility and Navigation
 

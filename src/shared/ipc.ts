@@ -8,18 +8,28 @@ import type {
   CreateImagesInput,
   CreateNoteInput,
   CreateProjectInput,
+  DuplicatePolicy,
+  FolderDeletePreview,
   FolderListItem,
   ImportBytesInput,
+  ImportProgress,
   ImportResult,
+  LibraryDetails,
+  LibraryPage,
+  LibraryQuery,
   NoteLeaseAction,
   NoteStylePatch,
   ObjectPatch,
   Point,
   ProjectSummary,
   ProjectTree,
+  PurgeResult,
+  StorageReport,
   RecentProject,
   SaveNoteInput,
   SaveNoteResult,
+  TrashItem,
+  TrashKind,
   Viewport
 } from './types'
 
@@ -48,7 +58,7 @@ export interface IpcRequests {
   'board:setViewport': { args: [id: string, viewport: Viewport]; result: void }
   'objects:update': { args: [patches: ObjectPatch[]]; result: void }
   'objects:delete': { args: [ids: string[]]; result: void }
-  'objects:restore': { args: [ids: string[]]; result: void }
+  'objects:restore': { args: [ids: string[], boardId?: string]; result: void }
   'objects:moveToBoard': { args: [ids: string[], targetBoardId: string, at?: Point]; result: void }
   'objects:copyTo': { args: [ids: string[], targetBoardId: string, at: Point]; result: string[] }
   'objects:createImages': { args: [input: CreateImagesInput]; result: string[] }
@@ -101,7 +111,62 @@ export interface IpcRequests {
   'folder:create': { args: [input: CreateFolderInput]; result: FolderListItem }
   'folder:rename': { args: [id: string, name: string]; result: void }
   'folder:move': { args: [id: string, newParentId: string | null]; result: void }
-  'folder:delete': { args: [id: string]; result: void }
+  'folder:delete': {
+    args: [id: string, mode?: 'tree' | 'dissolve', renameConflicts?: boolean]
+    result: { renamed: string[] }
+  }
+  'folder:deletePreview': { args: [id: string]; result: FolderDeletePreview }
+  'library:list': { args: [query: LibraryQuery]; result: LibraryPage }
+  'library:details': { args: [id: string]; result: LibraryDetails }
+  'library:rename': { args: [id: string, name: string]; result: string }
+  'library:move': {
+    args: [ids: string[], folderId: string | null]
+    result: { id: string; folderId: string | null }[]
+  }
+  'library:trash': { args: [ids: string[]]; result: { entryIds: string[]; boardCount: number } }
+  'library:restore': {
+    args: [ids: string[], destinationFolderId?: string | null]
+    result: { restored: string[]; needsDestination: string[] }
+  }
+  'library:entriesForAsset': {
+    args: [assetId: string]
+    result: { id: string; folderId: string | null }[]
+  }
+  'library:storage': { args: []; result: StorageReport }
+  'library:importFiles': {
+    args: [
+      paths: string[],
+      options: {
+        folderId: string | null
+        duplicates: DuplicatePolicy
+        structure?: 'preserve' | 'flatten'
+      }
+    ]
+    result: ImportResult
+  }
+  'library:importTree': {
+    args: [
+      root: string,
+      options: {
+        folderId: string | null
+        duplicates: DuplicatePolicy
+        structure: 'preserve' | 'flatten'
+      }
+    ]
+    result: ImportResult
+  }
+  'library:cancelImport': { args: []; result: void }
+  'trash:list': { args: [kind: 'all' | TrashKind]; result: TrashItem[] }
+  'trash:restoreFolders': {
+    args: [ids: string[], destinationParentId?: string | null]
+    result: { restoredFolderIds: string[]; restoredEntryIds: string[]; needsDestination: string[] }
+  }
+  'trash:purge': {
+    args: [input: { entries: string[]; folders: string[]; objects: string[] }]
+    result: PurgeResult
+  }
+  'trash:empty': { args: []; result: PurgeResult }
+  'dialog:pickFolder': { args: []; result: string | null }
   'window:openNew': { args: [options?: { boardId?: string }]; result: void }
   /** Opens the PDF reader in its own window. Closing it does not close the project. */
   'window:openReader': { args: [options: { objectId: string }]; result: void }
@@ -130,6 +195,8 @@ export interface IpcEvents {
   'project:changed': ProjectSummary
   /** Boards or folders of the open project changed; refetch the tree and current board. */
   'project:contentChanged': null
+  /** Import progress for the window that started it. */
+  'library:importProgress': ImportProgress
   /** Only these objects changed (note text saves): refetch just them. */
   'objects:changed': { boardId: string; objectIds: string[] }
   /** Notes being edited in other windows changed. */
@@ -187,6 +254,23 @@ export const IPC_CHANNELS = [
   'folder:rename',
   'folder:move',
   'folder:delete',
+  'folder:deletePreview',
+  'library:list',
+  'library:details',
+  'library:rename',
+  'library:move',
+  'library:trash',
+  'library:restore',
+  'library:entriesForAsset',
+  'library:storage',
+  'library:importFiles',
+  'library:importTree',
+  'library:cancelImport',
+  'trash:list',
+  'trash:restoreFolders',
+  'trash:purge',
+  'trash:empty',
+  'dialog:pickFolder',
   'window:openNew',
   'window:openReader',
   'notes:create',

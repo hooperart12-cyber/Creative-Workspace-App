@@ -72,9 +72,7 @@ export interface AssetInfo {
   hasAlpha: boolean | null
   /** PDF page count. Null for other files, and for a PDF until its password is entered. */
   pageCount: number | null
-  /** Library folder; null is the library's top level. */
-  folderId: string | null
-  /** Image asset used as a generic file's preview. Shared by every card of this file. */
+  /** Image asset used as a generic file's preview. Shared by every card and library entry. */
   previewAssetId: string | null
   /** The preview image, when one is attached and still in the library. */
   preview: { sha256: string; width: number; height: number } | null
@@ -93,6 +91,104 @@ export interface ImportResult {
   imported: AssetInfo[]
   /** Files that weren't imported, with a reason the user can read. */
   skipped: { name: string; reason: string }[]
+  /** Large files that were still imported. */
+  warnings: { name: string; message: string }[]
+  /** Library entries created for this import. */
+  entryIds: string[]
+}
+
+export type LibraryScope = 'folder' | 'project'
+export type LibrarySort = 'name' | 'imported' | 'size' | 'type'
+export type LibraryTypeFilter = 'all' | 'image' | 'pdf' | 'other'
+export type DuplicatePolicy = 'skip' | 'entry'
+
+/** One named library row. `asset` is the stored original it points at. */
+export interface LibraryEntry {
+  id: string
+  assetId: string
+  folderId: string | null
+  name: string
+  createdAt: number
+  /** Folder names from the library root, empty at the top level. */
+  folderPath: string
+  asset: AssetInfo
+}
+
+export interface LibraryQuery {
+  folderId: string | null
+  /** `folder` is the current folder and its subfolders. At the root that is the whole library. */
+  scope: LibraryScope
+  /** When true, only entries directly inside `folderId` (the sidebar). */
+  direct?: boolean
+  /** Only entries that are not in a folder. */
+  unfiled?: boolean
+  query?: string
+  type?: LibraryTypeFilter
+  sort?: LibrarySort
+  direction?: 'asc' | 'desc'
+  offset?: number
+  limit?: number
+}
+
+export interface LibraryPage {
+  entries: LibraryEntry[]
+  total: number
+  /** Every matching id, in sort order, so Select all covers more than the visible page. */
+  ids: string[]
+  /** Stored original for each id, in the same order. */
+  assetIds: string[]
+}
+
+export interface LibraryDetails {
+  entry: LibraryEntry
+  /** Other entries that share this original, including this one. */
+  sameOriginal: { id: string; name: string; folderPath: string }[]
+  appearances: { objectId: string; boardId: string; boardTitle: string }[]
+}
+
+export interface StorageReport {
+  originalBytes: number
+  originalCount: number
+  entryCount: number
+  imageBytes: number
+  pdfBytes: number
+  otherBytes: number
+  thumbnailBytes: number
+}
+
+export interface FolderDeletePreview {
+  entries: number
+  folders: number
+  boardCount: number
+  conflicts: string[]
+}
+
+export interface ImportProgress {
+  found: number
+  processed: number
+  imported: number
+  skipped: number
+  failed: number
+  bytes: number
+}
+
+export type TrashKind = 'entry' | 'folder' | 'object'
+
+export interface TrashItem {
+  kind: TrashKind
+  id: string
+  name: string
+  deletedAt: number
+  location: string
+  assetId: string | null
+  boardId: string | null
+}
+
+export interface PurgeResult {
+  filesDeleted: number
+  filesKept: { name: string; reason: string }[]
+  /** Originals the database no longer points at, but the disk delete failed. */
+  unlinkErrors: string[]
 }
 
 export interface CreateImagesInput {

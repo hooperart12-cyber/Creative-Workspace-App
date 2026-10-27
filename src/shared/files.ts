@@ -61,6 +61,13 @@ export function mimeForExtension(ext: string): string {
   return MIME_BY_EXT[ext.toLowerCase()] ?? 'application/octet-stream'
 }
 
+/** Imports at least this large are reported. They are still stored. */
+export const LARGE_FILE_BYTES = 100 * 1024 * 1024
+
+export function largeFileWarning(name: string): string {
+  return `${name} is over 100 MB. It was imported.`
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   const units = ['KB', 'MB', 'GB', 'TB']

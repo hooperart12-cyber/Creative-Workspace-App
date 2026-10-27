@@ -16,10 +16,17 @@ export function openDatabase(file: string, migrationsFolder: string): OpenedData
   try {
     // WAL keeps the database consistent if the app crashes mid-write (ADR-009).
     sqlite.pragma('journal_mode = WAL')
-    sqlite.pragma('foreign_keys = ON')
     sqlite.pragma('busy_timeout = 5000')
+    // Drizzle runs every migration inside one transaction, and SQLite cannot change
+    // foreign_keys inside a transaction. Dropping assets.folder_id rebuilds that table,
+    // which other tables reference, so constraints are off only while migrating.
+    sqlite.pragma('foreign_keys = OFF')
     const db = drizzle(sqlite, { schema })
-    migrate(db, { migrationsFolder })
+    try {
+      migrate(db, { migrationsFolder })
+    } finally {
+      sqlite.pragma('foreign_keys = ON')
+    }
     return { sqlite, db }
   } catch (error) {
     sqlite.close()

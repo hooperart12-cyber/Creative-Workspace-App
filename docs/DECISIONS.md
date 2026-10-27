@@ -489,4 +489,35 @@ MyProject.cwproj/
 - A 500-page PDF is read a few pages at a time. That is a manual check, not a CI fixture.
 - Password-protected PDFs show a placeholder cover until unlocked in that window.
 - Search in the reader is not project-wide search (M5).
-- Files land at the top of the library until M4. There is no library browser for picking a preview; the user picks an image file.
+- A preview is still attached by picking an image file. The library details panel shows that preview.
+
+## ADR-016 — Library entries, duplicates and Trash
+
+**Date:** 2026-10-25 · **Status:** ✅ Accepted · **Requirements:** §8, §18, §20, §21 · **Extends:** ADR-005, ADR-011, ADR-015
+
+**Context.** M4 is the project library: folders of files, search, import of many files or a whole folder, reuse on boards, and a Trash. The stored original must stay unique by hash. A person still needs two named places for the same bytes, and deleting a name must not delete a board.
+
+**Decision.**
+
+- `library_entries` is the library row: display name, folder, and trash time. `assets` stays the unique original (`sha256` unique). `board_objects.asset_id`, `boards.cover_asset_id`, and `assets.preview_asset_id` keep pointing at `assets.id`.
+- `assets.folder_id` is removed after migration `0003_library_entries` copies each old asset into one entry. `assets.deleted_at` is cleared and is not used for library trash. Importing the same bytes again does not restore a trashed entry.
+- The import dialog chooses Skip (default, remembered) or Add another entry before copying starts. Skip reports the duplicate and creates nothing. Add another entry inserts a row and does not copy the file. A canvas drop reuses an active entry, or creates one if every entry is trashed, and does not restore trashed entries.
+- Two entries in one folder may share a display name. A “ (2)” suffix is added only when the user confirms deleting a folder while keeping its contents and a name already exists in the parent.
+- Files of 100 MB or more are imported and reported. There is no size cap.
+- Move, rename, trash, and restore share the window’s undo stack with the canvas. Permanent delete and Empty Trash do not.
+- A stored file is removed only when nothing still points at it: no library entry (including trashed), no board object (including trashed), no board cover, and no other asset using it as a preview. The database change is committed first; the file is deleted after. If the file is still needed, the message says why it stayed.
+- Trash has no expiry. Restoring a folder brings back the entries trashed with it. If the parent folder or board is already gone, the user picks a place.
+
+**Alternatives considered.**
+
+| Option | Pros | Cons |
+|---|---|---|
+| One row per file, folder on `assets` | Fewer tables. | Two names for one file means two copies, or a rename changes every board. |
+| Clone the file for a second entry | Simple mental model. | Breaks the hash rule and doubles disk use. |
+| Ask about each duplicate in the middle of a long import | Precise. | Stops a thousand-file import on the first repeat. |
+
+**Consequences.**
+
+- Tags, stacks, and project-wide text search are not part of M4.
+- Renaming an entry does not rename the stored file or `original_name`.
+- Empty Trash and permanent delete cannot be undone.
