@@ -113,9 +113,16 @@ test('search opens a PDF page, an image with no card, and a board appearance', a
   )
 
   await expect
-    .poll(() => t.page.evaluate(() => window.api.invoke('search:query', 'beacon', 'pdf', false)), {
-      timeout: 30_000
-    })
+    .poll(
+      () =>
+        t.page.evaluate(
+          async () =>
+            (await window.api.invoke('search:query', { text: 'beacon', filter: 'pdf' })).hits
+        ),
+      {
+        timeout: 30_000
+      }
+    )
     .toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'pdf-page', page: 1 })]))
 
   await t.page.getByRole('button', { name: 'Search', exact: true }).click()

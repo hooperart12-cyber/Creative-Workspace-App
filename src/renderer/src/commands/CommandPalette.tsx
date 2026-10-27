@@ -55,8 +55,8 @@ export function CommandPalette() {
     if (!open || query.trim().length < 2) return
     const timer = setTimeout(() => {
       void window.api
-        .invoke('search:query', query, 'all', false)
-        .then((rows) => setFound({ query, hits: rows.slice(0, 8) }))
+        .invoke('search:query', { text: query, filter: 'all' })
+        .then((page) => setFound({ query, hits: page.hits.slice(0, 8) }))
     }, 150)
     return () => clearTimeout(timer)
   }, [open, query])

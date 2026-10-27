@@ -3,12 +3,20 @@ import { useWorkspaceStore } from '../store/workspaceStore'
 import * as actions from '../canvas/actions'
 import { createNote, editSelectedNote } from '../notes/noteActions'
 import { isEditingNote } from '../notes/noteStore'
+import { openTagManager } from '../tags/TagManager'
 
 export interface AppCommand {
   id: string
   title: string
   group:
-    'Canvas' | 'Navigation' | 'Text editing' | 'PDF reader' | 'Asset library' | 'Project' | 'Search'
+    | 'Canvas'
+    | 'Navigation'
+    | 'Text editing'
+    | 'PDF reader'
+    | 'Asset library'
+    | 'Project'
+    | 'Search'
+    | 'Tags'
   shortcut?: string
   run: () => void
   when?: () => boolean
@@ -27,6 +35,12 @@ export function commands(): AppCommand[] {
       group: 'Search',
       shortcut: `${mod}+K`,
       run: () => document.dispatchEvent(new CustomEvent('cw-palette'))
+    },
+    {
+      id: 'tags',
+      title: 'Tag manager',
+      group: 'Tags',
+      run: () => openTagManager()
     },
     {
       id: 'search',

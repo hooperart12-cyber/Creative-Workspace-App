@@ -29,8 +29,14 @@ import type {
   BoardAppearance,
   NoteDraftInfo,
   RecoveryManifest,
-  SearchFilter,
-  SearchHit,
+  SearchPage,
+  SearchRequest,
+  PromoteTagResult,
+  RestoreTagResult,
+  TagAssignment,
+  TagRecord,
+  TagTarget,
+  TagVisibility,
   StorageReport,
   RecentProject,
   SaveNoteInput,
@@ -208,10 +214,7 @@ export interface IpcRequests {
   'project:importZip': { args: [zipPath: string, parentDir: string, name: string]; result: string }
   'dialog:pickSaveZip': { args: []; result: string | null }
   'dialog:pickZip': { args: []; result: string | null }
-  'search:query': {
-    args: [text: string, filter: SearchFilter, phrase: boolean]
-    result: SearchHit[]
-  }
+  'search:query': { args: [request: SearchRequest]; result: SearchPage }
   'search:appearances': { args: [assetId: string]; result: BoardAppearance[] }
   'search:rebuild': { args: []; result: void }
   'search:nextPdf': {
@@ -226,6 +229,54 @@ export interface IpcRequests {
     args: [assetId: string, state: 'done' | 'no-text' | 'locked' | 'failed', note?: string]
     result: void
   }
+  'tags:list': {
+    args: [options?: { query?: string; includeArchived?: boolean; trash?: boolean }]
+    result: TagRecord[]
+  }
+  'tags:oneOffs': { args: []; result: TagRecord[] }
+  'tags:summary': {
+    args: [targets: TagTarget[]]
+    result: { id: string; name: string; color: string | null; present: number; total: number }[]
+  }
+  'tags:create': { args: [name: string, color?: string | null]; result: TagRecord }
+  'tags:createOneOff': {
+    args: [name: string, target: TagTarget, color?: string | null]
+    result: TagRecord
+  }
+  'tags:removeOneOff': { args: [id: string]; result: void }
+  'tags:assign': {
+    args: [tagId: string, target: TagTarget]
+    result: TagAssignment & { created: boolean }
+  }
+  'tags:unassign': { args: [tagId: string, target: TagTarget]; result: TagAssignment | null }
+  'tags:addMany': { args: [tagIds: string[], targets: TagTarget[]]; result: TagAssignment[] }
+  'tags:removeMany': { args: [tagIds: string[], targets: TagTarget[]]; result: TagAssignment[] }
+  'tags:replaceDirect': {
+    args: [tagIds: string[], targets: TagTarget[]]
+    result: { before: TagAssignment[]; after: TagAssignment[] }
+  }
+  'tags:revertAdd': { args: [ids: string[]]; result: void }
+  'tags:revertRemove': { args: [rows: TagAssignment[]]; result: void }
+  'tags:revertReplace': {
+    args: [targets: TagTarget[], expectedIds: string[], restore: TagAssignment[]]
+    result: void
+  }
+  'tags:rename': { args: [id: string, name: string]; result: TagRecord }
+  'tags:recolor': { args: [id: string, color: string | null]; result: TagRecord }
+  'tags:archive': { args: [id: string]; result: TagRecord }
+  'tags:unarchive': { args: [id: string]; result: TagRecord }
+  'tags:trash': { args: [id: string]; result: { tag: TagRecord; assignments: number } }
+  'tags:restore': { args: [id: string, name?: string]; result: RestoreTagResult }
+  'tags:purge': { args: [id: string]; result: { assignments: number } }
+  'tags:merge': {
+    args: [sourceId: string, destinationId: string]
+    result: { moved: number; destination: TagRecord }
+  }
+  'tags:promote': {
+    args: [id: string, choice?: { useExisting?: boolean; restoreTrashed?: boolean }]
+    result: PromoteTagResult
+  }
+  'tags:visibility': { args: [boardId: string, visibility: TagVisibility]; result: void }
   'assets:get': { args: [id: string]; result: import('./types').AssetInfo }
   'recovery:writeDraft': {
     args: [
@@ -355,6 +406,30 @@ export const IPC_CHANNELS = [
   'search:nextPdf',
   'search:addPdfPage',
   'search:finishPdf',
+  'tags:list',
+  'tags:oneOffs',
+  'tags:summary',
+  'tags:create',
+  'tags:createOneOff',
+  'tags:removeOneOff',
+  'tags:assign',
+  'tags:unassign',
+  'tags:addMany',
+  'tags:removeMany',
+  'tags:replaceDirect',
+  'tags:revertAdd',
+  'tags:revertRemove',
+  'tags:revertReplace',
+  'tags:rename',
+  'tags:recolor',
+  'tags:archive',
+  'tags:unarchive',
+  'tags:trash',
+  'tags:restore',
+  'tags:purge',
+  'tags:merge',
+  'tags:promote',
+  'tags:visibility',
   'assets:get',
   'recovery:writeDraft',
   'recovery:clearDraft',

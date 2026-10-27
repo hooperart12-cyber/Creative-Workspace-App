@@ -15,7 +15,7 @@
 
 | Badge | Meaning |
 |---|---|
-| 🟢 **MVP** | Part of the first working version (milestones M0–M5) |
+| 🟢 **MVP** | Part of the first working version (milestones M0–M6) |
 | 🟡 **MVP – deprioritized** | In MVP scope, but built after the priority items |
 | ⚪ **Later** | Important for later development |
 | 🔵 **Optional** | Optional enhancement |
@@ -36,7 +36,7 @@
 | 9 | Image Stacks | ⚪ Later | |
 | 10 | Page Collections and Manga Planning | ⚪ Later | |
 | 11 | Artwork Annotation and Review | ⚪ Later | |
-| 12 | Tags and Advanced Searching | ⚪ Later | Schema prepared in MVP |
+| 12 | Tags and Advanced Searching | 🟢 MVP | ✅ Scoped tags, Tag Manager, and tag search in M6 |
 | 13 | Linked Tables of Contents and Navigation | ⚪ Later | Sidebar hierarchy is MVP (via §3) |
 | 14 | Pinned Items and Workspace Navigation | ⚪ Later | |
 | 15 | Collaboration and Shared Workspaces | ⚪ Later | **Requires cloud backend** (see DECISIONS ADR-006) |
@@ -403,7 +403,7 @@ The goal is broad file compatibility and preservation, not native editing suppor
 
 ## 8. Project Asset Libraries
 
-> **Status:** 🟢 **MVP – ✅ implemented in M4** (ADR-016). Tags and bulk rename stay ⚪ Later.
+> **Status:** 🟢 **MVP – ✅ implemented in M4** (ADR-016). Tags are M6 (ADR-018). Bulk rename stays ⚪ Later.
 > **Decision:** Imported files are **copied into the project** and stored by content hash, never modified. A library entry is the named, foldered row; many entries can share one original. Folders live in the database, so moving an entry never breaks board references (ADR-005, ADR-016).
 
 Each project should have its own asset library.
@@ -580,7 +580,13 @@ The application does not need painting brushes, artistic layer systems, advanced
 
 ## 12. Tags and Advanced Searching
 
-> **Status:** ⚪ Later (tag tables are included in the MVP schema so they are ready).
+> **Status:** 🟢 **MVP – ✅ implemented in M6** (ADR-018). Page collections stay ⚪ Later.
+
+A reusable tag belongs to the project. A one-off tag belongs to exactly one item. Artwork can be tagged on the original file (shared by every entry and file card), on one library entry, or on one board appearance. A board card’s tags are not the tags of the board it opens. Tags on a board do not flow onto the cards inside it.
+
+Archive hides a reusable tag from ordinary suggestions and keeps its name reserved. Tag Trash hides it from pills and search until it is restored or permanently deleted. Restoring a tag whose name is now taken asks for a new name or cancel. Undo of an add, remove, or replace refuses when another window has changed that assignment.
+
+Search keeps the M5 text index and adds tag filters in the database before pagination. A text match on a PDF page names the asset, entry, or appearance whose own tags matched. A tag-only search returns those items, not one row per page. Always-visible canvas tags become compact dots below 35% zoom instead of disappearing.
 
 Tags should handle much of the application's character, artwork, and production tracking.
 
@@ -1032,3 +1038,4 @@ The overarching goal is a **flexible, PC-based visual creative workspace that ca
 | 1.5 | 2026-10-25 | M3C implemented: PDF cards and reader (§5, §6), generic file cards with optional previews (§7), drop and paste of PDFs and other files (§18) (ADR-015) |
 | 1.6 | 2026-10-25 | M4 implemented: library entries, folders, import, and Trash (§8, ADR-016) |
 | 1.7 | 2026-10-25 | M5 implemented: recovery points, crash journals, save status, command palette, and project search (§19–21, ADR-017) |
+| 1.8 | 2026-10-26 | M6 implemented: scoped tags, one-off tags, Tag Manager, Tag Trash, and tag search (§12, ADR-018) |

@@ -6,6 +6,8 @@ import { NEW_OBJECT_MIME } from './CanvasView'
 import { BoardIcon } from '../components/icons'
 import { createNote } from '../notes/noteActions'
 import { useNoteStore } from '../notes/noteStore'
+import type { TagVisibility } from '@shared/types'
+import { reportError } from '../store/projectStore'
 
 const toolButton =
   'flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-canvas hover:text-ink disabled:opacity-30 aria-pressed:bg-accent/10 aria-pressed:text-accent'
@@ -18,6 +20,7 @@ export function CanvasToolbar() {
   const toggleSnap = useCanvasStore((s) => s.toggleSnap)
   useCanvasStore((s) => s.historyVersion) // re-render when undo/redo availability changes
   const editingText = useNoteStore((s) => s.editing !== null)
+  const board = useWorkspaceStore((s) => s.board)
 
   return (
     <div
@@ -117,6 +120,23 @@ export function CanvasToolbar() {
       >
         <UndoIcon style={{ transform: 'scaleX(-1)' }} />
       </button>
+      <Divider />
+      <select
+        aria-label="Tag visibility"
+        value={board?.tagVisibility ?? 'hover'}
+        onChange={(event) => {
+          if (!board) return
+          void window.api
+            .invoke('tags:visibility', board.id, event.target.value as TagVisibility)
+            .catch(reportError)
+        }}
+        className="w-14 rounded border border-line bg-surface text-[10px]"
+        title="How tag labels are shown on this board"
+      >
+        <option value="hidden">Hide</option>
+        <option value="hover">Hover</option>
+        <option value="always">Always</option>
+      </select>
     </div>
   )
 }

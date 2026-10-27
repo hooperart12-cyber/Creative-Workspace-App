@@ -144,6 +144,8 @@ export interface LibraryDetails {
   /** Other entries that share this original, including this one. */
   sameOriginal: { id: string; name: string; folderPath: string }[]
   appearances: { objectId: string; boardId: string; boardTitle: string }[]
+  /** Tags on this entry plus tags on its original. */
+  tags?: TagPill[]
 }
 
 export interface StorageReport {
@@ -222,6 +224,8 @@ export interface CanvasObject {
   board?: { title: string; childBoardCount: number }
   /** Present for objects that show a library file (images). */
   asset?: AssetInfo
+  /** Effective tags for this appearance: its own tags, plus the original's tags for a file. */
+  tags?: TagPill[]
 }
 
 /** Changes to an object's placement or arrangement (undoable). */
@@ -247,6 +251,10 @@ export interface BoardDetail {
   objects: CanvasObject[]
   /** Last saved camera position for this board. */
   viewport: Viewport
+  /** How tag pills are drawn on this board. */
+  tagVisibility: TagVisibility
+  /** Tags on the board itself. They do not appear on cards that link to it. */
+  tags?: TagPill[]
 }
 
 export interface ClipboardContents {
@@ -351,7 +359,7 @@ export interface BackupStatus {
   points: RecoveryManifest[]
 }
 
-export type SearchKind = 'board' | 'note' | 'entry' | 'folder' | 'pdf-page' | 'asset'
+export type SearchKind = 'board' | 'note' | 'entry' | 'folder' | 'pdf-page' | 'asset' | 'object'
 export type SearchFilter = 'all' | 'board' | 'note' | 'pdf' | 'image' | 'file' | 'folder'
 
 export interface SearchHit {
@@ -362,7 +370,78 @@ export interface SearchHit {
   title: string
   snippet: string
   location: string
+  /** Library entry that satisfied the query, when the hit is that entry or a page found through it. */
+  entryId?: string | null
+  /** Canvas object that satisfied the query. */
+  objectId?: string | null
+  /** Board that owns `objectId`, or the board hit itself. */
+  boardId?: string | null
+  /** Tags that made this hit match, and whether each one is on the item or on its original. */
+  matchedTags?: { id: string; name: string; source: 'direct' | 'asset' }[]
 }
+
+export interface SearchRequest {
+  text?: string
+  phrase?: boolean
+  filter?: SearchFilter
+  tags?: { included: string[]; mode: 'all' | 'any'; excluded: string[] }
+  /** `direct` ignores tags inherited from the original file. */
+  tagMatch?: 'effective' | 'direct'
+  scope?: { type: 'project' } | { type: 'board'; id: string } | { type: 'folder'; id: string }
+  cursor?: string | null
+  limit?: number
+}
+
+export interface SearchPage {
+  hits: SearchHit[]
+  nextCursor: string | null
+}
+
+export type TagTargetType = 'asset' | 'entry' | 'object' | 'board'
+export type TagVisibility = 'hidden' | 'hover' | 'always'
+
+export interface TagRecord {
+  id: string
+  name: string
+  color: string | null
+  reusable: boolean
+  archived: boolean
+  deleted: boolean
+  ownerType: TagTargetType | null
+  ownerId: string | null
+  assignmentCount: number
+}
+
+export interface TagTarget {
+  type: TagTargetType
+  id: string
+}
+
+/** A reusable assignment, or a one-off tag row. `id` is the assignment's own identity. */
+export interface TagAssignment {
+  id: string
+  tagId: string
+  targetType: TagTargetType
+  targetId: string
+  oneOff?: { name: string; color: string | null }
+}
+
+export interface TagPill {
+  id: string
+  name: string
+  color: string | null
+  source: 'direct' | 'asset'
+  oneOff: boolean
+  assignmentId: string | null
+}
+
+export type RestoreTagResult =
+  { status: 'restored'; tag: TagRecord } | { status: 'name-taken'; suggestedName: string }
+
+export type PromoteTagResult =
+  | { status: 'promoted'; tag: TagRecord }
+  | { status: 'use-existing'; existing: TagRecord }
+  | { status: 'trashed-exists'; existing: TagRecord }
 
 export interface BoardAppearance {
   objectId: string

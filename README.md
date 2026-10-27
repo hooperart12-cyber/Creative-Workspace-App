@@ -4,7 +4,7 @@ A PC desktop creative workspace, inspired by Milanote (boards and organization) 
 
 It combines infinite visual canvases, interconnected boards, notes, reference images, document viewing, artwork management, and project organization in one flexible environment. The goal is to support the whole creative process, from brainstorming and research through planning, review, and organizing finished work, without forcing a rigid workflow.
 
-> **Status:** M5 complete: recovery points outside the project, a save indicator, a command palette, and project-wide search. M4 added the asset library. M3C added PDFs and other files, M3B rich text notes, and M3A images, on M2's canvas and M1's boards. Board covers stay later.
+> **Status:** M6 complete: scoped tags, a Tag Manager, and tag search on top of M5 project search. M5 added recovery points, a save indicator, a command palette, and project-wide search. M4 added the asset library. Board covers stay later.
 > This README summarizes the full feature vision. The complete, **living** specification is [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md). The original PDF (v1.0) is archived at [`docs/archive/`](docs/archive/Creative%20Workspace%20App%20v1.0.pdf).
 
 ## Project Docs

@@ -21,6 +21,7 @@ import { NoteRepository } from './notes'
 import { ObjectRepository } from './objects'
 import { pendingMigrationTags, readChangeRevision, readProjectIdentity } from './schemaInfo'
 import { SearchRepository } from './search'
+import { TagRepository } from './tags'
 
 export const PROJECT_EXTENSION = '.cwproj'
 export const PROJECT_DB_FILE = 'project.db'
@@ -42,6 +43,7 @@ export class Project {
   readonly notes: NoteRepository
   readonly assets: AssetRepository
   readonly search: SearchRepository
+  readonly tags: TagRepository
 
   private constructor(
     readonly path: string,
@@ -62,6 +64,7 @@ export class Project {
     this.notes = new NoteRepository(db, this.boards)
     this.assets = new AssetRepository(db, path)
     this.search = new SearchRepository(db)
+    this.tags = new TagRepository(db)
   }
 
   /** The open connection, for snapshots and recovery points. */
@@ -87,16 +90,18 @@ export class Project {
     for (const dir of PROJECT_SUBDIRS) mkdirSync(join(path, dir))
 
     const { sqlite, db } = openDatabase(join(path, PROJECT_DB_FILE), migrationsFolder)
-    const now = new Date()
+    const now = Date.now()
     const mainBoardId = randomUUID()
-    db.transaction((tx) => {
-      tx.insert(boards)
-        .values({ id: mainBoardId, title: cleanName, createdAt: now, updatedAt: now })
-        .run()
-      tx.insert(projectMeta)
-        .values({ id: randomUUID(), name: cleanName, mainBoardId, createdAt: now, updatedAt: now })
-        .run()
-    })
+    // Named columns only. Later columns have defaults, and an older database opened by a
+    // migration test does not have them yet.
+    sqlite
+      .prepare(`INSERT INTO boards (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)`)
+      .run(mainBoardId, cleanName, now, now)
+    sqlite
+      .prepare(
+        `INSERT INTO project_meta (id, name, main_board_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`
+      )
+      .run(randomUUID(), cleanName, mainBoardId, now, now)
     return new Project(path, sqlite, db)
   }
 

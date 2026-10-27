@@ -10,7 +10,6 @@ import {
   type AnySQLiteColumn,
   index,
   integer,
-  primaryKey,
   real,
   sqliteTable,
   text,
@@ -111,6 +110,8 @@ export const boards = sqliteTable(
     viewportX: real('viewport_x').notNull().default(0),
     viewportY: real('viewport_y').notNull().default(0),
     viewportZoom: real('viewport_zoom').notNull().default(1),
+    /** Canvas tag pills: hidden, shown for the item under the pointer or selected, or always on. */
+    tagVisibility: text('tag_visibility').notNull().default('hover'),
     ...timestamps,
     ...softDelete
   },
@@ -154,24 +155,28 @@ export const boardObjects = sqliteTable(
   ]
 )
 
-/** Tag library (§12). `reusable = false` marks one-off "unique" tags. */
-export const tags = sqliteTable(
-  'tags',
-  {
-    id: text('id').primaryKey(),
-    name: text('name').notNull(),
-    color: text('color'),
-    reusable: integer('reusable', { mode: 'boolean' }).notNull().default(true),
-    ...timestamps,
-    ...softDelete
-  },
-  (t) => [index('tags_name_idx').on(t.name)]
-)
+/**
+ * Tag library (§12). Partial unique indexes live in `0005_tags.sql` because Drizzle cannot
+ * express them. `reusable = false` is a one-off owned by exactly one item.
+ */
+export const tags = sqliteTable('tags', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  normalizedName: text('normalized_name').notNull(),
+  color: text('color'),
+  reusable: integer('reusable', { mode: 'boolean' }).notNull().default(true),
+  ownerType: text('owner_type'),
+  ownerId: text('owner_id'),
+  archivedAt: integer('archived_at', { mode: 'timestamp_ms' }),
+  ...timestamps,
+  ...softDelete
+})
 
-/** Tags applied to any taggable item (asset, board, board object, …). */
+/** One reusable tag on one asset, library entry, canvas object (including a board card), or board. */
 export const taggings = sqliteTable(
   'taggings',
   {
+    id: text('id').primaryKey(),
     tagId: text('tag_id')
       .notNull()
       .references(() => tags.id),
@@ -179,8 +184,5 @@ export const taggings = sqliteTable(
     targetId: text('target_id').notNull(),
     createdAt: timestamps.createdAt
   },
-  (t) => [
-    primaryKey({ columns: [t.tagId, t.targetType, t.targetId] }),
-    index('taggings_target_idx').on(t.targetType, t.targetId)
-  ]
+  (t) => [index('taggings_target_idx').on(t.targetType, t.targetId)]
 )

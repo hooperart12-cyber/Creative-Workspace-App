@@ -29,6 +29,27 @@ export async function openSearchHit(hit: SearchHit, query: string): Promise<void
     workspace.openLibrary(hit.sourceId)
     return
   }
+  if (hit.kind === 'object' && hit.objectId && hit.boardId) {
+    await openAppearance({
+      objectId: hit.objectId,
+      boardId: hit.boardId,
+      boardTitle: hit.title,
+      path: hit.location,
+      x: 0,
+      y: 0
+    })
+    return
+  }
+  if (
+    hit.kind === 'entry' &&
+    hit.entryId &&
+    (hit.matchedTags?.length ?? 0) > 0 &&
+    hit.page == null
+  ) {
+    const details = await window.api.invoke('library:details', hit.entryId)
+    workspace.openLibrary(details.entry.folderId, hit.entryId)
+    return
+  }
   if (hit.kind === 'note') {
     const object = await window.api.invoke('objects:read', hit.sourceId)
     if (!object) return
@@ -47,7 +68,17 @@ export async function openSearchHit(hit: SearchHit, query: string): Promise<void
   if (!hit.assetId) return
   const asset = await window.api.invoke('assets:get', hit.assetId)
   if (hit.kind === 'pdf-page' || asset.mime === 'application/pdf') {
-    canvas.setPdfAsset({ assetId: asset.id, page: hit.page ?? 1, query })
+    if (hit.kind === 'pdf-page' && hit.objectId && hit.boardId) {
+      await openAppearance({
+        objectId: hit.objectId,
+        boardId: hit.boardId,
+        boardTitle: hit.title,
+        path: hit.location,
+        x: 0,
+        y: 0
+      })
+    }
+    useCanvasStore.getState().setPdfAsset({ assetId: asset.id, page: hit.page ?? 1, query })
     return
   }
   if (asset.mime.startsWith('image/')) {

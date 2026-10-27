@@ -69,7 +69,28 @@ const SAVE_CHANNELS = new Set<string>([
   'trash:empty',
   'notes:create',
   'notes:saveContent',
-  'notes:updateStyle'
+  'notes:updateStyle',
+  'tags:create',
+  'tags:createOneOff',
+  'tags:removeOneOff',
+  'tags:assign',
+  'tags:unassign',
+  'tags:addMany',
+  'tags:removeMany',
+  'tags:replaceDirect',
+  'tags:revertAdd',
+  'tags:revertRemove',
+  'tags:revertReplace',
+  'tags:rename',
+  'tags:recolor',
+  'tags:archive',
+  'tags:unarchive',
+  'tags:trash',
+  'tags:restore',
+  'tags:purge',
+  'tags:merge',
+  'tags:promote',
+  'tags:visibility'
 ])
 
 function handle<C extends IpcChannel>(channel: C, handler: Handler<C>): void {
@@ -204,7 +225,10 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
     }
   })
 
-  handle('board:get', (event, id) => requireProject(event).boards.get(id))
+  handle('board:get', (event, id) => {
+    const project = requireProject(event)
+    return project.tags.decorateBoard(project.boards.get(id))
+  })
 
   handle('board:create', (event, input) => {
     const project = requireProject(event)
@@ -484,7 +508,10 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
   })
 
   handle('library:list', (event, query) => requireProject(event).library.list(query))
-  handle('library:details', (event, id) => requireProject(event).library.details(id))
+  handle('library:details', (event, id) => {
+    const project = requireProject(event)
+    return project.tags.decorateLibrary(project.library.details(id))
+  })
   handle('library:rename', (event, id, name) => {
     const project = requireProject(event)
     const previous = project.library.rename(id, name)
@@ -762,9 +789,131 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
     })
     return result.canceled ? null : (result.filePaths[0] ?? null)
   })
-  handle('search:query', (event, text, filter, phrase) =>
-    requireProject(event).search.search(text, filter, phrase)
-  )
+  handle('search:query', (event, request) => requireProject(event).search.searchPage(request))
+  handle('tags:list', (event, options) => requireProject(event).tags.list(options))
+  handle('tags:oneOffs', (event) => requireProject(event).tags.listOneOffs())
+  handle('tags:summary', (event, targets) => requireProject(event).tags.directSummary(targets))
+  handle('tags:create', (event, name, color) => {
+    const project = requireProject(event)
+    const tag = project.tags.createReusable(name, color)
+    broadcastContent(project)
+    return tag
+  })
+  handle('tags:createOneOff', (event, name, target, color) => {
+    const project = requireProject(event)
+    const tag = project.tags.createOneOff(name, target, color)
+    broadcastContent(project)
+    return tag
+  })
+  handle('tags:removeOneOff', (event, id) => {
+    const project = requireProject(event)
+    project.tags.removeOneOff(id)
+    broadcastContent(project)
+  })
+  handle('tags:assign', (event, tagId, target) => {
+    const project = requireProject(event)
+    const assignment = project.tags.assign(tagId, target)
+    if (assignment.created) broadcastContent(project)
+    return assignment
+  })
+  handle('tags:unassign', (event, tagId, target) => {
+    const project = requireProject(event)
+    const removed = project.tags.unassign(tagId, target)
+    if (removed) broadcastContent(project)
+    return removed
+  })
+  handle('tags:addMany', (event, tagIds, targets) => {
+    const project = requireProject(event)
+    const added = project.tags.addMany(tagIds, targets)
+    if (added.length) broadcastContent(project)
+    return added
+  })
+  handle('tags:removeMany', (event, tagIds, targets) => {
+    const project = requireProject(event)
+    const removed = project.tags.removeMany(tagIds, targets)
+    if (removed.length) broadcastContent(project)
+    return removed
+  })
+  handle('tags:replaceDirect', (event, tagIds, targets) => {
+    const project = requireProject(event)
+    const replaced = project.tags.replaceDirect(tagIds, targets)
+    broadcastContent(project)
+    return replaced
+  })
+  handle('tags:revertAdd', (event, ids) => {
+    const project = requireProject(event)
+    project.tags.revertAdd(ids)
+    broadcastContent(project)
+  })
+  handle('tags:revertRemove', (event, rows) => {
+    const project = requireProject(event)
+    project.tags.revertRemove(rows)
+    broadcastContent(project)
+  })
+  handle('tags:revertReplace', (event, targets, expectedIds, restore) => {
+    const project = requireProject(event)
+    project.tags.revertReplace(targets, expectedIds, restore)
+    broadcastContent(project)
+  })
+  handle('tags:rename', (event, id, name) => {
+    const project = requireProject(event)
+    const tag = project.tags.rename(id, name)
+    broadcastContent(project)
+    return tag
+  })
+  handle('tags:recolor', (event, id, color) => {
+    const project = requireProject(event)
+    const tag = project.tags.recolor(id, color)
+    broadcastContent(project)
+    return tag
+  })
+  handle('tags:archive', (event, id) => {
+    const project = requireProject(event)
+    const tag = project.tags.archive(id)
+    broadcastContent(project)
+    return tag
+  })
+  handle('tags:unarchive', (event, id) => {
+    const project = requireProject(event)
+    const tag = project.tags.unarchive(id)
+    broadcastContent(project)
+    return tag
+  })
+  handle('tags:trash', (event, id) => {
+    const project = requireProject(event)
+    const result = project.tags.trash(id)
+    broadcastContent(project)
+    return result
+  })
+  handle('tags:restore', (event, id, name) => {
+    const project = requireProject(event)
+    const result = project.tags.restore(id, name)
+    if (result.status === 'restored') broadcastContent(project)
+    return result
+  })
+  handle('tags:purge', (event, id) => {
+    const project = requireProject(event)
+    const result = project.tags.purge(id)
+    broadcastContent(project)
+    return result
+  })
+  handle('tags:merge', (event, sourceId, destinationId) => {
+    const project = requireProject(event)
+    const result = project.tags.merge(sourceId, destinationId)
+    broadcastContent(project)
+    return result
+  })
+  handle('tags:promote', (event, id, choice) => {
+    const project = requireProject(event)
+    const result = project.tags.promote(id, choice)
+    if (result.status === 'promoted') broadcastContent(project)
+    return result
+  })
+  handle('tags:visibility', (event, boardId, visibility) => {
+    const project = requireProject(event)
+    project.tags.setVisibility(boardId, visibility)
+    broadcastContent(project)
+  })
   handle('search:appearances', (event, assetId) =>
     requireProject(event).search.appearances(assetId)
   )
