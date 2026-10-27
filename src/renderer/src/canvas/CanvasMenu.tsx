@@ -17,6 +17,7 @@ import {
   updateNoteStyle
 } from '../notes/noteActions'
 import { showInLibrary } from '../library/libraryActions'
+import { openTagEditor } from '../tags/TagManager'
 import { beginEditing } from '../notes/session'
 
 const noteMode = (o: CanvasObject) => {
@@ -116,6 +117,16 @@ function MenuItems() {
         <Item shortcut="Ctrl+A" onSelect={actions.selectAll}>
           Select all
         </Item>
+        <Item
+          onSelect={() =>
+            openTagEditor({
+              title: 'Tag this board',
+              targets: [{ type: 'board', id: useWorkspaceStore.getState().board?.id ?? '' }]
+            })
+          }
+        >
+          Tag this board
+        </Item>
         <Item shortcut="Shift+1" onSelect={actions.fitAll}>
           Zoom to fit
         </Item>
@@ -140,8 +151,64 @@ function MenuItems() {
   const fixedNotes = notes.filter((o) => !isAutoHeightNote(o))
   const allFloating = notes.length > 0 && notes.every((o) => noteMode(o) === 'floating')
 
+  const fileCards = selected.filter(
+    (object) => object.assetId && object.type !== 'text' && object.type !== 'board'
+  )
+  const originalIds = [
+    ...new Set(fileCards.flatMap((object) => (object.assetId ? [object.assetId] : [])))
+  ]
+
   return (
     <>
+      {single?.type === 'board' && single.linkedBoardId && (
+        <>
+          <Item
+            onSelect={() =>
+              openTagEditor({
+                title: 'Tag this board card',
+                targets: [{ type: 'object', id: single.id }]
+              })
+            }
+          >
+            Tag this board card
+          </Item>
+          <Item
+            onSelect={() =>
+              openTagEditor({
+                title: 'Tag linked board',
+                targets: [{ type: 'board', id: single.linkedBoardId! }]
+              })
+            }
+          >
+            Tag linked board
+          </Item>
+          <Separator />
+        </>
+      )}
+      {!(single?.type === 'board' && single.linkedBoardId) && (
+        <Item
+          onSelect={() =>
+            openTagEditor({
+              title: 'Tag selected items',
+              targets: selected.map((object) => ({ type: 'object' as const, id: object.id }))
+            })
+          }
+        >
+          Tag selected items
+        </Item>
+      )}
+      {originalIds.length > 0 && (
+        <Item
+          onSelect={() =>
+            openTagEditor({
+              title: `On the original (${fileCards.length} card${fileCards.length === 1 ? '' : 's'})`,
+              targets: originalIds.map((id) => ({ type: 'asset' as const, id }))
+            })
+          }
+        >
+          On the original
+        </Item>
+      )}
       {single?.type === 'text' && !single.locked && (
         <>
           <Item shortcut="Enter" onSelect={() => void beginEditing(single.id)}>

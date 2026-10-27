@@ -7,6 +7,8 @@ import { useCanvasStore } from '../store/canvasStore'
 import { useProjectStore } from '../store/projectStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { importLibraryFiles, moveEntries, renameEntry, trashEntries } from './libraryActions'
+import { TagEditor } from '../tags/TagEditor'
+import { openTagEditor } from '../tags/TagManager'
 
 const ENTRY_MIME = 'application/x-cw-entries'
 const CELL = 168
@@ -290,6 +292,31 @@ export function LibraryView() {
             onClick={() => void placeExistingAssets(assetIdsFor(selected), viewCenter())}
           >
             Add to board
+          </button>
+          <button
+            className="rounded-lg border border-line px-2 py-1"
+            onClick={() =>
+              openTagEditor({
+                title: 'Tag these entries',
+                targets: selected.map((id) => ({ type: 'entry', id }))
+              })
+            }
+          >
+            Tag entries
+          </button>
+          <button
+            className="rounded-lg border border-line px-2 py-1"
+            onClick={() =>
+              openTagEditor({
+                title: `On the original (${selected.length} entries)`,
+                targets: [...new Set(assetIdsFor(selected))].map((id) => ({
+                  type: 'asset' as const,
+                  id
+                }))
+              })
+            }
+          >
+            On the original
           </button>
           <label className="flex items-center gap-1">
             Move to
@@ -622,6 +649,12 @@ function Details({
           </ul>
         </>
       )}
+      <TagEditor
+        targets={[{ type: 'entry', id: entry.id }]}
+        title="Tags on this entry"
+        inherited={(info?.tags ?? []).filter((tag) => tag.source === 'asset')}
+      />
+      <TagEditor targets={[{ type: 'asset', id: entry.assetId }]} title="On the original" />
     </aside>
   )
 }

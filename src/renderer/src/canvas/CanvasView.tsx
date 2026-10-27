@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Layer, Line, Rect, Shape, Stage, Transformer } from 'react-konva'
 import type Konva from 'konva'
 import type { CanvasObject, Point } from '@shared/types'
@@ -21,6 +21,7 @@ import {
 import { DocumentNode } from './DocumentNode'
 import { FileNode } from './FileNode'
 import { ImageNode } from './ImageNode'
+import { TagMarks } from '../tags/TagMarks'
 import { canRotate, isViewable, lockedAspectRatio } from './objectTypes'
 import { useCanvasShortcuts, isSpaceHeld } from './useCanvasShortcuts'
 import { NoteNode } from '../notes/NoteNode'
@@ -60,6 +61,7 @@ type Gesture =
 /** The infinite canvas for the open board (§4). */
 export function CanvasView() {
   const board = useWorkspaceStore((s) => s.board)
+  const [hoverId, setHoverId] = useState<string | null>(null)
   const renaming = useWorkspaceStore((s) => s.renaming)
   const openBoard = useWorkspaceStore((s) => s.openBoard)
   const setRenaming = useWorkspaceStore((s) => s.setRenaming)
@@ -649,7 +651,10 @@ export function CanvasView() {
       onDragOver={onDragOver}
       onDrop={onDrop}
       onMouseMove={(e) => (hoverPoint.current = pointer(e))}
-      onMouseLeave={() => (hoverPoint.current = null)}
+      onMouseLeave={() => {
+        hoverPoint.current = null
+        setHoverId(null)
+      }}
       onScroll={(e) => {
         // The note editor asks the browser to keep the cursor in view, which would scroll
         // this box. Move the camera instead, so the canvas and the editor stay together.
@@ -675,6 +680,11 @@ export function CanvasView() {
           onMouseDown={onMouseDown}
           onDblClick={onDoubleClick}
           onContextMenu={onContextMenu}
+          onMouseMove={(event) => {
+            const node = event.target.findAncestor?.('.object', true)
+            const id = node?.id() || null
+            setHoverId((current) => (current === id ? current : id))
+          }}
         >
           {showGrid && (
             <Layer listening={false}>
@@ -682,58 +692,83 @@ export function CanvasView() {
             </Layer>
           )}
           <Layer ref={objectLayer}>
-            {visible.map((o) =>
-              o.type === 'text' ? (
-                <NoteNode
-                  key={o.id}
-                  object={o}
-                  {...positionOf(o)}
-                  width={liveSizes[o.id]?.width ?? o.width}
-                  height={liveSizes[o.id]?.height ?? o.height}
-                  faded={cut.has(o.id)}
-                  zoom={viewport.zoom}
-                  selected={selection.has(o.id)}
-                  editing={editingId === o.id}
-                  editedElsewhere={editedElsewhere.has(o.id)}
-                  scrollTop={noteScroll[o.id] ?? 0}
-                  onMeasured={syncMeasuredHeight}
-                />
-              ) : o.type === 'image' ? (
-                <ImageNode
-                  key={o.id}
-                  object={o}
-                  {...positionOf(o)}
-                  faded={cut.has(o.id)}
-                  zoom={viewport.zoom}
-                />
-              ) : o.type === 'document' ? (
-                <DocumentNode
-                  key={o.id}
-                  object={o}
-                  {...positionOf(o)}
-                  faded={cut.has(o.id)}
-                  zoom={viewport.zoom}
-                />
-              ) : o.type === 'file' ? (
-                <FileNode
-                  key={o.id}
-                  object={o}
-                  {...positionOf(o)}
-                  faded={cut.has(o.id)}
-                  zoom={viewport.zoom}
-                />
-              ) : (
-                <BoardCardNode
-                  key={o.id}
-                  object={o}
-                  {...positionOf(o)}
-                  dropTarget={drag?.dropCardId === o.id}
-                  faded={cut.has(o.id)}
-                  hideTitle={renamingCard?.id === o.id}
-                  zoom={viewport.zoom}
-                />
+            {visible.map((o) => {
+              const pos = positionOf(o)
+              const visibility = board.tagVisibility
+              const showTags =
+                visibility === 'always' ||
+                (visibility !== 'hidden' && (selection.has(o.id) || hoverId === o.id))
+              const compact =
+                visibility === 'always' &&
+                viewport.zoom < 0.35 &&
+                !selection.has(o.id) &&
+                hoverId !== o.id
+              const node =
+                o.type === 'text' ? (
+                  <NoteNode
+                    key={o.id}
+                    object={o}
+                    {...positionOf(o)}
+                    width={liveSizes[o.id]?.width ?? o.width}
+                    height={liveSizes[o.id]?.height ?? o.height}
+                    faded={cut.has(o.id)}
+                    zoom={viewport.zoom}
+                    selected={selection.has(o.id)}
+                    editing={editingId === o.id}
+                    editedElsewhere={editedElsewhere.has(o.id)}
+                    scrollTop={noteScroll[o.id] ?? 0}
+                    onMeasured={syncMeasuredHeight}
+                  />
+                ) : o.type === 'image' ? (
+                  <ImageNode
+                    key={o.id}
+                    object={o}
+                    {...positionOf(o)}
+                    faded={cut.has(o.id)}
+                    zoom={viewport.zoom}
+                  />
+                ) : o.type === 'document' ? (
+                  <DocumentNode
+                    key={o.id}
+                    object={o}
+                    {...positionOf(o)}
+                    faded={cut.has(o.id)}
+                    zoom={viewport.zoom}
+                  />
+                ) : o.type === 'file' ? (
+                  <FileNode
+                    key={o.id}
+                    object={o}
+                    {...positionOf(o)}
+                    faded={cut.has(o.id)}
+                    zoom={viewport.zoom}
+                  />
+                ) : (
+                  <BoardCardNode
+                    key={o.id}
+                    object={o}
+                    {...positionOf(o)}
+                    dropTarget={drag?.dropCardId === o.id}
+                    faded={cut.has(o.id)}
+                    hideTitle={renamingCard?.id === o.id}
+                    zoom={viewport.zoom}
+                  />
+                )
+              return (
+                <Fragment key={o.id}>
+                  {node}
+                  {showTags && (
+                    <TagMarks
+                      tags={o.tags ?? []}
+                      x={pos.x}
+                      y={pos.y}
+                      zoom={viewport.zoom}
+                      compact={compact}
+                    />
+                  )}
+                </Fragment>
               )
-            )}
+            })}
             <Transformer
               ref={transformer}
               rotateEnabled={rotateEnabled}
