@@ -11,6 +11,9 @@ extraResources:
     to: drizzle
 asarUnpack:
   - node_modules/better-sqlite3/**
+  # sharp loads its native image library from @img/sharp-<platform>; it can't run from inside the asar.
+  - node_modules/sharp/**
+  - node_modules/@img/**
 win:
   target: nsis
   artifactName: ${productName}-Setup-${version}.${ext}

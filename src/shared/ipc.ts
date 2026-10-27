@@ -4,8 +4,11 @@ import type {
   ClipboardContents,
   CreateBoardInput,
   CreateFolderInput,
+  CreateImagesInput,
   CreateProjectInput,
   FolderListItem,
+  ImportBytesInput,
+  ImportResult,
   ObjectPatch,
   Point,
   ProjectSummary,
@@ -42,8 +45,21 @@ export interface IpcRequests {
   'objects:restore': { args: [ids: string[]]; result: void }
   'objects:moveToBoard': { args: [ids: string[], targetBoardId: string, at?: Point]; result: void }
   'objects:copyTo': { args: [ids: string[], targetBoardId: string, at: Point]; result: string[] }
+  'objects:createImages': { args: [input: CreateImagesInput]; result: string[] }
+  /** Copies files into the library (images only for now). Unsupported files are listed as skipped. */
+  'assets:importFiles': { args: [paths: string[]]; result: ImportResult }
+  'assets:importBytes': { args: [files: ImportBytesInput[]]; result: ImportResult }
+  /** Asks where to save, then copies the stored original there. False if cancelled. */
+  'assets:saveOriginal': { args: [assetId: string]; result: boolean }
+  'dialog:pickImages': { args: []; result: string[] }
+  /** App objects copied with Ctrl+C/X. Null once something else has been copied to the system clipboard. */
   'clipboard:set': { args: [contents: ClipboardContents | null]; result: void }
   'clipboard:get': { args: []; result: ClipboardContents | null }
+  /**
+   * Imports what another program put on the system clipboard: files copied in File Explorer
+   * or Finder, or an image (browser "Copy image", screenshots). Null if there's nothing to import.
+   */
+  'clipboard:importExternal': { args: []; result: ImportResult | null }
   'folder:create': { args: [input: CreateFolderInput]; result: FolderListItem }
   'folder:rename': { args: [id: string, name: string]; result: void }
   'folder:move': { args: [id: string, newParentId: string | null]; result: void }
@@ -84,8 +100,14 @@ export const IPC_CHANNELS = [
   'objects:restore',
   'objects:moveToBoard',
   'objects:copyTo',
+  'objects:createImages',
+  'assets:importFiles',
+  'assets:importBytes',
+  'assets:saveOriginal',
+  'dialog:pickImages',
   'clipboard:set',
   'clipboard:get',
+  'clipboard:importExternal',
   'folder:create',
   'folder:rename',
   'folder:move',
@@ -100,4 +122,6 @@ export type Api = {
     ...args: IpcRequests[C]['args']
   ): Promise<IpcRequests[C]['result']>
   on<E extends IpcEventChannel>(event: E, listener: (payload: IpcEvents[E]) => void): () => void
+  /** Path on disk of a dropped or pasted file; empty for files that only exist in memory. */
+  pathForFile(file: File): string
 }

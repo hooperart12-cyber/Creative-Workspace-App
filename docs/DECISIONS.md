@@ -18,6 +18,7 @@ Statuses: ✅ Accepted · 🟡 Tentative (will be confirmed when the feature is 
 | [010](#adr-010--m0-toolchain-versions-and-implementation-choices) | M0 toolchain versions & implementation choices | ✅ |
 | [011](#adr-011--boards-and-folders-are-separate-hierarchies) | Boards and folders are separate hierarchies | 🟡 Pending team discussion |
 | [012](#adr-012--canvas-interaction-model-and-undo) | Canvas interaction model and undo | ✅ |
+| [013](#adr-013--images-import-pipeline-display-and-rotation) | Images: import pipeline, display and rotation | ✅ |
 
 ---
 
@@ -179,7 +180,7 @@ MyProject.cwproj/
 
 ## ADR-007 — v1 file formats: JPEG/JPG, PNG, PDF
 
-**Date:** 2026-10-24 · **Status:** ✅ Accepted · **Requirements:** §6, §7, §23
+**Date:** 2026-10-24 · **Status:** ✅ Accepted (WebP added by [ADR-013](#adr-013--images-import-pipeline-display-and-rotation)) · **Requirements:** §6, §7, §23
 
 **Decision.**
 - **Images (v1):** JPEG/JPG and PNG, rendered natively by Chromium. Transparency is preserved. Dimensions and alpha are read with `sharp`. WebP is a cheap add-on.
@@ -275,7 +276,7 @@ MyProject.cwproj/
 
 ## ADR-012 — Canvas interaction model and undo
 
-**Date:** 2026-10-24 · **Status:** ✅ Accepted · **Requirements:** §4, §19, §20
+**Date:** 2026-10-24 · **Status:** ✅ Accepted (clipboard and rotation extended by [ADR-013](#adr-013--images-import-pipeline-display-and-rotation)) · **Requirements:** §4, §19, §20
 
 **Decisions.**
 - **Figma-style navigation.**
@@ -297,3 +298,61 @@ MyProject.cwproj/
 - **Optimistic updates.** Moves and resizes update the screen immediately, then save. Other windows refresh from the broadcast.
 - **App menu.** Electron's default menu is replaced: no page zoom (it would scale the whole UI) and no Reload in packaged builds. Edit roles stay for text fields.
 - **Test hook.** `window.__cw` exposes the stores read-only, because the canvas draws to `<canvas>` and end-to-end tests need object positions.
+
+---
+
+## ADR-013 — Images: import pipeline, display and rotation
+
+**Date:** 2026-10-24 · **Status:** ✅ Accepted · **Requirements:** §4, §5, §7, §8, §18, §23 · **Amends:** ADR-007 (adds WebP) · **Extends:** ADR-012 (clipboard, rotation)
+
+**Context.** M3A puts images on boards. The project owner's conditions: never modify or recompress imported artwork; keep transparency and proportions under every resize and alignment; large images must not freeze the UI; M2 behaviour, undo and multi-window must keep working; the asset code must suit the M4 library.
+
+**Decisions.**
+
+- **Import pipeline** (main process, `src/main/project/assets.ts`):
+  1. Stream the source into `assets/.incoming/<uuid>` while hashing it (SHA-256). The source is only read.
+  2. Check the content with `sharp` metadata: the file must really be JPEG, PNG or WebP, whatever its extension. Read the size (EXIF orientation applied) and whether it has alpha.
+  3. Rename into `assets/<sha[0..2]>/<sha>.<ext>`, retrying briefly if OneDrive or antivirus has the file locked. An identical file already stored is reused (deduplication by hash; a trashed asset is restored).
+  4. Generate thumbnails. Clean up the temporary file whatever happens.
+
+  Up to 3 files import at a time. Files that can't be imported are skipped and listed with a reason, and the rest still import.
+- **The original is never written to after step 3.** Copies on boards, duplicates and pastes share the asset (ADR-005). "Download original" copies the stored file byte-for-byte.
+- **Formats:** JPEG, PNG and WebP. Anything else gets a clear message for now; generic file cards come in M3C.
+- **Thumbnails:** WebP, 256 and 1024 px on the longest side, only when smaller than the original, EXIF orientation applied, alpha kept (`alphaQuality: 100`). They live in `thumbs/`, are regenerated on demand if missing, and are safe to delete.
+- **Serving files to the UI:** a privileged `cw-asset://<projectId>/<sha256>/<256|1024|original>` protocol handled in the main process. It accepts only a 64-character hash belonging to that project, never a path, and sends immutable cache headers. The CSP allows `img-src cw-asset:`.
+- **Level of detail and performance:** the canvas draws the smallest stored version that covers the image's on-screen size in device pixels, and keeps the previous version visible while the next one loads. Images decode off the main thread (`img.decode()`). A shared cache keeps up to ~256 MB of decoded images that are off screen, and viewport culling (ADR-003) still applies.
+- **Image objects:** `board_objects.type = 'image'` with `asset_id`.
+  - **Size:** new images are at most 800 canvas units on their longest side (smaller images keep 1 px = 1 unit). There is no maximum display size.
+  - **Proportions are enforced in the main process.** `objects:update` recomputes an image's height from its width and the asset's ratio, so no code path (handles, match size, a future feature) can distort an image. The smallest allowed size is 24 units on the longest side.
+  - **Handles:** with an image selected, the resize handles are corner-only and proportional (Konva `keepRatio`).
+- **Rotation:** degrees in `board_objects.rotation`, around the object's top-left corner (Konva's native origin), stored normalised to −180…180.
+  - Shift snaps to 15° (Konva's built-in behaviour). Board cards don't rotate. "Reset rotation" straightens an image around its centre.
+  - Culling, marquee, snapping, fit, align, distribute, free-space placement and drop targets all use the rotated bounding box (`src/shared/geometry.ts`).
+- **Placement:** on the open board only; dropping into nested boards comes later.
+  - Drops and "Paste here" centre on the pointer. The toolbar and Ctrl+V centre in the view, shifted right until clear of existing content.
+  - Several images are laid out in a grid with 24-unit gaps, and adding them is one undoable step.
+  - Assets go to the library's top level (`folder_id = null`) until M4. The import API already accepts a folder id.
+- **Clipboard (extends ADR-012):** copying objects in the app also writes a short note ("N items copied in Creative Workspace") to the system clipboard. Paste checks for that note:
+  - If the note is still there, the app's own objects are pasted.
+  - Otherwise the main process reads the system clipboard: file URLs first (`text/uri-list`, which is how File Explorer and Finder copy files), then a PNG, JPEG or WebP bitmap (screenshots, images copied in browsers), imported as "Pasted image <date and time>.png".
+  - Reads are retried for up to ~0.5 s while the clipboard comes back empty, because Windows clipboard history and clipboard managers briefly lock it after a copy.
+- **Drag and drop:** files dropped from File Explorer are imported by path (`webUtils.getPathForFile` in the preload). Items with no path, such as an image dragged out of a browser, are sent as bytes.
+- **Full-size viewer:** a DOM dialog showing the original file, with the 1024 px thumbnail underneath while the original loads.
+  - Zoom: wheel zooms toward the cursor (2%–3200%). Fit to window (the default), 100%, and drag to pan.
+  - ←/→ step through the images on the board.
+  - Pixels are drawn crisp from 200% upward, and a checkerboard shows transparency.
+  - "Download original" saves an exact copy.
+- **Packaging:** `sharp` and `@img/*` are unpacked from the asar (native library).
+
+| Choice | Pros | Cons | Alternatives considered |
+|---|---|---|---|
+| Custom `cw-asset://` protocol ✅ | No file paths in the renderer; browser caching; the renderer can only request hashes of its own project's assets. | A little protocol code. | `file://` URLs (expose paths and need a weaker CSP); IPC with base64 (slow, doubles memory). |
+| Thumbnails with `sharp` in main ✅ | Fast, high quality, off the UI thread; handles EXIF and alpha. | Native dependency (~10 MB). | Renderer canvas resizing (blocks the UI, lower quality). |
+| Proportions enforced in main ✅ | One rule protects every path that resizes images. | Main must know which objects are images (a join on `assets`). | UI-only locking (any new code path could distort images). |
+| Rotation around top-left ✅ | Konva's native model: no offsets to convert; existing x/y stay valid. | Layout maths needs rotated bounds. | Rotation around the centre (needs offset conversions everywhere). |
+| Clipboard note on the system clipboard ✅ | "Copy in a browser, paste in the app" just works after copying in the app; no stale internal paste. | Copying in the app replaces the system clipboard text. | Always preferring the internal clipboard (pastes old objects instead of the new screenshot). |
+
+**Consequences.**
+- The M4 library can reuse `AssetRepository`, `ImportOptions.folderId`, `AssetInfo`, `cw-asset://` URLs and the thumbnails.
+- The same pipeline will serve PDFs (M3C), with a page render as the cover.
+- Projects gain a `thumbs/` folder that can be deleted and regenerated at any time.

@@ -2,9 +2,10 @@
  * Canvas and board edits. Every edit goes through here so it can be undone (§20):
  * each one performs the change, then records how to undo and redo it.
  */
-import type { CanvasObject, ObjectPatch, Point } from '@shared/types'
+import { positionForCenter, rotatedCenter } from '@shared/geometry'
+import type { CanvasObject, ImportResult, ObjectPatch, Point } from '@shared/types'
 import { history as undoHistory, useCanvasStore } from '../store/canvasStore'
-import { reportError } from '../store/projectStore'
+import { reportError, showNotice, useProjectStore } from '../store/projectStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import {
   align,
@@ -16,8 +17,17 @@ import {
   type DistributeAxis,
   type ZOrderOp
 } from './arrange'
-import { boundsOf, fitViewport, intersects, screenToWorld, stepZoom, zoomAt } from './geometry'
+import {
+  boundsOf,
+  fitViewport,
+  intersects,
+  objectBounds,
+  screenToWorld,
+  stepZoom,
+  zoomAt
+} from './geometry'
 import type { Command } from './history'
+import { serialQueue } from './queue'
 
 const BOARD_CARD = { width: 200, height: 160 }
 /** Offset for duplicates and repeated pastes, so copies don't hide the original. */
@@ -34,14 +44,22 @@ export const selectedObjects = (): CanvasObject[] => {
   return currentObjects().filter((o) => selection.has(o.id))
 }
 
+/**
+ * Edits run one at a time, in the order they were made: an undo pressed straight after
+ * Delete waits until the delete is saved and recorded, instead of undoing the step before.
+ */
+const enqueue = serialQueue()
+
 /** Runs an edit; on failure shows the error and refetches so the screen matches the data. */
-async function run(edit: () => Promise<void>): Promise<void> {
-  try {
-    await edit()
-  } catch (error) {
-    reportError(error)
-    await workspace().refresh()
-  }
+function run(edit: () => Promise<void>): Promise<void> {
+  return enqueue(async () => {
+    try {
+      await edit()
+    } catch (error) {
+      reportError(error)
+      await workspace().refresh()
+    }
+  })
 }
 
 function record(command: Command): void {
@@ -127,7 +145,7 @@ export function createBoardOnCanvas(center?: Point): Promise<void> {
   // Don't cover existing objects (e.g. clicking "Board" twice): move right until there's room.
   const free = (p: Point) =>
     !currentObjects().some((o) =>
-      intersects(o, { ...p, width: BOARD_CARD.width, height: BOARD_CARD.height })
+      intersects(objectBounds(o), { ...p, width: BOARD_CARD.width, height: BOARD_CARD.height })
     )
   for (let tries = 0; tries < 50 && !free(at); tries++) at.x += BOARD_CARD.width + PASTE_OFFSET
   return createBoard(board.id, at)
@@ -221,12 +239,23 @@ export function copySelection(mode: 'copy' | 'cut'): Promise<void> {
   })
 }
 
-/** Pastes at a world point (or offset from the originals when pasting on the same board). */
-export function paste(at?: Point): Promise<void> {
-  return run(async () => {
+/**
+ * Pastes at a world point (or offset from the originals when pasting on the same board).
+ * If something else was copied since (an image in a browser, files in File Explorer, a
+ * screenshot), that is imported instead.
+ */
+export async function paste(at?: Point): Promise<void> {
+  // Set when the clipboard holds something from another program; imported after the queued step.
+  let external = null as { boardId: string; center: Point } | null
+  await run(async () => {
     const board = workspace().board
+    if (!board) return
     const clip = await api().invoke('clipboard:get')
-    if (!board || !clip) return
+    if (!clip) {
+      canvas().setCut([])
+      external = { boardId: board.id, center: at ?? viewCenter() }
+      return
+    }
     const target = at ?? defaultPastePoint(clip.objectIds, clip.sourceBoardId === board.id)
 
     if (clip.mode === 'cut') {
@@ -261,6 +290,10 @@ export function paste(at?: Point): Promise<void> {
       }
     })
   })
+  if (external) {
+    const { boardId, center } = external
+    await importThenPlace(boardId, () => api().invoke('clipboard:importExternal'), center, !at)
+  }
 }
 
 export function duplicateSelection(): Promise<void> {
@@ -290,6 +323,189 @@ function defaultPastePoint(ids: string[], sameBoard: boolean): Point {
   }
   const { viewport, viewSize } = canvas()
   return screenToWorld({ x: viewSize.width / 3, y: viewSize.height / 3 }, viewport)
+}
+
+// ── Images ───────────────────────────────────────────────────────────────────
+
+const viewCenter = (): Point => {
+  const { viewport, viewSize } = canvas()
+  return screenToWorld({ x: viewSize.width / 2, y: viewSize.height / 2 }, viewport)
+}
+
+/** Imports files dropped from File Explorer / Finder or a browser, centred on `at`. */
+export function importDroppedFiles(files: File[], at: Point): Promise<void> {
+  const board = workspace().board
+  if (!board || files.length === 0) return Promise.resolve()
+  return importThenPlace(
+    board.id,
+    async () => {
+      // Files on disk are imported by path (no copy through the renderer). Things without a
+      // path, like an image dragged out of a browser, are sent as bytes.
+      const paths: string[] = []
+      const unsaved: File[] = []
+      for (const file of files) {
+        const path = api().pathForFile(file)
+        if (path) paths.push(path)
+        else unsaved.push(file)
+      }
+      const fromDisk = paths.length
+        ? await api().invoke('assets:importFiles', paths)
+        : { imported: [], skipped: [] }
+      if (unsaved.length === 0) return fromDisk
+      const bytes = await Promise.all(
+        unsaved.map(async (file) => ({
+          name: file.name,
+          bytes: new Uint8Array(await file.arrayBuffer())
+        }))
+      )
+      const fromMemory = await api().invoke('assets:importBytes', bytes)
+      return {
+        imported: [...fromDisk.imported, ...fromMemory.imported],
+        skipped: [...fromDisk.skipped, ...fromMemory.skipped]
+      }
+    },
+    at,
+    false
+  )
+}
+
+/** Asks for image files and places them at `at` (or the middle of the view, next to what's there). */
+export async function addImagesFromPicker(at?: Point): Promise<void> {
+  // The picker stays open as long as the user likes, so it isn't part of the queued edit.
+  const paths = await api()
+    .invoke('dialog:pickImages')
+    .catch((error: unknown) => {
+      reportError(error)
+      return []
+    })
+  if (paths.length === 0) return
+  const board = workspace().board
+  if (!board) return
+  return importThenPlace(
+    board.id,
+    () => api().invoke('assets:importFiles', paths),
+    at ?? viewCenter(),
+    !at
+  )
+}
+
+/**
+ * Copying files in (hashing, decoding, thumbnails) can take seconds, so it runs outside the
+ * edit queue: dragging, undo and delete keep working meanwhile. Only putting the finished
+ * import on the board is a queued, undoable edit.
+ */
+async function importThenPlace(
+  boardId: string,
+  importWork: () => Promise<ImportResult | null>,
+  center: Point,
+  avoidOverlap: boolean
+): Promise<void> {
+  let result: ImportResult | null
+  try {
+    result = await withProgress(importWork)
+  } catch (error) {
+    reportError(error)
+    return
+  }
+  if (result) {
+    const imported = result
+    await run(() => placeImported(imported, boardId, center, avoidOverlap))
+  }
+}
+
+/** Imports in progress; "Importing…" stays up until the last one finishes. */
+let importsRunning = 0
+
+/** Shows "Importing…" if an import takes more than a moment. */
+async function withProgress<T>(work: () => Promise<T>): Promise<T> {
+  importsRunning++
+  const timer = setTimeout(() => showNotice('Importing…', 0), 400)
+  try {
+    return await work()
+  } finally {
+    clearTimeout(timer)
+    importsRunning--
+    if (importsRunning === 0 && useProjectStore.getState().notice === 'Importing…') {
+      showNotice(null)
+    }
+  }
+}
+
+/** Puts freshly imported images on a board as one undoable step and reports skipped files. */
+async function placeImported(
+  result: ImportResult,
+  boardId: string,
+  center: Point,
+  avoidOverlap: boolean
+): Promise<void> {
+  reportSkipped(result)
+  if (result.imported.length === 0) return
+  const assetIds = result.imported.map((a) => a.id)
+  const created = await api().invoke('objects:createImages', {
+    boardId,
+    assetIds,
+    center,
+    avoidOverlap
+  })
+  if (workspace().board?.id === boardId) canvas().setSelection(created)
+  record({
+    label: created.length === 1 ? 'Add image' : 'Add images',
+    undo: () => api().invoke('objects:delete', created),
+    redo: () => api().invoke('objects:restore', created)
+  })
+}
+
+function reportSkipped({ imported, skipped }: ImportResult): void {
+  if (skipped.length === 0) return
+  const lines = skipped.map((s) => `• ${s.name}: ${s.reason}`)
+  const head =
+    imported.length === 0
+      ? skipped.length === 1
+        ? 'This file couldn’t be added:'
+        : 'These files couldn’t be added:'
+      : `Added ${imported.length} image${imported.length === 1 ? '' : 's'}. ` +
+        `${skipped.length} file${skipped.length === 1 ? ' was' : 's were'} skipped:`
+  const shown = lines.slice(0, 5)
+  if (lines.length > shown.length) shown.push(`…and ${lines.length - shown.length} more`)
+  showNotice([head, ...shown].join('\n'), 12000)
+}
+
+/** Sizes images to their pixel size (1 pixel = 1 canvas unit), keeping their middle in place. */
+export function resetImageSize(ids: string[]): Promise<void> {
+  const patches = currentObjects()
+    .filter((o) => ids.includes(o.id) && !o.locked && o.asset?.width && o.asset.height)
+    .map((o) => {
+      const width = o.asset!.width!
+      const height = o.asset!.height!
+      return {
+        id: o.id,
+        width,
+        height,
+        ...positionForCenter(rotatedCenter(o), width, height, o.rotation)
+      }
+    })
+  return applyPatches(patches, 'Reset size')
+}
+
+/** Straightens rotated objects around their middle. */
+export function resetRotation(ids: string[]): Promise<void> {
+  const patches = currentObjects()
+    .filter((o) => ids.includes(o.id) && !o.locked && o.rotation !== 0)
+    .map((o) => ({
+      id: o.id,
+      rotation: 0,
+      ...positionForCenter(rotatedCenter(o), o.width, o.height, 0)
+    }))
+  return applyPatches(patches, 'Reset rotation')
+}
+
+/** Saves a copy of an image's original file, exactly as it was imported. */
+export async function saveOriginal(object: CanvasObject): Promise<void> {
+  // Not an edit (nothing to undo), and its save dialog mustn't hold up queued edits.
+  if (!object.asset) return
+  await api()
+    .invoke('assets:saveOriginal', object.asset.id)
+    .catch((error: unknown) => reportError(error))
 }
 
 // ── Arrangement ──────────────────────────────────────────────────────────────
@@ -364,7 +580,7 @@ export function fitSelection(): void {
 
 function fitTo(objects: CanvasObject[], maxZoom = 1): void {
   const { viewSize, setViewport } = canvas()
-  const bounds = boundsOf(objects)
+  const bounds = boundsOf(objects.map(objectBounds))
   if (!bounds || viewSize.width === 0) {
     setViewport({ x: viewSize.width / 2, y: viewSize.height / 2, zoom: 1 })
     return

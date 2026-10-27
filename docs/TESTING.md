@@ -50,6 +50,82 @@ To test a specific pull request instead of `main`: `git fetch origin && git chec
 
 Work through each step, and tick the box if the **Expected** result happens. If it doesn't, write down the step number and report it (Part 3). Keyboard shortcuts say **Ctrl** for Windows; on macOS use **Cmd** where Ctrl is listed, and **Option** for Alt.
 
+### M3A — Images (≈25 minutes)
+
+Use a fresh project (e.g. `Image Test`) with one or two board cards on it.
+
+**Collect some test files first** (put copies in a scratch folder):
+- a large photo, ideally taken **in portrait on a phone** (these are stored sideways with a "rotate" tag)
+- a **PNG with a transparent background** (a logo or cut-out character)
+- a **WebP** image (many websites serve them; "Save image as…" in a browser often gives `.webp`)
+- a **very tall or wide** image (a comic strip, a long screenshot)
+- a file the app can't use yet: `.psd`, `.tif`, `.pdf` or `.txt`
+- optionally, a folder of 20+ large images
+
+**Adding images**
+
+| # | Do this | Expected |
+|---|---|---|
+| 3A.1 | Click the **Image** tool in the left toolbar and choose 2–3 images. | They appear in the middle of the view, side by side in a grid, **next to** (not on top of) existing cards, and stay selected. Big images arrive at most 800 px on their longest side at 100% zoom. |
+| 3A.2 | Drag **one** image file from File Explorer onto the canvas. | It appears centred where you dropped it. |
+| 3A.3 | Drag **several** files at once, including the unsupported one. | The images appear. A yellow message near the bottom lists the unsupported file with the reason ("Not a JPG, PNG or WebP image."). It closes after a few seconds or with **Dismiss**. |
+| 3A.4 | In a web browser, right-click an image → **Copy image**. Click the canvas, press **Ctrl+V**. | The image appears in the middle of the view. (Its name in the viewer is "Pasted image" plus the date and time.) |
+| 3A.5 | Take a screenshot with **Win+Shift+S** (or Print Screen), then press **Ctrl+V** on the canvas. | The screenshot is added. |
+| 3A.6 | In File Explorer, select one or more image files and press **Ctrl+C**. Press **Ctrl+V** on the canvas. | The files are added under their own names. |
+| 3A.7 | Drag an image straight from a web page onto the canvas. | It's added (most browsers allow this; if one doesn't, copy and paste works instead). |
+| 3A.8 | Right-click an empty spot → **Add images here…** | The chosen images are placed at that spot. |
+| 3A.9 | Right after adding several images, press **Ctrl+Z**, then **Ctrl+Shift+Z**. | All images from that one import disappear together, then come back. |
+| 3A.10 | Copy one image in the app (**Ctrl+C**), then copy something in a browser, then press **Ctrl+V** in the app. | You get the **browser's** image (the newest copy), not the old one. Copy an image in the app again and **Ctrl+V**: you get a copy of the app image. |
+
+**Does it look right?**
+
+| # | Do this | Expected |
+|---|---|---|
+| 3A.11 | Put the transparent PNG over the dot grid and partly over another image. | Transparent parts show what's behind them. No white or black box. |
+| 3A.12 | Look at the portrait phone photo. | It's upright, not sideways. |
+| 3A.13 | Zoom far in on a large image (Ctrl+wheel), then far out. | Up close it's sharp (a brief soft moment while the full-quality version loads is fine). Zoomed out, panning stays smooth. |
+| 3A.14 | Optional: add 20+ large images at once. | The app stays responsive; "Importing…" shows if it takes more than a moment. Panning and zooming afterwards stay smooth. |
+
+**Resizing and rotating**
+
+| # | Do this | Expected |
+|---|---|---|
+| 3A.15 | Select an image. Drag a corner handle, making it much bigger and much smaller. | Only corner handles are shown. The image always keeps its shape (never stretches or squashes) and has no maximum size. |
+| 3A.16 | Resize the very tall or wide image. | It still resizes; it just can't shrink to nothing. |
+| 3A.17 | Drag the **round handle above the image** to rotate it. Then rotate again while holding **Shift**. | It rotates freely; with Shift it jumps in 15° steps. **Ctrl+Z** undoes a rotation. |
+| 3A.18 | Right-click a rotated, resized image → **Reset rotation**, then **Reset to original size**. | It straightens in place, then returns to its pixel size (1 image pixel = 1 px at 100% zoom), keeping its centre. |
+| 3A.19 | Select an image **and** a board card together. | No rotation handle (board cards don't rotate) and corner handles only. Resizing keeps the image's shape. |
+| 3A.20 | Select 3 images of different shapes (one rotated). Try align, **Distribute** and **Same width / Same height** in the floating bar. | They line up by their **visible** edges. Images keep their shape: "Same width" makes them as wide as the widest, and their heights follow. |
+| 3A.21 | On images, try everything from M2: move, arrow-key nudge, group, lock, layer order, copy/paste, duplicate, cut and paste on another board, Delete + Ctrl+Z. | All work as they do for board cards. Copies appear instantly (nothing is imported again). |
+| 3A.22 | Drag an image onto a board card. | It moves into that board. |
+| 3A.22a | Add 3 images one at a time, delete one, then press **Ctrl+Z** 4 times **as fast as you can**. Then **Ctrl+Shift+Z** twice quickly. | Every key press counts: the deleted image comes back and all 3 imports are undone (empty board), then two images return. Nothing is skipped or undone out of order. |
+| 3A.22b | Open a different project (or relaunch the app) and, **immediately** as its board appears, drop an image file onto the canvas. | It lands centred where you dropped it, and the view doesn't jump afterwards. |
+
+**Full-size viewer**
+
+| # | Do this | Expected |
+|---|---|---|
+| 3A.23 | Double-click an image (or select it and press **Enter**, or right-click → **View full size**). | A dark full-window viewer opens with the image fitted to the window. The top shows the file name, pixel size, format and file size. |
+| 3A.24 | Scroll to zoom, drag to pan; try **Fit**, **100%**, double-click, and the keys **+**, **−**, **1**, **F**. | Zoom follows the pointer. Double-click toggles between 100% (at that spot) and fit. Zoomed right in, pixels look crisp and square (not blurry). Transparent areas show a grey checkerboard. |
+| 3A.24a | Close the viewer. Click an image once, then straight away double-click it (three quick clicks). | The viewer opens **fitted** (below 100% for a big image) and stays fitted. Double-clicking inside the viewer still toggles 100% / fit. |
+| 3A.25 | Press **←** / **→** (or the arrow buttons). | Steps through the images on this board ("2 of 5"). |
+| 3A.26 | Click **Download original** and save it somewhere. Also try right-click on the canvas → **Save original as…**. | The saved file is **identical** to the file you imported: same size in bytes (right-click → Properties), opens in your art app at full quality with its transparency. |
+| 3A.27 | Press **Esc** (or ✕). While the viewer was open, did **Delete** or the arrow keys change the board? | The viewer closes. Keys pressed in the viewer never edit the board. |
+
+**Keeping your work safe**
+
+| # | Do this | Expected |
+|---|---|---|
+| 3A.28 | Open the board in a second window. Move, resize and rotate an image in one window. | The other window shows the images and updates. |
+| 3A.29 | Quit and relaunch the app, then reopen the project. | Every image is back with the same position, size and rotation. |
+| 3A.30 | Check the files you imported, in their original folders. | They're untouched (same size and date). The project folder holds copies in `assets` and small previews in `thumbs`. |
+
+**Feel (your opinion — most important for M3A)**
+
+- Do resizing and rotating feel natural? Are the handles easy to grab?
+- Does pasting from your browser and screenshot tool work every time?
+- Is anything about image quality disappointing at any zoom level?
+
 ### M2 — Canvas: navigation, arranging & drag-and-drop (≈20 minutes)
 
 Use a fresh project (e.g. `Canvas Test`). **Ctrl** = **Cmd** on macOS, **Alt** = **Option**. A mouse with a scroll wheel is ideal; a trackpad works too.
@@ -253,13 +329,16 @@ npm run test:e2e     # end-to-end UI tests: builds the app, then Playwright driv
 **Current coverage:**
 - **Unit tests** (Vitest):
   - main-process logic: projects, boards, folders, canvas objects (move/copy/trash/restore), multi-window registry, recent projects
-  - renderer helpers: tree building, camera math, align/distribute/z-order/snapping, undo history
+  - assets: originals stored byte-for-byte and source files untouched, content checks (fake or unsupported files), deduplication, EXIF orientation, thumbnails with transparency, export of originals
+  - image objects: initial sizing, layout, proportions enforced on every update, copies sharing one asset
+  - renderer helpers: tree building, camera math, rotated bounds, image level of detail, align/distribute/match size with rotated and ratio-locked images, z-order, snapping, undo history
 - **End-to-end tests** (Playwright, `e2e/`): launch the real app with a temporary settings folder and test
   - creating boards from the toolbar (click and drag-drop)
   - dragging cards and persistence after restart
   - nesting by drag-and-drop, plus undo
   - delete + undo
   - sidebar drag-and-drop for boards and folders
+  - images (`e2e/images.spec.ts`): Image tool import with byte-for-byte storage and thumbnails served to the UI; drawn on the canvas; proportional resize and Shift-snapped rotation with undo and persistence; dropping files (with an unsupported one explained); duplicate sharing the stored file; delete/undo/redo; pasting a screenshot, files copied in File Explorer and copied images; viewer open/fit/100%/download original/close; a second window showing the image and its changes
 
   Failures in CI upload a Playwright report with screenshots and traces.
 

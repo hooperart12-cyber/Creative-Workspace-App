@@ -4,7 +4,7 @@ A PC desktop creative workspace, inspired by Milanote (boards and organization) 
 
 It combines infinite visual canvases, interconnected boards, notes, reference images, document viewing, artwork management, and project organization in one flexible environment. The goal is to support the whole creative process, from brainstorming and research through planning, review, and organizing finished work, without forcing a rigid workflow.
 
-> **Status:** M2 complete: a Figma-style canvas with drag-and-drop, arranging tools and undo, on top of M1's nested boards and folders. Next up is M3 (images, text notes, PDFs).
+> **Status:** M3A complete: images on boards. You can drop, paste or pick JPG, PNG and WebP images, resize them proportionally, rotate them, and open them in a full-size viewer. Originals are stored untouched. This sits on M2's Figma-style canvas and M1's nested boards and folders. Next up is M3B (text notes, board covers), then M3C (PDFs).
 > This README summarizes the full feature vision. The complete, **living** specification is [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md). The original PDF (v1.0) is archived at [`docs/archive/`](docs/archive/Creative%20Workspace%20App%20v1.0.pdf).
 
 ## Project Docs
@@ -183,7 +183,7 @@ Spec stages 1–4 (inventory, feasibility, scope, architecture) are **done**. St
 1. ~~**M0 — Scaffold.** Electron + React app, database, project create/open.~~ ✅ Done
 2. ~~**M1 — Nested boards and folders** (§3).~~ ✅ Done
 3. ~~**M2 — Canvas navigation and manipulation** (§4).~~ ✅ Done
-4. **M3 — Board objects, images first**, then text notes and PDFs (§5, §7: JPEG/JPG, PNG, PDF).
+4. **M3 — Board objects** (§5, §7): ~~M3A images (JPEG/JPG, PNG, WebP)~~ ✅ Done; M3B text notes and board covers; M3C PDFs and file cards.
 5. **M4 — Project asset library** (§8).
 6. **M5 — Reliability polish.** Autosave status, backups, command palette, search.
 

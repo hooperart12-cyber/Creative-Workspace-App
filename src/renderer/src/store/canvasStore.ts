@@ -32,6 +32,8 @@ interface CanvasState {
   snapToGrid: boolean
   /** Bumped by undo/redo so buttons re-render their enabled state. */
   historyVersion: number
+  /** Image shown in the full-size viewer, if open. */
+  viewerObjectId: string | null
 
   setViewport: (viewport: Viewport) => void
   setViewSize: (size: Size) => void
@@ -42,6 +44,7 @@ interface CanvasState {
   toggleGrid: () => void
   toggleSnap: () => void
   bumpHistory: () => void
+  setViewerObjectId: (id: string | null) => void
 }
 
 const PREFS_KEY = 'cw.canvasPrefs'
@@ -75,6 +78,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   marquee: null,
   ...readPrefs(),
   historyVersion: 0,
+  viewerObjectId: null,
 
   setViewport: (viewport) => set({ viewport }),
   setViewSize: (viewSize) => set({ viewSize }),
@@ -90,5 +94,6 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set({ snapToGrid: !get().snapToGrid })
     savePrefs({ showGrid: get().showGrid, snapToGrid: get().snapToGrid })
   },
-  bumpHistory: () => set({ historyVersion: get().historyVersion + 1 })
+  bumpHistory: () => set({ historyVersion: get().historyVersion + 1 }),
+  setViewerObjectId: (viewerObjectId) => set({ viewerObjectId })
 }))

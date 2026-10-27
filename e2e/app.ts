@@ -41,12 +41,16 @@ export async function createProject(page: Page, parentDir: string, name: string)
 
 export interface ObjectInfo {
   id: string
+  type: string
   title?: string
   x: number
   y: number
   width: number
   height: number
+  rotation: number
   linkedBoardId: string | null
+  assetId: string | null
+  asset?: { sha256: string; ext: string; width: number; height: number; originalName: string }
 }
 
 /** Objects on the open board (the canvas draws to <canvas>, so read them from app state). */
@@ -54,14 +58,27 @@ export function objects(page: Page): Promise<ObjectInfo[]> {
   return page.evaluate(() =>
     (window as unknown as CwWindow).__cw.workspace.getState().board.objects.map((o) => ({
       id: o.id,
+      type: o.type,
       title: o.board?.title,
       x: o.x,
       y: o.y,
       width: o.width,
       height: o.height,
-      linkedBoardId: o.linkedBoardId
+      rotation: o.rotation,
+      linkedBoardId: o.linkedBoardId,
+      assetId: o.assetId,
+      asset: o.asset
     }))
   )
+}
+
+/** Page coordinates of a world point, from the canvas camera. */
+export async function toScreen(page: Page, p: { x: number; y: number }) {
+  const box = (await page.getByTestId('canvas').boundingBox())!
+  const vp = await page.evaluate(
+    () => (window as unknown as CwWindow).__cw.canvas.getState().viewport
+  )
+  return { x: box.x + p.x * vp.zoom + vp.x, y: box.y + p.y * vp.zoom + vp.y }
 }
 
 /** Page coordinates of the centre of a card, from the canvas camera. */
@@ -101,12 +118,16 @@ type CwWindow = Window & {
         board: {
           objects: {
             id: string
+            type: string
             x: number
             y: number
             width: number
             height: number
+            rotation: number
             linkedBoardId: string | null
+            assetId: string | null
             board?: { title: string }
+            asset?: ObjectInfo['asset']
           }[]
         }
       }

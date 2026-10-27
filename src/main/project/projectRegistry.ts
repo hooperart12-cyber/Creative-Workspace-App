@@ -41,6 +41,12 @@ export class ProjectRegistry {
     return path ? this.projects.get(path)?.project : undefined
   }
 
+  /** An open project by its id (asset URLs name the project they belong to). */
+  findById(id: string): Project | undefined {
+    for (const { project } of this.projects.values()) if (project.id === id) return project
+    return undefined
+  }
+
   /** All owners (windows) that currently have the given project open. */
   ownersOf(project: Project): number[] {
     return [...(this.projects.get(project.path)?.owners ?? [])]

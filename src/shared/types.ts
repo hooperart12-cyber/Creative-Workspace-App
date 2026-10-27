@@ -55,7 +55,48 @@ export interface Viewport {
   zoom: number
 }
 
-/** Anything placed on a board canvas (§4, §5). M2 only has `board` cards; M3 adds images, notes, documents. */
+/** A file in the project library (§8). The original is stored unmodified (ADR-005). */
+export interface AssetInfo {
+  id: string
+  sha256: string
+  originalName: string
+  mime: string
+  /** Extension of the stored original, without the dot. */
+  ext: string
+  bytes: number
+  /** Pixel size as displayed (EXIF orientation applied); null for files that aren't images. */
+  width: number | null
+  height: number | null
+  hasAlpha: boolean | null
+  /** Library folder; null is the library's top level. */
+  folderId: string | null
+}
+
+/** Which stored file of an asset to load: a generated thumbnail (longest side in px) or the original. */
+export type AssetVariant = 256 | 1024 | 'original'
+
+/** A file handed over as bytes (pasted screenshots, images dragged from a browser). */
+export interface ImportBytesInput {
+  name: string
+  bytes: Uint8Array
+}
+
+export interface ImportResult {
+  imported: AssetInfo[]
+  /** Files that weren't imported, with a reason the user can read. */
+  skipped: { name: string; reason: string }[]
+}
+
+export interface CreateImagesInput {
+  boardId: string
+  assetIds: string[]
+  /** World point the images are centred on. */
+  center: Point
+  /** Shift right until the images don't cover existing objects (toolbar, paste without a point). */
+  avoidOverlap?: boolean
+}
+
+/** Anything placed on a board canvas (§4, §5). M2 has `board` cards; M3 adds images, notes, documents. */
 export interface CanvasObject {
   id: string
   boardId: string
@@ -73,6 +114,8 @@ export interface CanvasObject {
   data: Record<string, unknown>
   /** Present for `board` cards: details of the board the card opens. */
   board?: { title: string; childBoardCount: number }
+  /** Present for objects that show a library file (images). */
+  asset?: AssetInfo
 }
 
 /** Changes to an object's placement or arrangement (undoable). */

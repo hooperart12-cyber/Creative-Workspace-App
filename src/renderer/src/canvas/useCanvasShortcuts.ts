@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useCanvasStore } from '../store/canvasStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import * as actions from './actions'
+import { isViewable } from './objectTypes'
 
 let spaceHeld = false
 
@@ -18,7 +19,10 @@ function keysBelongElsewhere(e: KeyboardEvent): boolean {
   ) {
     return true
   }
-  return useWorkspaceStore.getState().dialog !== null
+  return (
+    useWorkspaceStore.getState().dialog !== null ||
+    useCanvasStore.getState().viewerObjectId !== null
+  )
 }
 
 /**
@@ -105,6 +109,9 @@ export function useCanvasShortcuts(): void {
       const single = selected.length === 1 ? selected[0] : undefined
       if (e.key === 'Enter' && single?.linkedBoardId) {
         return handled(() => void workspace.openBoard(single.linkedBoardId!))
+      }
+      if (e.key === 'Enter' && single && isViewable(single)) {
+        return handled(() => canvas.setViewerObjectId(single.id))
       }
       if (e.key === 'F2' && single?.linkedBoardId) {
         return handled(() =>

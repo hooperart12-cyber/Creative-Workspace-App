@@ -37,6 +37,19 @@ export function CanvasToolbar() {
         <BoardIcon width={20} height={20} className="text-accent" />
         Board
       </button>
+      <button
+        onClick={(e) => {
+          // Let canvas shortcuts (Delete, Shift+1…) act on the new images straight away.
+          e.currentTarget.blur()
+          void actions.addImagesFromPicker()
+        }}
+        title="Image: choose JPG, PNG or WebP files (you can also drop or paste images)"
+        aria-label="Add images"
+        className="flex w-14 flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[11px] text-ink hover:bg-canvas"
+      >
+        <ImageIcon />
+        Image
+      </button>
       <Divider />
       <button
         className={toolButton}
@@ -229,6 +242,16 @@ function MagnetIcon() {
     <svg {...svg}>
       <path d="m6 15-4-4 6.75-6.77a7.79 7.79 0 0 1 11 11L13 22l-4-4 6.39-6.36a2.14 2.14 0 0 0-3-3L6 15" />
       <path d="m5 8 4 4M12 15l4 4" />
+    </svg>
+  )
+}
+
+function ImageIcon() {
+  return (
+    <svg {...svg} width={20} height={20} className="text-accent">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="9" cy="9" r="2" />
+      <path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21" />
     </svg>
   )
 }

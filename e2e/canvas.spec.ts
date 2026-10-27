@@ -97,6 +97,26 @@ test('delete with the keyboard and restore with undo', async () => {
   await expect.poll(async () => (await objects(t.page)).map((o) => o.title)).toEqual(['Keep me'])
 })
 
+test('a click selects what is on the board even before the window repaints', async () => {
+  // Slow or throttled windows paint late; what a click hits must follow the board's data,
+  // not the last frame that was drawn.
+  await t.page.context().addInitScript(() => {
+    const native = window.requestAnimationFrame.bind(window)
+    window.requestAnimationFrame = (callback) => {
+      setTimeout(() => native(callback), 400)
+      return 0
+    }
+  })
+  await createProject(t.page, t.projectsDir, 'Slow frames')
+  await addBoard('Keep me')
+  const c = await cardCenter(t.page, 'Keep me')
+  await t.page.mouse.click(c.x, c.y)
+  await t.page.keyboard.press('Delete')
+  await expect.poll(async () => (await objects(t.page)).length).toBe(0)
+  await t.page.keyboard.press('ControlOrMeta+z')
+  await expect.poll(async () => (await objects(t.page)).map((o) => o.title)).toEqual(['Keep me'])
+})
+
 test('drag the Board tile onto the canvas to place a board there', async () => {
   await createProject(t.page, t.projectsDir, 'Toolbar drag')
   const canvas = t.page.getByTestId('canvas')

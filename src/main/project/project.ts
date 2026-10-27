@@ -6,6 +6,7 @@ import type Database from 'better-sqlite3'
 import type { ProjectSummary } from '@shared/types'
 import { openDatabase, type ProjectDb } from '../db/client'
 import { assets, boards, projectMeta } from '../db/schema'
+import { AssetRepository } from './assets'
 import { BoardRepository } from './boards'
 import { FolderRepository } from './folders'
 import { ObjectRepository } from './objects'
@@ -20,22 +21,30 @@ export const PROJECT_SUBDIRS = ['assets', 'thumbs', 'backups'] as const
  * This module must not import `electron`, so it can be unit-tested.
  */
 export class Project {
+  /** The project's UUID (also used in asset URLs). */
+  readonly id: string
   readonly mainBoardId: string
   readonly boards: BoardRepository
   readonly folders: FolderRepository
   readonly objects: ObjectRepository
+  readonly assets: AssetRepository
 
   private constructor(
     readonly path: string,
     private readonly sqlite: Database.Database,
     readonly db: ProjectDb
   ) {
-    const meta = db.select({ mainBoardId: projectMeta.mainBoardId }).from(projectMeta).get()
+    const meta = db
+      .select({ id: projectMeta.id, mainBoardId: projectMeta.mainBoardId })
+      .from(projectMeta)
+      .get()
     if (!meta) throw new Error(`Project database is missing its metadata: ${path}`)
+    this.id = meta.id
     this.mainBoardId = meta.mainBoardId
     this.boards = new BoardRepository(db, meta.mainBoardId)
     this.folders = new FolderRepository(db)
     this.objects = new ObjectRepository(db, this.boards)
+    this.assets = new AssetRepository(db, path)
   }
 
   static create(parentDir: string, name: string, migrationsFolder: string): Project {

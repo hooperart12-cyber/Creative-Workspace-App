@@ -76,6 +76,65 @@ describe('matchSize', () => {
   })
 })
 
+const image = (id: string, x: number, y: number, w: number, h: number, extra = {}) =>
+  obj(id, x, y, w, h, {
+    type: 'image',
+    asset: {
+      id: `asset-${id}`,
+      sha256: 'a'.repeat(64),
+      originalName: `${id}.png`,
+      mime: 'image/png',
+      ext: 'png',
+      bytes: 1,
+      width: w * 10,
+      height: h * 10,
+      hasAlpha: true,
+      folderId: null
+    },
+    ...extra
+  })
+
+describe('images in arrangement', () => {
+  it('keeps image proportions when matching sizes', () => {
+    const objects = [obj('card', 0, 0, 300, 100), image('wide', 0, 0, 200, 100)]
+    expect(matchSize(objects, 'width')).toEqual([{ id: 'wide', width: 300, height: 150 }])
+    expect(matchSize(objects, 'height')).toEqual([])
+    // "Both": the image fits inside 300 × 400 instead of stretching.
+    expect(matchSize([obj('card', 0, 0, 300, 400), image('tall', 0, 0, 100, 200)], 'both')).toEqual(
+      [{ id: 'tall', width: 200, height: 400 }]
+    )
+  })
+
+  it('aligns rotated objects by the area they cover', () => {
+    // Rotated 90° around its top-left corner, a 100 × 50 image covers x -50..0, y 0..100.
+    const rotated = image('r', 0, 0, 100, 50, { rotation: 90 })
+    const plain = obj('p', 100, 200, 50, 50)
+    const patches = align([rotated, plain], 'left')
+    expect(patches).toEqual([{ id: 'p', x: -50 }])
+    const right = align([rotated, plain], 'right')
+    // Bounds span -50..150; the rotated image's right edge (0) moves to 150.
+    expect(right).toEqual([{ id: 'r', x: 150 }])
+  })
+
+  it('distributes by the area objects cover', () => {
+    const objects = [
+      obj('a', 0, 0, 100, 100),
+      image('r', 300, 0, 100, 50, { rotation: 90 }), // covers x 250..300
+      obj('c', 500, 0, 100, 100)
+    ]
+    // span 0..600, sizes 100 + 50 + 100, gap 175 → the image covers 275..325, so x = 325
+    const [patch] = distribute(objects, 'horizontal')
+    expect(patch.id).toBe('r')
+    expect(patch.x).toBeCloseTo(325)
+  })
+
+  it('finds drop targets under rotated board cards', () => {
+    const card = obj('card', 0, 0, 200, 100, { rotation: 90 }) // covers x -100..0
+    expect(findDropTarget([card], new Set(), { x: -50, y: 50 })?.id).toBe('card')
+    expect(findDropTarget([card], new Set(), { x: 50, y: 50 })).toBeUndefined()
+  })
+})
+
 describe('reorder (z-order)', () => {
   const stack = [
     obj('a', 0, 0, 1, 1, { zIndex: 1 }),

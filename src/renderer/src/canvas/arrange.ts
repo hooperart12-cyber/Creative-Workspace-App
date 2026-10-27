@@ -1,30 +1,36 @@
 import type { CanvasObject, ObjectPatch } from '@shared/types'
 import type { Point } from '@shared/types'
-import { boundsOf, containsPoint, type Rect } from './geometry'
+import { boundsOf, containsPoint, objectBounds, type Rect } from './geometry'
+import { lockedAspectRatio } from './objectTypes'
 
 export type AlignMode = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom'
 export type DistributeAxis = 'horizontal' | 'vertical'
 export type ZOrderOp = 'forward' | 'backward' | 'front' | 'back'
 
-/** Aligns objects to the edges or centre of their combined bounds. */
+/**
+ * Aligns objects to the edges or centre of their combined bounds. Rotated objects align by
+ * the area they cover on screen; objects only move, never change size.
+ */
 export function align(objects: CanvasObject[], mode: AlignMode): ObjectPatch[] {
-  const b = boundsOf(objects)
+  const boxes = new Map(objects.map((o) => [o.id, objectBounds(o)]))
+  const b = boundsOf([...boxes.values()])
   if (!b || objects.length < 2) return []
   return objects
     .map((o) => {
+      const box = boxes.get(o.id)!
       switch (mode) {
         case 'left':
-          return { id: o.id, x: b.x }
+          return { id: o.id, x: o.x + b.x - box.x }
         case 'hcenter':
-          return { id: o.id, x: b.x + (b.width - o.width) / 2 }
+          return { id: o.id, x: o.x + b.x + (b.width - box.width) / 2 - box.x }
         case 'right':
-          return { id: o.id, x: b.x + b.width - o.width }
+          return { id: o.id, x: o.x + b.x + b.width - box.width - box.x }
         case 'top':
-          return { id: o.id, y: b.y }
+          return { id: o.id, y: o.y + b.y - box.y }
         case 'vcenter':
-          return { id: o.id, y: b.y + (b.height - o.height) / 2 }
+          return { id: o.id, y: o.y + b.y + (b.height - box.height) / 2 - box.y }
         case 'bottom':
-          return { id: o.id, y: b.y + b.height - o.height }
+          return { id: o.id, y: o.y + b.y + b.height - box.height - box.y }
       }
     })
     .filter((p) => changed(objects, p))
@@ -35,22 +41,26 @@ export function distribute(objects: CanvasObject[], axis: DistributeAxis): Objec
   if (objects.length < 3) return []
   const pos = axis === 'horizontal' ? 'x' : 'y'
   const size = axis === 'horizontal' ? 'width' : 'height'
-  const sorted = [...objects].sort((a, b) => a[pos] - b[pos])
-  const first = sorted[0]
-  const last = sorted[sorted.length - 1]
+  const items = objects.map((o) => ({ o, box: objectBounds(o) }))
+  const sorted = items.sort((a, b) => a.box[pos] - b.box[pos])
+  const first = sorted[0].box
+  const last = sorted[sorted.length - 1].box
   const span = last[pos] + last[size] - first[pos]
-  const totalSize = sorted.reduce((sum, o) => sum + o[size], 0)
+  const totalSize = sorted.reduce((sum, { box }) => sum + box[size], 0)
   const gap = (span - totalSize) / (sorted.length - 1)
   const patches: ObjectPatch[] = []
   let cursor = first[pos] + first[size] + gap
-  for (const o of sorted.slice(1, -1)) {
-    patches.push({ id: o.id, [pos]: cursor })
-    cursor += o[size] + gap
+  for (const { o, box } of sorted.slice(1, -1)) {
+    patches.push({ id: o.id, [pos]: o[pos] + cursor - box[pos] })
+    cursor += box[size] + gap
   }
   return patches.filter((p) => changed(objects, p))
 }
 
-/** Makes every object as wide and/or tall as the largest one. */
+/**
+ * Makes every object as wide and/or tall as the largest one. Images keep their aspect
+ * ratio: they scale to the target width or height, and for "both" fit inside that box.
+ */
 export function matchSize(
   objects: CanvasObject[],
   dimension: 'width' | 'height' | 'both'
@@ -59,11 +69,23 @@ export function matchSize(
   const width = Math.max(...objects.map((o) => o.width))
   const height = Math.max(...objects.map((o) => o.height))
   return objects
-    .map((o) => ({
-      id: o.id,
-      ...(dimension !== 'height' ? { width } : {}),
-      ...(dimension !== 'width' ? { height } : {})
-    }))
+    .map((o): ObjectPatch => {
+      const ratio = lockedAspectRatio(o)
+      if (ratio) {
+        const scale =
+          dimension === 'width'
+            ? width / o.width
+            : dimension === 'height'
+              ? height / o.height
+              : Math.min(width / o.width, height / o.height)
+        return { id: o.id, width: o.width * scale, height: (o.width * scale) / ratio }
+      }
+      return {
+        id: o.id,
+        ...(dimension !== 'height' ? { width } : {}),
+        ...(dimension !== 'width' ? { height } : {})
+      }
+    })
     .filter((p) => changed(objects, p))
 }
 
@@ -185,7 +207,7 @@ export function findDropTarget(
 ): CanvasObject | undefined {
   return [...objects]
     .sort((a, b) => b.zIndex - a.zIndex)
-    .find((o) => o.type === 'board' && !dragged.has(o.id) && containsPoint(o, point))
+    .find((o) => o.type === 'board' && !dragged.has(o.id) && containsPoint(objectBounds(o), point))
 }
 
 function changed(objects: CanvasObject[], patch: ObjectPatch): boolean {

@@ -1,6 +1,17 @@
-import { BrowserWindow, dialog, ipcMain, webContents, type IpcMainInvokeEvent } from 'electron'
+import { join } from 'node:path'
+import {
+  app,
+  BrowserWindow,
+  clipboard as systemClipboard,
+  dialog,
+  ipcMain,
+  webContents,
+  type IpcMainInvokeEvent
+} from 'electron'
+import { IMAGE_EXTENSIONS, SUPPORTED_IMAGES_LABEL } from '@shared/assets'
 import type { IpcChannel, IpcEventChannel, IpcEvents, IpcRequests } from '@shared/ipc'
-import type { ClipboardContents } from '@shared/types'
+import type { ClipboardContents, ImportBytesInput, ImportResult } from '@shared/types'
+import { localPathsFromUriList, REMOTE_FILE_REASON } from './clipboardFiles'
 import type { Project } from './project/project'
 import type { ProjectRegistry } from './project/projectRegistry'
 import type { RecentProjects } from './project/recentProjects'
@@ -187,18 +198,104 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
     return created
   })
 
-  // One clipboard for the whole app, so you can copy in one window and paste in another.
-  // It only holds object ids, and is tied to the project they came from.
-  let clipboard: { projectPath: string; contents: ClipboardContents } | null = null
-
-  handle('clipboard:set', (event, contents) => {
+  handle('objects:createImages', (event, input) => {
     const project = requireProject(event)
-    clipboard = contents ? { projectPath: project.path, contents } : null
+    const ids = project.objects.createImages(input)
+    broadcastContent(project)
+    return ids
   })
 
-  handle('clipboard:get', (event) => {
+  handle('assets:importFiles', async (event, paths) => {
+    const project = requireProject(event)
+    const result = await project.assets.importFiles(paths)
+    broadcastChanged(project)
+    return result
+  })
+
+  handle('assets:importBytes', async (event, files) => {
+    const project = requireProject(event)
+    const result = await project.assets.importByteFiles(files)
+    broadcastChanged(project)
+    return result
+  })
+
+  handle('assets:saveOriginal', async (event, assetId) => {
+    const project = requireProject(event)
+    const asset = project.assets.get(assetId)
+    const window = BrowserWindow.fromWebContents(event.sender)!
+    const result = await dialog.showSaveDialog(window, {
+      title: 'Save original file',
+      defaultPath: join(app.getPath('downloads'), asset.originalName)
+    })
+    if (result.canceled || !result.filePath) return false
+    await project.assets.exportOriginal(assetId, result.filePath)
+    return true
+  })
+
+  handle('dialog:pickImages', async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)!
+    const result = await dialog.showOpenDialog(window, {
+      title: 'Add images',
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: `Images (${SUPPORTED_IMAGES_LABEL})`, extensions: [...IMAGE_EXTENSIONS] },
+        { name: 'All files', extensions: ['*'] }
+      ]
+    })
+    return result.canceled ? [] : result.filePaths
+  })
+
+  // One clipboard for the whole app, so you can copy in one window and paste in another.
+  // It only holds object ids, and is tied to the project they came from. Copying also puts
+  // a short note on the system clipboard: if that note is gone, something newer was copied
+  // elsewhere (a browser image, a screenshot, files) and Paste uses that instead.
+  let clipboard: { projectPath: string; contents: ClipboardContents; marker: string } | null = null
+
+  handle('clipboard:set', async (event, contents) => {
+    const project = requireProject(event)
+    if (!contents) {
+      clipboard = null
+      return
+    }
+    const count = contents.objectIds.length
+    const marker = `${count} item${count === 1 ? '' : 's'} copied in Creative Workspace`
+    await systemClipboard.writeText(marker)
+    clipboard = { projectPath: project.path, contents, marker }
+  })
+
+  const ownClipboard = async (): Promise<boolean> => {
+    if (!clipboard) return false
+    const items = await readSystemClipboard()
+    const text = items.find((item) => item.types.includes('text/plain'))
+    if (!text) return false
+    const value = await text
+      .getType('text/plain')
+      .then((blob) => blob.text())
+      .catch(() => '')
+    return value === clipboard.marker
+  }
+
+  handle('clipboard:get', async (event) => {
     const project = registry.get(event.sender.id)
-    return project && clipboard?.projectPath === project.path ? clipboard.contents : null
+    if (!project || clipboard?.projectPath !== project.path) return null
+    return (await ownClipboard()) ? clipboard.contents : null
+  })
+
+  handle('clipboard:importExternal', async (event) => {
+    const project = requireProject(event)
+    if (await ownClipboard()) return null
+    const content = await readExternalClipboard()
+    if (!content) return null
+    let result: ImportResult
+    if (content.kind === 'files') {
+      result = await project.assets.importFiles(content.paths)
+      // Links to other computers were never opened (see localPathsFromUriList).
+      result.skipped.push(...content.remote.map((name) => ({ name, reason: REMOTE_FILE_REASON })))
+    } else {
+      result = await project.assets.importByteFiles([content.file])
+    }
+    broadcastChanged(project)
+    return result
   })
 
   handle('folder:create', (event, input) => {
@@ -235,6 +332,62 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
     if (project) window.setTitle(`${project.summary().name} — Creative Workspace`)
     trackWindow(window, registry)
   })
+}
+
+/** Image types other programs put on the clipboard, best first (browsers and screenshots use PNG). */
+const CLIPBOARD_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp']
+
+/**
+ * What another program copied: files (File Explorer / Finder list them as `file:` URLs)
+ * or an image. Files win, because copying a file can also carry its icon as an image.
+ */
+async function readExternalClipboard(): Promise<
+  | { kind: 'files'; paths: string[]; remote: string[] }
+  | { kind: 'image'; file: ImportBytesInput }
+  | null
+> {
+  try {
+    const items = await readSystemClipboard()
+    for (const item of items) {
+      if (!item.types.includes('text/uri-list')) continue
+      const list = await (await item.getType('text/uri-list')).text()
+      const { paths, remote } = localPathsFromUriList(list)
+      if (paths.length || remote.length) return { kind: 'files', paths, remote }
+    }
+    for (const item of items) {
+      const type = CLIPBOARD_IMAGE_TYPES.find((t) => item.types.includes(t))
+      if (!type) continue
+      const blob = (await item.getType(type)) as Blob
+      const bytes = new Uint8Array(await blob.arrayBuffer())
+      return { kind: 'image', file: { name: pastedImageName(type), bytes } }
+    }
+  } catch {
+    // An unreadable clipboard just means there's nothing to paste.
+  }
+  return null
+}
+
+/**
+ * Right after something is copied, another program (Windows clipboard history, a clipboard
+ * manager) may hold the clipboard for a moment and a read comes back empty. Retry briefly.
+ */
+async function readSystemClipboard(): Promise<Electron.ClipboardItem[]> {
+  const read = () => systemClipboard.read().catch(() => [])
+  let items = await read()
+  for (const delay of [50, 150, 300]) {
+    if (items.some((item) => item.types.length > 0)) break
+    await new Promise((resolve) => setTimeout(resolve, delay))
+    items = await read()
+  }
+  return items
+}
+
+/** e.g. "Pasted image 2026-10-24 19.30.12.png" */
+function pastedImageName(type: string): string {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}.${pad(d.getMinutes())}.${pad(d.getSeconds())}`
+  return `Pasted image ${stamp}.${type === 'image/jpeg' ? 'jpg' : type.split('/')[1]}`
 }
 
 /** Releases a window's project when the window closes. */

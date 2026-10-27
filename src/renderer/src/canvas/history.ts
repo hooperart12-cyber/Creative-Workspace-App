@@ -1,3 +1,5 @@
+import { serialQueue } from './queue'
+
 /** An undoable action. `redo` re-applies it after an undo. */
 export interface Command {
   label: string
@@ -9,7 +11,8 @@ export interface Command {
 export class History {
   private undoStack: Command[] = []
   private redoStack: Command[] = []
-  private busy = false
+  /** Steps run one after another: pressing Ctrl+Z twice quickly undoes two steps. */
+  private readonly enqueue = serialQueue()
 
   constructor(private readonly limit = 200) {}
 
@@ -42,21 +45,17 @@ export class History {
     this.redoStack = []
   }
 
-  private async step(
+  private step(
     from: Command[],
     to: Command[],
     run: (c: Command) => Promise<void>
   ): Promise<Command | undefined> {
-    if (this.busy) return undefined
-    const command = from.pop()
-    if (!command) return undefined
-    this.busy = true
-    try {
+    return this.enqueue(async () => {
+      const command = from.pop()
+      if (!command) return undefined
       await run(command)
       to.push(command)
       return command
-    } finally {
-      this.busy = false
-    }
+    })
   }
 }
