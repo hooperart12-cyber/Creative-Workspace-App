@@ -33,13 +33,13 @@ describe('Project', () => {
     project.close()
   })
 
-  it('reopens a project and keeps its data', () => {
+  it('reopens a project and keeps its data', async () => {
     const created = Project.create(dir, 'Reopen', migrations)
     created.rename('Renamed')
     const { id, mainBoardId } = created.summary()
     created.close()
 
-    const reopened = Project.open(join(dir, 'Reopen.cwproj'), migrations)
+    const reopened = await Project.open(join(dir, 'Reopen.cwproj'), migrations)
     expect(reopened.summary()).toMatchObject({ id, mainBoardId, name: 'Renamed' })
     reopened.close()
   })
@@ -52,10 +52,10 @@ describe('Project', () => {
     project.close()
   })
 
-  it('refuses to overwrite an existing project or open a non-project folder', () => {
+  it('refuses to overwrite an existing project or open a non-project folder', async () => {
     Project.create(dir, 'Dup', migrations).close()
     expect(() => Project.create(dir, 'Dup', migrations)).toThrow(/already exists/)
-    expect(() => Project.open(dir, migrations)).toThrow(/Not a Creative Workspace project/)
+    await expect(Project.open(dir, migrations)).rejects.toThrow(/Not a Creative Workspace project/)
   })
 
   it('rejects empty names on rename', () => {
@@ -77,10 +77,10 @@ describe('sanitizeProjectName', () => {
 })
 
 describe('ProjectRegistry', () => {
-  it('shares one project between windows and closes it after the last release', () => {
+  it('shares one project between windows and closes it after the last release', async () => {
     const registry = new ProjectRegistry(migrations)
     const project = registry.create(1, dir, 'Shared')
-    expect(registry.share(1, 2)).toBe(project)
+    expect(await registry.share(1, 2)).toBe(project)
     expect(registry.ownersOf(project).sort()).toEqual([1, 2])
 
     registry.release(1)
@@ -92,10 +92,10 @@ describe('ProjectRegistry', () => {
     expect(() => project.summary()).toThrow()
   })
 
-  it('reuses the open connection when a second window opens the same path', () => {
+  it('reuses the open connection when a second window opens the same path', async () => {
     const registry = new ProjectRegistry(migrations)
     const project = registry.create(1, dir, 'Same')
-    expect(registry.open(2, project.path)).toBe(project)
+    expect(await registry.open(2, project.path)).toBe(project)
     registry.closeAll()
   })
 })

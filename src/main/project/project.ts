@@ -1,17 +1,26 @@
 import { randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { count, eq, isNull } from 'drizzle-orm'
 import type Database from 'better-sqlite3'
 import type { ProjectSummary } from '@shared/types'
-import { openDatabase, type ProjectDb } from '../db/client'
+import {
+  migrateDatabase,
+  openDatabase,
+  openRawDatabase,
+  wrapDatabase,
+  type ProjectDb
+} from '../db/client'
 import { assets, boards, projectMeta } from '../db/schema'
 import { AssetRepository } from './assets'
+import { createRecoveryPoint } from './backup'
 import { BoardRepository } from './boards'
 import { FolderRepository } from './folders'
 import { LibraryRepository } from './library'
 import { NoteRepository } from './notes'
 import { ObjectRepository } from './objects'
+import { pendingMigrationTags, readChangeRevision, readProjectIdentity } from './schemaInfo'
+import { SearchRepository } from './search'
 
 export const PROJECT_EXTENSION = '.cwproj'
 export const PROJECT_DB_FILE = 'project.db'
@@ -32,6 +41,7 @@ export class Project {
   readonly objects: ObjectRepository
   readonly notes: NoteRepository
   readonly assets: AssetRepository
+  readonly search: SearchRepository
 
   private constructor(
     readonly path: string,
@@ -51,6 +61,16 @@ export class Project {
     this.objects = new ObjectRepository(db, this.boards)
     this.notes = new NoteRepository(db, this.boards)
     this.assets = new AssetRepository(db, path)
+    this.search = new SearchRepository(db)
+  }
+
+  /** The open connection, for snapshots and recovery points. */
+  get connection(): Database.Database {
+    return this.sqlite
+  }
+
+  changeRevision(): number | null {
+    return readChangeRevision(this.sqlite)
   }
 
   static create(parentDir: string, name: string, migrationsFolder: string): Project {
@@ -80,7 +100,11 @@ export class Project {
     return new Project(path, sqlite, db)
   }
 
-  static open(path: string, migrationsFolder: string): Project {
+  static async open(
+    path: string,
+    migrationsFolder: string,
+    options?: { vaultFor?: (projectId: string) => string }
+  ): Promise<Project> {
     const dbFile = join(path, PROJECT_DB_FILE)
     if (!existsSync(dbFile)) {
       throw new Error(`Not a Creative Workspace project (missing ${PROJECT_DB_FILE}): ${path}`)
@@ -88,9 +112,39 @@ export class Project {
     // Recreate any missing sub-folders, e.g. if a sync tool skipped empty folders.
     for (const dir of PROJECT_SUBDIRS) mkdirSync(join(path, dir), { recursive: true })
 
-    const { sqlite, db } = openDatabase(dbFile, migrationsFolder)
+    const sqlite = openRawDatabase(dbFile)
     try {
-      return new Project(path, sqlite, db)
+      const sessionFile = join(path, 'recovery', 'session')
+      if (existsSync(sessionFile)) {
+        const check = sqlite.prepare('PRAGMA integrity_check').get() as { integrity_check: string }
+        if (check.integrity_check !== 'ok') {
+          throw new Error(
+            'This project’s database did not pass its integrity check. Restore a recovery point. The project was not changed.'
+          )
+        }
+      }
+      const pending = pendingMigrationTags(sqlite, migrationsFolder)
+      if (pending.length) {
+        const identity = readProjectIdentity(sqlite)
+        const vaultRoot = options?.vaultFor?.(identity.id)
+        if (!vaultRoot) {
+          throw new Error(
+            'This project needs a recovery point before its data can be updated, and no backup location is available.'
+          )
+        }
+        await createRecoveryPoint({
+          sqlite,
+          projectPath: path,
+          projectId: identity.id,
+          projectName: identity.name,
+          vaultRoot,
+          kind: 'premigration'
+        })
+      }
+      migrateDatabase(sqlite, migrationsFolder)
+      mkdirSync(join(path, 'recovery'), { recursive: true })
+      writeFileSync(join(path, 'recovery', 'session'), String(Date.now()))
+      return new Project(path, sqlite, wrapDatabase(sqlite))
     } catch (error) {
       sqlite.close()
       throw error
@@ -145,6 +199,7 @@ export class Project {
   }
 
   close(): void {
+    rmSync(join(this.path, 'recovery', 'session'), { force: true })
     if (this.sqlite.open) this.sqlite.close()
   }
 

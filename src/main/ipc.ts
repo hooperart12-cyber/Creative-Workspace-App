@@ -17,7 +17,13 @@ import type { IpcChannel, IpcEventChannel, IpcEvents, IpcRequests } from '@share
 import { isSafeLink } from '@shared/notes'
 import type { ClipboardContents, ImportBytesInput, ImportResult } from '@shared/types'
 import { localPathsFromUriList, REMOTE_FILE_REASON } from './clipboardFiles'
+import { BackupService } from './project/backupService'
+import { deleteRecoveryPoint, verifyPoint } from './project/backup'
+import { removeDraft, takeDrafts, writeDraft, type NoteDraft } from './project/journal'
+import { withProjectLock } from './project/lock'
 import { NoteLeases } from './project/noteLeases'
+import { exportProjectZip, importProjectZip } from './project/projectZip'
+import { restoreProject } from './project/restore'
 import type { Project } from './project/project'
 import type { ProjectRegistry } from './project/projectRegistry'
 import type { RecentProjects } from './project/recentProjects'
@@ -28,8 +34,63 @@ type Handler<C extends IpcChannel> = (
   ...args: IpcRequests[C]['args']
 ) => IpcRequests[C]['result'] | Promise<IpcRequests[C]['result']>
 
+const SAVE_CHANNELS = new Set<string>([
+  'project:rename',
+  'board:create',
+  'board:rename',
+  'board:move',
+  'board:delete',
+  'board:setViewport',
+  'objects:update',
+  'objects:delete',
+  'objects:restore',
+  'objects:moveToBoard',
+  'objects:copyTo',
+  'objects:createImages',
+  'objects:createFromAssets',
+  'objects:setFileAppearance',
+  'assets:importFiles',
+  'assets:importBytes',
+  'assets:saveCover',
+  'assets:recordPdfInfo',
+  'assets:setPreview',
+  'folder:create',
+  'folder:rename',
+  'folder:move',
+  'folder:delete',
+  'library:rename',
+  'library:move',
+  'library:trash',
+  'library:restore',
+  'library:importFiles',
+  'library:importTree',
+  'trash:restoreFolders',
+  'trash:purge',
+  'trash:empty',
+  'notes:create',
+  'notes:saveContent',
+  'notes:updateStyle'
+])
+
 function handle<C extends IpcChannel>(channel: C, handler: Handler<C>): void {
-  ipcMain.handle(channel, (event, ...args) => handler(event, ...(args as IpcRequests[C]['args'])))
+  ipcMain.handle(channel, async (event, ...args) => {
+    const saving = SAVE_CHANNELS.has(channel)
+    if (saving) send(event.sender.id, 'save:state', { phase: 'saving', error: null })
+    try {
+      const result = await handler(event, ...(args as IpcRequests[C]['args']))
+      if (saving)
+        send(event.sender.id, 'save:state', { phase: 'saved', error: null, at: Date.now() })
+      return result
+    } catch (error) {
+      if (saving) {
+        send(event.sender.id, 'save:state', {
+          phase: 'failed',
+          error: error instanceof Error ? error.message : String(error)
+        })
+      }
+      throw error
+    }
+  })
 }
 
 function send<E extends IpcEventChannel>(
@@ -43,6 +104,8 @@ function send<E extends IpcEventChannel>(
 
 export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentProjects): void {
   const importCancel = new Map<number, { cancelled: boolean }>()
+  const backups = new BackupService(app.getPath('userData'), () => registry.all())
+  backups.start()
   const requireProject = (event: IpcMainInvokeEvent): Project => {
     const project = registry.get(event.sender.id)
     if (!project) throw new Error('No project is open in this window.')
@@ -99,14 +162,19 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
     const summary = project.summary()
     recent.touch(summary)
     setWindowTitle(event, summary.name)
+    void backups.onOpened(project)
     return summary
   })
 
-  handle('project:open', (event, path) => {
+  handle('project:open', async (event, path) => {
     releaseWindowLeases(event.sender.id)
-    const summary = registry.open(event.sender.id, path).summary()
+    const project = await registry.open(event.sender.id, path, {
+      vaultFor: (id) => backups.vaultFor(id).root
+    })
+    const summary = project.summary()
     recent.touch(summary)
     setWindowTitle(event, summary.name)
+    void backups.onOpened(project)
     return summary
   })
 
@@ -489,16 +557,18 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
   })
 
   const finishPurge = async (project: Project, result: ReturnType<Project['library']['purge']>) => {
-    const unlinkErrors: string[] = []
-    for (const file of result.removedFiles) {
-      try {
-        await project.assets.deleteStoredFiles(file.sha256, file.ext)
-      } catch (error) {
-        unlinkErrors.push(error instanceof Error ? error.message : String(error))
+    return withProjectLock(project.path, async () => {
+      const unlinkErrors: string[] = []
+      for (const file of result.removedFiles) {
+        try {
+          await project.assets.deleteStoredFiles(file.sha256, file.ext)
+        } catch (error) {
+          unlinkErrors.push(error instanceof Error ? error.message : String(error))
+        }
       }
-    }
-    broadcastContent(project)
-    return { filesDeleted: result.filesDeleted, filesKept: result.filesKept, unlinkErrors }
+      broadcastContent(project)
+      return { filesDeleted: result.filesDeleted, filesKept: result.filesKept, unlinkErrors }
+    })
   }
 
   handle('trash:list', (event, kind) => requireProject(event).library.trashList(kind))
@@ -529,16 +599,16 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
   handle('recent:list', () => recent.list())
   handle('recent:remove', (_event, path) => recent.remove(path))
 
-  handle('window:openNew', (event, options) => {
+  handle('window:openNew', async (event, options) => {
     const window = createWindow({ boardId: options?.boardId })
-    const project = registry.share(event.sender.id, window.webContents.id)
+    const project = await registry.share(event.sender.id, window.webContents.id)
     if (project) window.setTitle(`${project.summary().name} — Creative Workspace`)
     trackWindow(window, registry)
   })
 
-  handle('window:openReader', (event, options) => {
+  handle('window:openReader', async (event, options) => {
     const window = createWindow({ pdfObjectId: options.objectId })
-    const project = registry.share(event.sender.id, window.webContents.id)
+    const project = await registry.share(event.sender.id, window.webContents.id)
     if (project) window.setTitle(`${project.summary().name} — Creative Workspace`)
     trackWindow(window, registry)
   })
@@ -627,6 +697,116 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
       send(owner, 'notes:editedElsewhere', leases.editedElsewhere(project.path, owner))
     }
   }
+
+  handle('backup:status', (event) => backups.status(requireProject(event)))
+  handle('backup:create', (event) => backups.create(requireProject(event), 'manual'))
+  handle('backup:verify', (event, id) => {
+    const project = requireProject(event)
+    return verifyPoint(backups.vaultFor(project.id).root, id, 'checksum')
+  })
+  handle('backup:delete', async (event, id) => {
+    const project = requireProject(event)
+    await deleteRecoveryPoint(backups.vaultFor(project.id).root, id)
+  })
+  handle('backup:restore', async (event, id, parentDir, name) => {
+    const project = requireProject(event)
+    const root = backups.vaultFor(project.id).root
+    const manifest = (await backups.status(project)).points.find((point) => point.id === id)
+    if (!manifest) throw new Error('That recovery point was not found.')
+    return restoreProject({
+      vaultRoot: root,
+      manifest,
+      parentDir,
+      name,
+      migrationsFolder: app.isPackaged
+        ? join(process.resourcesPath, 'drizzle')
+        : join(app.getAppPath(), 'drizzle'),
+      vaultFor: (projectId) => backups.vaultFor(projectId).root
+    })
+  })
+  handle('backup:settings', (event) => backups.settings(requireProject(event).id))
+  handle('backup:saveSettings', (event, patch) =>
+    backups.saveSettings(requireProject(event).id, patch)
+  )
+  handle('project:exportZip', async (event, destination) => {
+    const project = requireProject(event)
+    await withProjectLock(project.path, () =>
+      exportProjectZip({ sqlite: project.connection, projectPath: project.path, destination })
+    )
+  })
+  handle('project:importZip', async (_event, zipPath, parentDir, name) =>
+    importProjectZip({
+      zipPath,
+      parentDir,
+      name,
+      migrationsFolder: app.isPackaged
+        ? join(process.resourcesPath, 'drizzle')
+        : join(app.getAppPath(), 'drizzle'),
+      vaultFor: (projectId) => backups.vaultFor(projectId).root
+    })
+  )
+  handle('dialog:pickSaveZip', async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)!
+    const result = await dialog.showSaveDialog(window, {
+      title: 'Export project',
+      filters: [{ name: 'Zip archive', extensions: ['zip'] }]
+    })
+    return result.canceled ? null : (result.filePath ?? null)
+  })
+  handle('dialog:pickZip', async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)!
+    const result = await dialog.showOpenDialog(window, {
+      title: 'Import a project archive',
+      filters: [{ name: 'Zip archive', extensions: ['zip'] }],
+      properties: ['openFile']
+    })
+    return result.canceled ? null : (result.filePaths[0] ?? null)
+  })
+  handle('search:query', (event, text, filter, phrase) =>
+    requireProject(event).search.search(text, filter, phrase)
+  )
+  handle('search:appearances', (event, assetId) =>
+    requireProject(event).search.appearances(assetId)
+  )
+  handle('search:rebuild', (event) => requireProject(event).search.rebuild())
+  handle('search:nextPdf', (event) => requireProject(event).search.nextPdfJob())
+  handle('search:addPdfPage', (event, assetId, page, text, title) => {
+    requireProject(event).search.addPdfPage(assetId, page, text, title)
+  })
+  handle('search:finishPdf', (event, assetId, state, note) => {
+    requireProject(event).search.finishPdf(assetId, state, note)
+  })
+  handle('assets:get', (event, id) => requireProject(event).assets.get(id))
+  handle('recovery:writeDraft', (event, draft) => {
+    writeDraft(requireProject(event).path, draft as NoteDraft)
+  })
+  handle('recovery:clearDraft', (event, objectId) => {
+    removeDraft(requireProject(event).path, objectId)
+  })
+  handle('recovery:list', (event) => {
+    const project = requireProject(event)
+    return takeDrafts(project.path, (objectId) => {
+      const row = project.connection
+        .prepare('SELECT revision, data FROM board_objects WHERE id = ?')
+        .get(objectId) as { revision: number; data: string } | undefined
+      if (!row) return null
+      const data = JSON.parse(row.data) as { content?: unknown }
+      return { revision: row.revision, contentJson: JSON.stringify(data.content ?? null) }
+    }).map((item) => {
+      const board = project.connection
+        .prepare('SELECT board_id FROM board_objects WHERE id = ?')
+        .get(item.draft.objectId) as { board_id: string } | undefined
+      return {
+        objectId: item.draft.objectId,
+        baseRevision: item.draft.baseRevision,
+        plainText: item.draft.plainText,
+        writtenAt: item.draft.writtenAt,
+        assessment: item.assessment.kind as 'restore' | 'conflict' | 'missing',
+        boardId: board?.board_id ?? null,
+        contentJson: JSON.stringify(item.draft.content)
+      }
+    })
+  })
 
   releaseWindowLeases = (owner: number): void => {
     const project = registry.get(owner)

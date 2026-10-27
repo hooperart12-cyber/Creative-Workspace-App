@@ -103,12 +103,12 @@ M3 is built in three parts, each with its own branch and PR.
 - [x] Trash view: restore or permanently delete objects and assets
 
 ## M5 — Reliability & Productivity Polish (§19–21)
-- [ ] Visible save status indicator (text notes already have one, M3B)
-- [ ] Rolling DB backups in `backups/` + "Export project as .zip"
-- [ ] Command palette (Ctrl+K / Ctrl+P) via cmdk
-- [ ] Project-wide search (FTS5): board names, notes, file names, PDF text
-- [ ] Keyboard shortcut reference sheet
-- [ ] Windows installer build tested on a real PC
+- [x] Visible save status indicator (text notes already have one, M3B)
+- [x] Recovery points outside the project, including stored files, plus “Export project as .zip” (ADR-017; the in-project `backups/` folder stays empty)
+- [x] Command palette (Ctrl/Cmd+K) via cmdk
+- [x] Project-wide search (FTS5): board names, notes, file names, PDF text
+- [x] Keyboard shortcut reference sheet (Ctrl/Cmd+/)
+- [ ] Windows installer build tested on a real PC (CI builds the installer; this box is the manual install)
 
 ---
 

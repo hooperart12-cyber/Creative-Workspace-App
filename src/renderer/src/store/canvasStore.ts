@@ -38,6 +38,12 @@ interface CanvasState {
   pdfReaderId: string | null
   /** Generic file card whose details are open. */
   fileDetailsId: string | null
+  /** Image opened from search or the library, with no board card. */
+  viewerAssetId: string | null
+  /** PDF opened from search, with no board card. */
+  pdfAsset: { assetId: string; page: number; query: string } | null
+  /** Generic file opened from search, with no board card. */
+  fileAssetId: string | null
   /** Bumped when a PDF cover may have appeared, so the card refetches it. */
   coverEpoch: number
 
@@ -53,6 +59,9 @@ interface CanvasState {
   setViewerObjectId: (id: string | null) => void
   setPdfReaderId: (id: string | null) => void
   setFileDetailsId: (id: string | null) => void
+  setViewerAssetId: (id: string | null) => void
+  setPdfAsset: (pdf: { assetId: string; page: number; query: string } | null) => void
+  setFileAssetId: (id: string | null) => void
   bumpCovers: () => void
 }
 
@@ -90,6 +99,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   viewerObjectId: null,
   pdfReaderId: null,
   fileDetailsId: null,
+  viewerAssetId: null,
+  pdfAsset: null,
+  fileAssetId: null,
   coverEpoch: 0,
 
   setViewport: (viewport) => set({ viewport }),
@@ -110,5 +122,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   setViewerObjectId: (viewerObjectId) => set({ viewerObjectId }),
   setPdfReaderId: (pdfReaderId) => set({ pdfReaderId }),
   setFileDetailsId: (fileDetailsId) => set({ fileDetailsId }),
+  setViewerAssetId: (viewerAssetId) => set({ viewerAssetId }),
+  setPdfAsset: (pdfAsset) => set({ pdfAsset }),
+  setFileAssetId: (fileAssetId) => set({ fileAssetId }),
   bumpCovers: () => set({ coverEpoch: get().coverEpoch + 1 })
 }))

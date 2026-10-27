@@ -28,7 +28,10 @@ function keysBelongElsewhere(e: KeyboardEvent): boolean {
     useWorkspaceStore.getState().dialog !== null ||
     useCanvasStore.getState().viewerObjectId !== null ||
     useCanvasStore.getState().pdfReaderId !== null ||
+    useCanvasStore.getState().pdfAsset !== null ||
+    useCanvasStore.getState().viewerAssetId !== null ||
     useCanvasStore.getState().fileDetailsId !== null ||
+    useCanvasStore.getState().fileAssetId !== null ||
     isEditingNote()
   )
 }

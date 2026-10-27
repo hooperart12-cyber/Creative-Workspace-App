@@ -189,12 +189,12 @@ describe('BoardRepository', () => {
     expect(() => project.boards.delete(project.mainBoardId)).toThrow(/main board cannot be deleted/)
   })
 
-  it('persists the hierarchy across reopen', () => {
+  it('persists the hierarchy across reopen', async () => {
     const a = project.boards.create(project.mainBoardId, 'A')
     project.boards.create(a.id, 'B')
     const path = project.path
     project.close()
-    project = Project.open(path, migrations)
+    project = await Project.open(path, migrations)
     expect(project.boards.list().map((x) => x.title)).toEqual(['Manga', 'A', 'B'])
   })
 })

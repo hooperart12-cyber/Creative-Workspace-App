@@ -17,23 +17,28 @@ export class ProjectRegistry {
     return project
   }
 
-  open(owner: number, path: string): Project {
+  open(
+    owner: number,
+    path: string,
+    options?: { vaultFor?: (projectId: string) => string }
+  ): Promise<Project> {
     const existing = this.projects.get(path)
     if (existing) {
       this.release(owner)
       existing.owners.add(owner)
       this.ownerToPath.set(owner, path)
-      return existing.project
+      return Promise.resolve(existing.project)
     }
-    const project = Project.open(path, this.migrationsFolder)
-    this.attach(owner, project)
-    return project
+    return Project.open(path, this.migrationsFolder, options).then((project) => {
+      this.attach(owner, project)
+      return project
+    })
   }
 
   /** Gives `owner` access to the project already opened by `sourceOwner`. */
-  share(sourceOwner: number, owner: number): Project | undefined {
+  share(sourceOwner: number, owner: number): Promise<Project | undefined> {
     const path = this.ownerToPath.get(sourceOwner)
-    return path ? this.open(owner, path) : undefined
+    return path ? this.open(owner, path) : Promise.resolve(undefined)
   }
 
   get(owner: number): Project | undefined {
@@ -45,6 +50,11 @@ export class ProjectRegistry {
   findById(id: string): Project | undefined {
     for (const { project } of this.projects.values()) if (project.id === id) return project
     return undefined
+  }
+
+  /** Projects that currently have at least one window. */
+  all(): Project[] {
+    return [...this.projects.values()].map((entry) => entry.project)
   }
 
   /** All owners (windows) that currently have the given project open. */

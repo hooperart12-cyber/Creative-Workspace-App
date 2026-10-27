@@ -171,13 +171,9 @@ docs/              Requirements, decisions, roadmap, handoff, this guide
 | `vitest` | ^5 | Unit test runner |
 | `eslint`, `@eslint/js`, `typescript-eslint`, `eslint-plugin-react-hooks`, `globals` | ^10 / ^8 / ^7 | Linting |
 | `prettier` | ^3 | Code formatting |
-| `@types/node`, `@types/react`, `@types/react-dom`, `@types/better-sqlite3` | — | TypeScript type definitions |
-
-### Planned (added in later milestones; see ROADMAP)
-
-| Package | Milestone | Purpose |
-|---|---|---|
-| `cmdk` | M5 | Command palette |
+| `cmdk` | ^1.1 | Command palette (bundled into the renderer) |
+| `yazl`, `yauzl` | ^3 | Write and read a project ZIP in the main process. No native module |
+| `@types/node`, `@types/react`, `@types/react-dom`, `@types/better-sqlite3`, `@types/yazl`, `@types/yauzl` | — | TypeScript type definitions |
 
 ---
 
