@@ -65,6 +65,8 @@ export const assets = sqliteTable(
     width: integer('width'),
     height: integer('height'),
     hasAlpha: integer('has_alpha', { mode: 'boolean' }),
+    /** Set for PDFs once the file can be read. Null for other files and locked PDFs. */
+    pageCount: integer('page_count'),
     folderId: text('folder_id').references(() => folders.id),
     /** Manually attached preview for formats the app cannot render (§7). */
     previewAssetId: text('preview_asset_id').references((): AnySQLiteColumn => assets.id),

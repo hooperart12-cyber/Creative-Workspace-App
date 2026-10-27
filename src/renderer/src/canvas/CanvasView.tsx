@@ -18,6 +18,8 @@ import {
   worldToScreen,
   zoomAt
 } from './geometry'
+import { DocumentNode } from './DocumentNode'
+import { FileNode } from './FileNode'
 import { ImageNode } from './ImageNode'
 import { canRotate, isViewable, lockedAspectRatio } from './objectTypes'
 import { useCanvasShortcuts, isSpaceHeld } from './useCanvasShortcuts'
@@ -502,7 +504,17 @@ export function CanvasView() {
     const id = objectIdOf(e.target)
     const object = board.objects.find((o) => o.id === id)
     if (object?.type === 'board' && object.linkedBoardId) void openBoard(object.linkedBoardId)
-    else if (object && isViewable(object)) useCanvasStore.getState().setViewerObjectId(object.id)
+    else if (object?.type === 'document' && object.asset) {
+      const state = useCanvasStore.getState()
+      state.setViewerObjectId(null)
+      state.setFileDetailsId(null)
+      state.setPdfReaderId(object.id)
+    } else if (object?.type === 'file' && object.asset) {
+      const state = useCanvasStore.getState()
+      state.setViewerObjectId(null)
+      state.setPdfReaderId(null)
+      state.setFileDetailsId(object.id)
+    } else if (object && isViewable(object)) useCanvasStore.getState().setViewerObjectId(object.id)
     else if (object?.type === 'text') {
       // A quick second Ctrl+click is for links, not for editing.
       if (e.evt.ctrlKey || e.evt.metaKey) return
@@ -670,6 +682,22 @@ export function CanvasView() {
                 />
               ) : o.type === 'image' ? (
                 <ImageNode
+                  key={o.id}
+                  object={o}
+                  {...positionOf(o)}
+                  faded={cut.has(o.id)}
+                  zoom={viewport.zoom}
+                />
+              ) : o.type === 'document' ? (
+                <DocumentNode
+                  key={o.id}
+                  object={o}
+                  {...positionOf(o)}
+                  faded={cut.has(o.id)}
+                  zoom={viewport.zoom}
+                />
+              ) : o.type === 'file' ? (
+                <FileNode
                   key={o.id}
                   object={o}
                   {...positionOf(o)}

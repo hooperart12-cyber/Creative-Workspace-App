@@ -1,6 +1,6 @@
 # Creative Workspace App
 
-## Complete Feature Inventory — Version 1.4 (living document)
+## Complete Feature Inventory — Version 1.5 (living document)
 
 > **This Markdown file is the source of truth for requirements.** It was converted from the original PDF (v1.0, archived at [`docs/archive/Creative Workspace App v1.0.pdf`](archive/Creative%20Workspace%20App%20v1.0.pdf)).
 > Update it whenever a decision or scope change is made, and record the reasoning in [`DECISIONS.md`](DECISIONS.md). Progress is tracked in [`ROADMAP.md`](ROADMAP.md).
@@ -29,9 +29,9 @@
 | 2 | Platform and Multi-Window Support | 🟢 MVP (basic) | Electron `BrowserWindow`s; changes broadcast from the main process |
 | 3 | Projects and Organizational Structure | 🟢 **MVP – priority** (✅ core done in M1) | Nested boards + folders; Collections ⚪ Later; ADR-011 pending team review |
 | 4 | Infinite Canvas | 🟢 **MVP – priority** (✅ done in M2) | Navigation, selection, move/resize, group, lock, layers, align/distribute, grid/snap, smart guides |
-| 5 | Board Object Types | 🟢 **MVP – priority** (✅ images done in M3A, ✅ text notes done in M3B) | Documents next. Checklists, headers/dividers and containers 🟡 deprioritized |
-| 6 | Document Viewing and Review | 🟢 MVP (PDF only) | Other formats ⚪ Later |
-| 7 | Artwork and Image Handling | 🟢 **MVP – priority** (✅ images done in M3A) | JPEG/JPG, PNG, WebP and PDF first; other formats ⚪ Later |
+| 5 | Board Object Types | 🟢 **MVP – priority** (✅ images M3A, ✅ text notes M3B, ✅ PDFs and file cards M3C) | Checklists, headers/dividers and containers 🟡 deprioritized |
+| 6 | Document Viewing and Review | 🟢 MVP (✅ PDF viewing in M3C) | Bookmarks, comments and other formats ⚪ Later |
+| 7 | Artwork and Image Handling | 🟢 **MVP – priority** (✅ images M3A, ✅ PDF and stored files M3C) | Automatic previews for TIFF, PSD, .clip and .procreate ⚪ Later |
 | 8 | Project Asset Libraries | 🟢 **MVP – priority** | Storage approach decided (local-first) |
 | 9 | Image Stacks | ⚪ Later | |
 | 10 | Page Collections and Manga Planning | ⚪ Later | |
@@ -42,7 +42,7 @@
 | 15 | Collaboration and Shared Workspaces | ⚪ Later | **Requires cloud backend** (see DECISIONS ADR-006) |
 | 16 | Plot Roadmaps | 🔵 Optional | |
 | 17 | Covers, Typography, and Appearance | ⚪ Later | Notes already offer bundled and system fonts (M3B); board covers and font import later |
-| 18 | Quick Capture and Importing | 🟢 MVP (images/PDF) (✅ image paste and drag-drop done in M3A) | Direct library import in M4; URL link cards ⚪ Later |
+| 18 | Quick Capture and Importing | 🟢 MVP (✅ images, PDFs and other files can be dropped or pasted) | Direct library import in M4; URL link cards ⚪ Later |
 | 19 | Keyboard Shortcuts and Quick Commands | 🟢 MVP | ✅ Canvas shortcuts done in M2; command palette in M5 |
 | 20 | Board History and Recovery | 🟢 MVP (undo/redo, trash) | ✅ Undo/redo done in M2; Trash view M4; snapshots ⚪ Later |
 | 21 | Essential Quality-of-Life Features | 🟢 MVP | Autosave, save status, backups, project search |
@@ -226,7 +226,7 @@ Users should be able to create either completely freeform arrangements or highly
 
 ## 5. Board Object Types
 
-> **Status:** 🟢 **MVP – priority** (Milestone M3). Build order: **Images (M3A ✅) → Text Boxes/Notes (M3B ✅) → Documents (PDF) (M3C)**. Nested board covers moved to Later (§17).
+> **Status:** 🟢 **MVP – priority** (Milestone M3). Build order: **Images (M3A ✅) → Text Boxes/Notes (M3B ✅) → Documents and other files (M3C ✅)**. Nested board covers moved to Later (§17).
 > Checklists, Headers and Dividers, and Containers are 🟡 **deprioritized**. Tables, Connections, and Comments are ⚪ Later.
 
 The canvas should support multiple object types.
@@ -256,7 +256,9 @@ These are intended for character biographies, setting descriptions, worldbuildin
 - Open images in a full-size viewer.
 - Link images to their original asset files.
 
-### Documents 🟢 (PDF first)
+### Documents 🟢 (PDF first) — ✅ implemented in M3C (ADR-015)
+
+> PDFs are read-only cards with a first-page cover. Double-click opens a reader (continuous, single page, or two-page spread) with search, page thumbnails and the PDF's own outline. Other files are stored unchanged and shown as compact or preview cards. PDF editing, bookmarks and OCR are not included.
 
 - Place documents on boards as file objects.
 - Open documents in a dedicated viewer.
@@ -316,7 +318,7 @@ Advanced spreadsheet functionality is not required.
 
 ## 6. Document Viewing and Review
 
-> **Status:** 🟢 MVP for **PDF only** (viewing, search, outline navigation via pdf.js). Bookmarks, review comments, and other document formats are ⚪ Later (ADR-007).
+> **Status:** 🟢 MVP for **PDF viewing** — ✅ implemented in M3C (ADR-015): page navigation, continuous / single / two-page reading, search, thumbnails, the PDF's own outline, and saving the original. Bookmarks, review comments, text editing and other document formats are ⚪ Later (ADR-007, ADR-015).
 
 The application should support large writing files without attempting to become a complete writing program.
 
@@ -342,7 +344,7 @@ A 500-page manuscript should be a dedicated document, not one enormous canvas te
 
 ## 7. Artwork and Image Handling
 
-> **Status:** 🟢 **MVP – priority** for **JPEG/JPG, PNG, WebP and PDF**. ✅ **Implemented in M3A** for JPEG, PNG and WebP: originals stored byte-for-byte and never modified, proportional resizing only, transparency kept, full-size viewer with zoom, pan, fit, previous/next and original download (ADR-013). PDF comes in M3C. TIFF, PSD, .clip, .procreate and others are ⚪ Later; they can be stored with a manually attached preview (ADR-007).
+> **Status:** 🟢 **MVP – priority** for **JPEG/JPG, PNG, WebP and PDF**. ✅ **Implemented in M3A** for JPEG, PNG and WebP: originals stored byte-for-byte and never modified, proportional resizing only, transparency kept, full-size viewer with zoom, pan, fit, previous/next and original download (ADR-013). ✅ **Implemented in M3C** for PDFs (read-only reader) and for storing other files as generic cards with an optional image preview (ADR-015). Automatic previews for TIFF, PSD, .clip and .procreate remain ⚪ Later.
 
 ### Image Preservation
 
@@ -799,8 +801,8 @@ Font licensing and portability will need consideration during development.
 
 ## 18. Quick Capture and Importing
 
-> **Status:** 🟢 MVP for images and PDFs (paste, drag-and-drop, file picker, direct library import). URL link cards are ⚪ Later.
-> ✅ **Implemented in M3A for images:** paste screenshots, images copied in a browser and files copied in File Explorer; drag one or many files from File Explorer or a browser; file picker. Imported images are registered in the project library (top level until M4). Direct library import without a board comes in M4.
+> **Status:** 🟢 MVP for images, PDFs and other files (paste, drag-and-drop, file picker, direct library import). URL link cards are ⚪ Later.
+> ✅ **Implemented in M3A for images, and in M3C for PDFs and other files:** paste screenshots, images copied in a browser and files copied in File Explorer; drag one or many files from File Explorer or a browser; file picker. The Image tool stays images-only. Imported files are registered in the project library (top level until M4). Direct library import without a board comes in M4.
 
 The application should make collecting creative references easy.
 
@@ -1028,3 +1030,4 @@ The overarching goal is a **flexible, PC-based visual creative workspace that ca
 | 1.2 | 2026-10-24 | M1 implemented (§3); boards/folders relationship decided as separate hierarchies, pending team review (ADR-011) |
 | 1.3 | 2026-10-24 | M2 implemented (§4 canvas, canvas shortcuts §19, undo/redo §20); interaction model recorded (ADR-012) |
 | 1.4 | 2026-10-24 | M3A implemented: images on boards (§5), JPEG/PNG/WebP handling and full-size viewer (§7), image paste and drag-and-drop (§18), image rotation (§4); WebP moved into the MVP (ADR-013) |
+| 1.5 | 2026-10-25 | M3C implemented: PDF cards and reader (§5, §6), generic file cards with optional previews (§7), drop and paste of PDFs and other files (§18) (ADR-015) |

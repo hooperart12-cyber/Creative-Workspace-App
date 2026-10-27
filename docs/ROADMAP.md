@@ -84,10 +84,10 @@ M3 is built in three parts, each with its own branch and PR.
 - [x] Multiple windows: one editor at a time with "Edit here instead", revision-checked saves and a conflict bar (no silent overwrites)
 - Board covers moved to **Later** (item 10)
 
-### M3C — Documents and other files
-- [ ] PDF import → document card with first-page cover
-- [ ] PDF viewer (pdf.js): page navigation, thumbnails, text search, outline/TOC jump, download original
-- [ ] Generic file card for unsupported types + "attach preview image"
+### M3C — Documents and other files ✅ (ADR-015)
+- [x] PDF import → document card with first-page cover
+- [x] PDF viewer (pdf.js): page navigation, continuous / single / two-page reading, thumbnails, text search, outline jump, download original, open in a new window
+- [x] Generic file card for other types, compact or preview, with "attach preview image"; originals saved or opened only as a separate copy
 - [ ] *Deprioritized (after the above):* checklists, headers/dividers, containers
 
 ## M4 — Project Asset Library (§8, §18)

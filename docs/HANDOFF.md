@@ -54,9 +54,9 @@ RULES:
 
 > Outgoing agent: replace this section each session. Keep it short and factual.
 
-**Last updated:** 2026-10-24
-**Branches:** `feat/m3a-images` (PR open → `main`) and `feat/m3b-text-notes`, stacked on it (PR open → `feat/m3a-images`). Merge M3A first, then retarget M3B to `main`. Don't merge automatically.
-**Phase:** M3A (images) and M3B (rich text notes) complete, awaiting review. Board covers moved to Later. M3C (PDFs, file cards) not started.
+**Last updated:** 2026-10-25
+**Branches:** `feat/m3a-images` (PR #6 → `main`), `feat/m3b-text-notes` (PR #7 → `feat/m3a-images`), `feat/m3c-documents` (PR #8 → `feat/m3b-text-notes`). Merge in that order. Don't merge automatically. After a lower PR merges, retarget the next one onto `main`.
+**Phase:** M3A, M3B and M3C are complete and awaiting review. Board covers stay Later. Next milestone is M4 (the asset library).
 
 **Done**
 - M0 scaffold, M1 boards/folders, testing guide, M2 canvas (PR #5, ADR-012).
@@ -84,18 +84,22 @@ RULES:
     - `layout.ts` / `measure.ts`: hidden-DOM layout read back as lines and runs. `NoteNode.tsx` paints them in Konva.
     - `NoteEditorOverlay.tsx` (inline), `ExpandedNoteEditor.tsx`, `NoteChrome.tsx` (toolbar position, notices), `NoteToolbar.tsx`, `NoteFormatPanel.tsx`.
     - `extensions.ts` (Tiptap setup, shortcuts), `paste.ts` (DOMPurify), `fonts.ts` (bundled fonts plus the Local Font Access API), `noteActions.ts` (style changes as canvas steps).
-- Tests: 128 unit tests; 32 Playwright end-to-end tests (canvas, images, and 18 for notes in `e2e/notes.spec.ts`).
-- `docs/TESTING.md` has checklists for M3B (30 steps) and M3A (30 steps).
+- M3C PDFs and generic files, see ADR-015:
+  - **Main process:** `describeFile` in `assets.ts` classifies each import (image, readable PDF, or generic file). Migration `0002_pdf_page_count`. `assets:readRange` serves PDF bytes. `assets:saveCover`, `assets:recordPdfInfo`, `assets:setPreview`, `assets:openCopy`. Dangerous extensions cannot be launched (`src/shared/files.ts`).
+  - **Renderer:** `DocumentNode` / `FileNode`, `PdfReader.tsx` (pdf.js, range transport, virtualized pages), `pdfCover.ts`, `FileDetails.tsx`. A reader window is `window:openReader` with `#pdf=<objectId>`.
+- Tests: 131 unit tests; 34 Playwright end-to-end tests (canvas, images, 18 for notes, 2 for documents).
+- `docs/TESTING.md` has checklists for M3C, M3B and M3A.
 
 **In progress**
 - Nothing.
 
 **Next steps**
-1. Project owner reviews the M3A PR and runs the M3A checklist (pasting from their own browser and screenshot tool is the key check), then merges.
-2. Project owner reviews the M3B PR and runs the M3B checklist (typing feel and two windows are the key checks). After M3A merges, retarget the M3B PR to `main`, then merge after review.
-3. Discuss ADR-011 (separate vs. unified tree) with the team before M4.
-4. Then **M3C**: PDF cards and viewer (pdf.js), generic file cards. Reuse `AssetRepository` (relax the image-only check per type) and the viewer pattern.
-5. Later: board covers (pick an image asset for `boards.cover_asset_id` and draw it in `BoardCardNode` via `useImage` and `assetUrl`).
+1. Project owner reviews the M3A PR and runs the M3A checklist, then merges.
+2. After M3A merges, retarget the M3B PR to `main`, review it, then merge.
+3. After M3B merges, retarget the M3C PR to `main`, run the M3C checklist (a long PDF and **Open a copy** are the key checks), then merge.
+4. Discuss ADR-011 (separate vs. unified tree) with the team before M4.
+5. Then **M4**: the asset library. `ImportOptions.folderId` and `assets.preview_asset_id` are already in place.
+6. Later: board covers (pick an image asset for `boards.cover_asset_id` and draw it in `BoardCardNode` via `useImage` and `assetUrl`).
 
 **Known issues / open questions**
 - Trashed items can only be restored with undo (in the same session) until the Trash view (M4).
@@ -105,6 +109,7 @@ RULES:
 - Copying objects in the app replaces the system clipboard text with a short note (by design, ADR-013).
 - Unused thumbnails and originals of permanently deleted assets aren't cleaned up yet (needs the M4 Trash view).
 - Notes: known display approximations and other limits are listed at the end of ADR-014. A note moved to another board by another window while you're editing shows the "moved to the trash" choices.
+- PDFs: the reader asks the main process for byte ranges because `fetch` of `cw-asset://` fails in Chromium. Limits are at the end of ADR-015. PDF and file cards do not rotate. A password is remembered only until that reader window closes.
 - Notes rely on two private details: Konva's `stage._lastClicks` (reset after a drag so the drag's mouse-up doesn't pair with the next click as a double-click), and ProseMirror's view for placing the cursor. Recheck both when upgrading Konva or Tiptap.
 - **Dev-only:** after hot-reloading `useCanvasShortcuts.ts`, Space+drag may stop working until the page reloads (duplicate module state). Not an issue in builds.
 - **Testing tips:**

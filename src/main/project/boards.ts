@@ -4,7 +4,7 @@ import { rotatedBounds } from '@shared/geometry'
 import type { BoardDetail, BoardListItem, CanvasObject, Point, Viewport } from '@shared/types'
 import type { ProjectDb } from '../db/client'
 import { assets, boardObjects, boards } from '../db/schema'
-import { toAssetInfo } from './assets'
+import { attachPreviews, toAssetInfo } from './assets'
 
 export const DEFAULT_BOARD_TITLE = 'Untitled board'
 
@@ -93,6 +93,7 @@ export class BoardRepository {
         : []
       ).map((a) => [a.id, toAssetInfo(a)])
     )
+    attachPreviews(this.db, [...assetsById.values()])
 
     const objects: CanvasObject[] = []
     for (const objectRow of rows) {

@@ -27,6 +27,8 @@ function keysBelongElsewhere(e: KeyboardEvent): boolean {
   return (
     useWorkspaceStore.getState().dialog !== null ||
     useCanvasStore.getState().viewerObjectId !== null ||
+    useCanvasStore.getState().pdfReaderId !== null ||
+    useCanvasStore.getState().fileDetailsId !== null ||
     isEditingNote()
   )
 }
@@ -38,6 +40,20 @@ function keysBelongElsewhere(e: KeyboardEvent): boolean {
 export function useCanvasShortcuts(): void {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        const canvas = useCanvasStore.getState()
+        const inDialog = (e.target as HTMLElement | null)?.closest?.('[role="dialog"]')
+        if (canvas.pdfReaderId && !inDialog) {
+          e.preventDefault()
+          canvas.setPdfReaderId(null)
+          return
+        }
+        if (canvas.fileDetailsId && !inDialog) {
+          e.preventDefault()
+          canvas.setFileDetailsId(null)
+          return
+        }
+      }
       if (keysBelongElsewhere(e)) return
       const canvas = useCanvasStore.getState()
       const workspace = useWorkspaceStore.getState()
@@ -120,6 +136,12 @@ export function useCanvasShortcuts(): void {
       }
       if (e.key === 'Enter' && single && isViewable(single)) {
         return handled(() => canvas.setViewerObjectId(single.id))
+      }
+      if (e.key === 'Enter' && single?.type === 'document' && single.asset) {
+        return handled(() => canvas.setPdfReaderId(single.id))
+      }
+      if (e.key === 'Enter' && single?.type === 'file' && single.asset) {
+        return handled(() => canvas.setFileDetailsId(single.id))
       }
       if (e.key === 'Enter' && single?.type === 'text' && editSelectedNote('inline')) {
         return e.preventDefault()

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -317,5 +317,38 @@ describe('ObjectRepository.copyTo', () => {
     expect(Math.min(cA.zIndex, cNote.zIndex)).toBeGreaterThan(
       Math.max(...all.filter((o) => o.id !== copyA && o.id !== copyNote).map((o) => o.zIndex))
     )
+  })
+})
+
+describe('PDFs and generic files', () => {
+  it('locks a PDF card to the page and lets a file card change shape without copying the file', async () => {
+    const { buildPdf } = await import('./buildPdf')
+    const main = project.mainBoardId
+    const pdfPath = join(dir, 'a.pdf')
+    writeFileSync(pdfPath, buildPdf(['Hello']))
+    writeFileSync(join(dir, 'note.txt'), 'hello')
+    const imported = await project.assets.importFiles([pdfPath, join(dir, 'note.txt')])
+    project.objects.createFromAssets({
+      boardId: main,
+      assetIds: imported.imported.map((asset) => asset.id),
+      center: { x: 200, y: 200 }
+    })
+    const placed = objectsOn(main)
+    const pdf = placed.find((o) => o.type === 'document')!
+    const file = placed.find((o) => o.type === 'file')!
+    expect(pdf.asset).toMatchObject({ pageCount: 1, width: 300, height: 400 })
+    expect(pdf.width / pdf.height).toBeCloseTo(300 / 400, 2)
+    project.objects.update([{ id: pdf.id, width: 150 }])
+    const resized = objectsOn(main).find((o) => o.id === pdf.id)!
+    expect(resized.width).toBe(150)
+    expect(resized.height).toBeCloseTo(200, 1)
+    project.objects.update([{ id: file.id, width: 300, height: 180 }])
+    expect(objectsOn(main).find((o) => o.id === file.id)).toMatchObject({ width: 300, height: 180 })
+    project.objects.setFileAppearance(file.id, 'preview')
+    expect(objectsOn(main).find((o) => o.id === file.id)?.data).toMatchObject({
+      appearance: 'preview'
+    })
+    const [copy] = project.objects.copyTo([file.id], main, { x: 10, y: 10 })
+    expect(objectsOn(main).find((o) => o.id === copy)?.assetId).toBe(file.assetId)
   })
 })

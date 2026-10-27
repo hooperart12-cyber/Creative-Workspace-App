@@ -50,7 +50,19 @@ export interface ObjectInfo {
   rotation: number
   linkedBoardId: string | null
   assetId: string | null
-  asset?: { sha256: string; ext: string; width: number; height: number; originalName: string }
+  data?: Record<string, unknown>
+  asset?: {
+    sha256: string
+    ext: string
+    width: number | null
+    height: number | null
+    originalName: string
+    mime?: string
+    bytes?: number
+    pageCount?: number | null
+    previewAssetId?: string | null
+    preview?: { sha256: string; width: number; height: number } | null
+  }
 }
 
 /** Objects on the open board (the canvas draws to <canvas>, so read them from app state). */
@@ -67,6 +79,7 @@ export function objects(page: Page): Promise<ObjectInfo[]> {
       rotation: o.rotation,
       linkedBoardId: o.linkedBoardId,
       assetId: o.assetId,
+      data: o.data,
       asset: o.asset
     }))
   )
@@ -126,6 +139,7 @@ type CwWindow = Window & {
             rotation: number
             linkedBoardId: string | null
             assetId: string | null
+            data?: Record<string, unknown>
             board?: { title: string }
             asset?: ObjectInfo['asset']
           }[]

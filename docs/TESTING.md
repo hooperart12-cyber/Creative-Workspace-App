@@ -50,6 +50,55 @@ To test a specific pull request instead of `main`: `git fetch origin && git chec
 
 Work through each step, and tick the box if the **Expected** result happens. If it doesn't, write down the step number and report it (Part 3). Keyboard shortcuts say **Ctrl** for Windows; on macOS use **Cmd** where Ctrl is listed, and **Option** for Alt.
 
+### M3C — PDFs and other files (≈40 minutes)
+
+Use a fresh project. Have ready: a text PDF of a few pages that has a table of contents, a long PDF (a few hundred pages if you have one), a PDF that is only scanned images, a password-protected PDF if you have one, a JPG or PNG, and a few other files (for example `.txt`, `.psd`, `.clip`, `.zip`, and an `.exe` or `.bat` you can spare — they will not be run).
+
+**Adding files**
+
+| # | Do this | Expected |
+|---|---|---|
+| 3C.1 | Click the **File** tool and choose the PDF and the text file. | Both appear. The PDF is a card with its name and a picture of the first page (it may take a moment). The other file is a small card with an icon, its name, its type and its size. |
+| 3C.2 | Drag several files onto the canvas at once, including one you renamed to `.pdf` that is not really a PDF, and an empty file. | The real files appear. A message lists the ones that were skipped and why. The rest are not lost. |
+| 3C.3 | Click the **Image** tool and choose the PDF. | It is not added. The message says it is not a JPG, PNG or WebP image. |
+| 3C.4 | Copy the text file in File Explorer and press **Ctrl+V** on the canvas. | A file card appears for it. |
+
+**PDF cards and the reader**
+
+| # | Do this | Expected |
+|---|---|---|
+| 3C.5 | Select the PDF card and look for a rotation handle. Drag a corner. | There is no rotation handle. Resizing keeps the page's shape. |
+| 3C.6 | Double-click the PDF (or select it and press **Enter**). | A reader fills the window. It shows the name, the page, and the page count. The board is gone until you close it. |
+| 3C.7 | Use **Next**, **Prev**, and type a page number. Switch **Continuous**, **Single** and **Two-page**. | You move through the pages. Two-page shows page 1 alone, then pairs. A last leftover page sits alone. The page you were on stays put when you switch, when it can. |
+| 3C.8 | In two-page mode, switch the reading direction to right-to-left, then back. | The two pages swap sides. The page order of the file does not change. |
+| 3C.9 | Try **Fit width**, **Fit page**, **100%**, and the zoom buttons. | The page refits. Text on the page stays selectable on a text PDF; you can copy it. |
+| 3C.10 | Open the sidebar. Click a page thumbnail, then **Outline**, then a heading. | Thumbnails highlight the page you are on. A heading jumps to that page. If the PDF has no outline, the sidebar says so and does not invent one. |
+| 3C.11 | Search for a word you know is in the PDF. Use **Next match** and **Prev match**. Then search for a word that is not there. | Matches are counted and highlighted, and the view moves to them. A missing word says **No matches**. |
+| 3C.12 | Open the image-only PDF and search for any word. | The pages still display. Search says **No searchable text**. |
+| 3C.13 | Press **Delete** while the reader is open, then **Esc** or **Close**. | The card is not deleted. Closing returns you to the same board, in the same place, with the same selection. |
+| 3C.14 | Open the PDF again and click **Open in new window**. Change the page and the view mode there. Close that window. | The new window has its own page and mode. The first window is unchanged. Closing the extra window leaves the project and the first reader open. |
+| 3C.15 | Click **Save original as** and pick a place. | The saved file opens in a PDF reader outside the app and matches the original. |
+| 3C.16 | If you have a password-protected PDF, open it, then cancel, then open it again and enter the password. Quit and reopen the project and open it once more. | Cancel leaves the card. The right password shows the pages. You are asked again next time; the password is not remembered. |
+| 3C.17 | Open a PDF of a few hundred pages and scroll. | The app stays responsive. Pages appear as you reach them, not all at once. |
+
+**Other files**
+
+| # | Do this | Expected |
+|---|---|---|
+| 3C.18 | Double-click a file card (not a PDF). | A details window shows the name, type and size, and **Compact** / **Preview**. |
+| 3C.19 | Click **Attach preview** and choose a JPG, PNG or WebP. Switch to **Preview**, then back to **Compact**. | Preview shows the picture without cropping or stretching it, plus the filename. Compact shows the icon again. The picture is still attached. |
+| 3C.20 | Click **Change preview**, then **Remove preview**. | The picture changes, then the card says there is no preview. The image file you attached is still in the project if you used it only as a preview (it is not deleted). |
+| 3C.21 | Duplicate the file card (**Ctrl+D**). | A second card appears. Both refer to the same file (the project does not store the file twice). |
+| 3C.22 | Click **Save original as**. | You get a copy of the original bytes. |
+| 3C.23 | Click **Open a copy**, choose an empty folder, and edit that file in another app. Come back. | The app says edits in the other app do not update the project. The card is unchanged. The file that opened is in the folder you chose, not a file named with a long hash. |
+| 3C.24 | Open details for the `.exe` or `.bat`. | **Open a copy** is unavailable and explains why. The file is not launched. |
+| 3C.25 | Quit and relaunch, then reopen the project. Open the board in a second window. | PDF cards, file cards, their size, and any preview are still there in both windows. |
+
+**Feel**
+
+- Is the reader comfortable for a long document?
+- Is it obvious that **Open a copy** will not change the file in the project?
+
 ### M3B — Text notes (≈30 minutes)
 
 Use a fresh project (e.g. `Notes Test`) with a board card and an image on it. Have a web page with formatted text open (a Wikipedia article works well), and a word processor if you have one.
@@ -401,8 +450,8 @@ npm run test:e2e     # end-to-end UI tests: builds the app, then Playwright driv
 **Current coverage:**
 - **Unit tests** (Vitest):
   - main-process logic: projects, boards, folders, canvas objects (move/copy/trash/restore), multi-window registry, recent projects
-  - assets: originals stored byte-for-byte and source files untouched, content checks (fake or unsupported files), deduplication, EXIF orientation, thumbnails with transparency, export of originals
-  - image objects: initial sizing, layout, proportions enforced on every update, copies sharing one asset
+  - assets: originals stored byte-for-byte and source files untouched, content checks (fake or unsupported files), deduplication, EXIF orientation, thumbnails with transparency, export of originals, PDF page size, invalid PDFs skipped, other files stored, previews attached and removed without deleting the image
+  - image, PDF and file objects: initial sizing, layout, PDF proportions enforced on every update, file cards free to resize, copies sharing one asset
   - renderer helpers: tree building, camera math, rotated bounds, image level of detail, align/distribute/match size with rotated and ratio-locked images, z-order, snapping, undo history
   - text notes: content validation and sanitising (unsafe links, images and scripts refused, invalid attributes, size limit), unreadable notes, plain-text extraction, revision-checked saves (stale revisions and notes trashed meanwhile), style and minimum-height rules, copy/trash/restore, editing leases and take-over
 - **End-to-end tests** (Playwright, `e2e/`): launch the real app with a temporary settings folder and test
@@ -413,6 +462,7 @@ npm run test:e2e     # end-to-end UI tests: builds the app, then Playwright driv
   - sidebar drag-and-drop for boards and folders
   - images (`e2e/images.spec.ts`): Image tool import with byte-for-byte storage and thumbnails served to the UI; drawn on the canvas; proportional resize and Shift-snapped rotation with undo and persistence; dropping files (with an unsupported one explained); duplicate sharing the stored file; delete/undo/redo; pasting a screenshot, files copied in File Explorer and copied images; viewer open/fit/100%/download original/close; a second window showing the image and its changes
   - text notes (`e2e/notes.spec.ts`): creating notes (double-click, T, toolbar) with autosave; card/floating and reset; formatting drawn on the canvas, unsafe links refused, Ctrl+click opening links; resize reflow and auto height; fixed height scrolling and fit to content; move and Shift-snapped rotation; editing zoomed in and far out; the expanded editor; paste cleaning, plain paste and images kept out of notes; keyboard isolation; undo/redo ordering; persistence after restart; two-window sync, take-over, conflicts and notes deleted elsewhere; failed saves with retry; closing a window right after typing; damaged notes; a CPU-throttled "slow machine"
+  - PDFs and other files (`e2e/documents.spec.ts`): PDF import with page size and a skipped invalid PDF; the image tool refusing a PDF; reader page navigation, single and two-page modes, right-to-left spread, zoom, outline jump, search highlights, a page with no text, saving the original, a separate reader window, closing it leaving the canvas, a long PDF painting only the pages on screen, persistence; generic files keeping their bytes, compact and preview appearance, attaching and removing a preview without deleting the image, a duplicate card sharing the file, an executable that cannot be launched, and opening a working copy
 
   Failures in CI upload a Playwright report with screenshots and traces.
 

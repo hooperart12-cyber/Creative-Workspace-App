@@ -14,7 +14,7 @@ import { eq } from 'drizzle-orm'
 import sharp from 'sharp'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { assets } from '../db/schema'
-import { UnsupportedFileError } from './assets'
+import { isDangerousExtension } from '@shared/files'
 import { Project } from './project'
 
 const migrations = resolve('drizzle')
@@ -138,31 +138,42 @@ describe('AssetRepository.importFile', () => {
     expect(readFileSync(stored).equals(bytes)).toBe(true)
   })
 
-  it('rejects files that are not JPG, PNG or WebP, whatever their extension says', async () => {
+  it('stores files it cannot preview, while the image tool still skips them', async () => {
     const fake = join(dir, 'notes.png')
     writeFileSync(fake, 'just some text')
-    await expect(project.assets.importFile(fake)).rejects.toBeInstanceOf(UnsupportedFileError)
-
-    const tiff = join(dir, 'scan.tif')
-    writeFileSync(
-      tiff,
-      await sharp({ create: { width: 10, height: 10, channels: 3, background: '#fff' } })
-        .tiff()
-        .toBuffer()
+    const text = await project.assets.importFile(fake)
+    expect(text).toMatchObject({ ext: 'png', width: null, mime: 'application/octet-stream' })
+    expect(readFileSync(project.assets.originalPath(text.sha256, text.ext)).toString()).toBe(
+      'just some text'
     )
-    await expect(project.assets.importFile(tiff)).rejects.toThrow(/JPG, PNG or WebP/)
+
+    const tiffBytes = await sharp({
+      create: { width: 10, height: 10, channels: 3, background: '#fff' }
+    })
+      .tiff()
+      .toBuffer()
+    const tiff = join(dir, 'scan.tif')
+    writeFileSync(tiff, tiffBytes)
+    const scan = await project.assets.importFile(tiff)
+    expect(scan).toMatchObject({ ext: 'tif', mime: 'image/tiff', width: null })
+    expect(readFileSync(project.assets.originalPath(scan.sha256, scan.ext)).equals(tiffBytes)).toBe(
+      true
+    )
+
+    const imagesOnly = await project.assets.importFiles([fake, tiff], { imagesOnly: true })
+    expect(imagesOnly.imported).toEqual([])
+    expect(imagesOnly.skipped.map((file) => file.reason)).toEqual([
+      'Not a JPG, PNG or WebP image.',
+      'Not a JPG, PNG or WebP image.'
+    ])
 
     const empty = join(dir, 'empty.png')
     writeFileSync(empty, '')
     await expect(project.assets.importFile(empty)).rejects.toThrow(/empty/)
-
     await expect(project.assets.importFile(join(dir, 'missing.png'))).rejects.toThrow(
       /not be found/
     )
     await expect(project.assets.importFile(dir)).rejects.toThrow(/Folders/)
-
-    // Nothing was stored.
-    expect(project.db.select().from(assets).all()).toEqual([])
     expect(readdirSync(join(project.path, 'assets', '.incoming'))).toEqual([])
   })
 
@@ -195,14 +206,68 @@ describe('AssetRepository.importFiles', () => {
     const result = await project.assets.importFiles([paths[0], psd, ...paths.slice(1), paths[2]])
     expect(result.imported.map((a) => a.originalName)).toEqual([
       'img0.png',
+      'layers.psd',
       'img1.png',
       'img2.png',
       'img3.png',
       'img4.png'
     ])
-    expect(result.skipped).toEqual([
-      { name: 'layers.psd', reason: 'Not a JPG, PNG or WebP image.' }
+    expect(result.skipped).toEqual([])
+    const psdAsset = result.imported.find((a) => a.originalName === 'layers.psd')!
+    expect(psdAsset).toMatchObject({ ext: 'psd', mime: 'image/vnd.adobe.photoshop', width: null })
+    expect(
+      readFileSync(project.assets.originalPath(psdAsset.sha256, psdAsset.ext)).toString()
+    ).toBe('8BPS fake photoshop file')
+  })
+
+  it('stores a PDF with its page size, skips an empty file and a file that only claims to be a PDF', async () => {
+    const { buildPdf } = await import('./buildPdf')
+    const pdfPath = join(dir, 'chapter.pdf')
+    const pdf = buildPdf(['Hello PDF', 'Second page'], { outline: [{ title: 'Second', page: 2 }] })
+    writeFileSync(pdfPath, pdf)
+    writeFileSync(join(dir, 'empty.pdf'), '')
+    writeFileSync(join(dir, 'notes.pdf'), 'this is not a pdf')
+    writeFileSync(join(dir, 'run.exe'), 'not really a program')
+    const result = await project.assets.importFiles([
+      pdfPath,
+      join(dir, 'empty.pdf'),
+      join(dir, 'notes.pdf'),
+      join(dir, 'run.exe')
     ])
+    expect(result.skipped.map((s) => s.name).sort()).toEqual(['empty.pdf', 'notes.pdf'])
+    expect(result.imported.map((a) => a.originalName).sort()).toEqual(['chapter.pdf', 'run.exe'])
+    const stored = result.imported.find((a) => a.originalName === 'chapter.pdf')!
+    expect(stored).toMatchObject({
+      mime: 'application/pdf',
+      ext: 'pdf',
+      pageCount: 2,
+      width: 300,
+      height: 400,
+      bytes: pdf.length
+    })
+    expect(readFileSync(project.assets.originalPath(stored.sha256, stored.ext)).equals(pdf)).toBe(
+      true
+    )
+    const exe = result.imported.find((a) => a.originalName === 'run.exe')!
+    expect(exe.ext).toBe('exe')
+    expect(isDangerousExtension(exe.ext)).toBe(true)
+    expect(isDangerousExtension('txt')).toBe(false)
+    expect(readFileSync(project.assets.originalPath(exe.sha256, exe.ext)).toString()).toBe(
+      'not really a program'
+    )
+  })
+
+  it('keeps a preview image when the preview is removed from a file', async () => {
+    const { path } = await makeImage('shot.png', { width: 20, height: 10, format: 'png' })
+    const image = await project.assets.importFile(path)
+    const filePath = join(dir, 'notes.txt')
+    writeFileSync(filePath, 'hello')
+    const file = (await project.assets.importFiles([filePath])).imported[0]
+    project.assets.setPreview(file.id, image.id)
+    expect(project.assets.get(file.id).previewAssetId).toBe(image.id)
+    project.assets.setPreview(file.id, null)
+    expect(project.assets.get(file.id).previewAssetId).toBeNull()
+    expect(project.assets.get(image.id).sha256).toBe(image.sha256)
   })
 })
 

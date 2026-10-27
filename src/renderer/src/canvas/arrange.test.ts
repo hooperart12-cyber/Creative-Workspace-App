@@ -90,7 +90,10 @@ const image = (id: string, x: number, y: number, w: number, h: number, extra = {
       width: w * 10,
       height: h * 10,
       hasAlpha: true,
-      folderId: null
+      pageCount: null,
+      folderId: null,
+      previewAssetId: null,
+      preview: null
     },
     ...extra
   })

@@ -27,6 +27,7 @@
   "dependencies": {
     "better-sqlite3": "^13.0.3",
     "drizzle-orm": "^0.45.4",
+    "pdfjs-dist": "^5.4.296",
     "sharp": "^0.35.5",
     "zustand": "^5.0.16"
   },
