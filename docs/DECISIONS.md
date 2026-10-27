@@ -19,6 +19,7 @@ Statuses: ✅ Accepted · 🟡 Tentative (will be confirmed when the feature is 
 | [011](#adr-011--boards-and-folders-are-separate-hierarchies) | Boards and folders are separate hierarchies | 🟡 Pending team discussion |
 | [012](#adr-012--canvas-interaction-model-and-undo) | Canvas interaction model and undo | ✅ |
 | [013](#adr-013--images-import-pipeline-display-and-rotation) | Images: import pipeline, display and rotation | ✅ |
+| [014](#adr-014--rich-text-notes-editor-display-saving-and-multiple-windows) | Rich text notes: editor, display, saving and multiple windows | ✅ |
 
 ---
 
@@ -276,7 +277,7 @@ MyProject.cwproj/
 
 ## ADR-012 — Canvas interaction model and undo
 
-**Date:** 2026-10-24 · **Status:** ✅ Accepted (clipboard and rotation extended by [ADR-013](#adr-013--images-import-pipeline-display-and-rotation)) · **Requirements:** §4, §19, §20
+**Date:** 2026-10-24 · **Status:** ✅ Accepted (clipboard and rotation extended by [ADR-013](#adr-013--images-import-pipeline-display-and-rotation); undo while typing by [ADR-014](#adr-014--rich-text-notes-editor-display-saving-and-multiple-windows)) · **Requirements:** §4, §19, §20
 
 **Decisions.**
 - **Figma-style navigation.**
@@ -356,3 +357,97 @@ MyProject.cwproj/
 - The M4 library can reuse `AssetRepository`, `ImportOptions.folderId`, `AssetInfo`, `cw-asset://` URLs and the thumbnails.
 - The same pipeline will serve PDFs (M3C), with a page render as the cover.
 - Projects gain a `thumbs/` folder that can be deleted and regenerated at any time.
+
+---
+
+## ADR-014 — Rich text notes: editor, display, saving and multiple windows
+
+**Date:** 2026-10-24 · **Status:** ✅ Accepted · **Requirements:** §4, §5, §17, §19, §20, §21 · **Extends:** ADR-012 (undo while typing), ADR-013 (rotation)
+
+**Context.** M3B adds text notes for character bios, worldbuilding and brainstorming. The project owner's conditions:
+- A note is a full canvas object: move, resize, rotate, layers, copy, delete, undo, group, align, multiple windows.
+- Rich formatting edited directly on the canvas, plus a larger editor for long text.
+- Writing is never lost: autosave with a visible status, no out-of-order saves, and no silent overwrites between windows.
+- Pasting is safe, and letters are never stretched.
+- Excluded for now: images, tables and checklists inside notes, custom font import, and board covers (moved to later).
+
+**Decisions.**
+
+- **Stored as `board_objects.type = 'text'`.** `data` holds:
+  - `content`: `{ schemaVersion: 1, doc }`, a ProseMirror JSON document.
+  - `plainText`: a plain copy of the text, kept for search (M5).
+  - `appearance`: card or floating, background, opacity, border, corners, padding and shadow.
+  - `sizing`: `auto` or `fixed`.
+
+  A new `revision` column (migration `0001_note_revision`) counts content saves.
+  - The main process checks every document against an allow-list of nodes, marks and attributes before saving. That covers colours, links (http, https and mailto only) and sizes. Documents over 512 KB are refused.
+  - A note that can't be read (damaged, or from a newer version) is drawn as a placeholder, and the rest of the board works normally.
+- **Editor: Tiptap 3 (ProseMirror).**
+  - One editor per window, for the note being edited. The inline editor and the expanded editor show the same instance, so switching keeps the cursor and the typing history.
+  - Content allowed:
+    - Paragraphs, headings 1–3, bulleted and numbered lists, and line breaks.
+    - Bold, italic, underline, strikethrough and links.
+    - Text colour, highlight, font and size.
+    - Alignment, line spacing and space after a paragraph.
+- **Display: the browser lays out the text and Konva paints it.**
+  - Each note is rendered into a hidden copy of the editor's DOM, with the same CSS and width. The app reads back every line and run of text and draws exactly that on the canvas.
+  - So the canvas and the editor break lines in the same places, and nothing jumps when editing starts.
+  - Baselines snap to pixels the way Chromium does.
+  - Layouts are cached per note and width. Text smaller than about 3.5 screen px is drawn as grey bars ("greeking").
+- **Inline editing** places the editor over the note's drawing with one CSS transform that matches the camera (translate, rotate about the top-left corner, scale by zoom).
+  - Starting to edit:
+    - Double-click a note (the cursor goes where you clicked), or press Enter on a selected note.
+    - To make a new note: press `T`, use the **Text** tool, choose "New text here", or double-click empty canvas.
+    - Editing below 50% zoom first zooms to 100% around the note.
+    - Locked notes can't be edited.
+  - Clicking outside or pressing Esc finishes. A new note left empty disappears again.
+  - While typing, no key reaches the canvas: Ctrl+A selects text, Delete deletes characters, `T` types a T. The browser's own attempts to scroll the canvas to show the cursor become camera moves.
+- **Undo.**
+  - While typing, Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z undo and redo typing (the canvas undo buttons are off).
+  - When editing ends, the whole session becomes one canvas step: "Edit text", or "Add note" for a new note.
+  - Undoing a text step is skipped, with a message, if another window changed the note since.
+  - Style changes (panel, menus, reset) are canvas steps right away.
+- **Appearance and sizing.**
+  - **Card** and **floating text** use the same box metrics, so switching never moves the text. "Reset appearance" restores the default card.
+  - **Auto height** (the default): the height follows the text, and only the width can be resized (side handles).
+  - **Fixed height**: corner handles too. Extra text scrolls inside the note: the mouse wheel over a selected fixed note scrolls its text, not the canvas. "Fit to content" makes the height match the text.
+  - Resizing reflows the text and never scales it. The minimum size is 80 × 40.
+  - Rotation works like images (ADR-013).
+- **Saving.**
+  - Autosave runs 600 ms after typing pauses, and at least every 3 s while typing continues.
+  - One save runs at a time, in the same queue as canvas edits, so saves can't arrive out of order and a canvas action never overtakes a pending save.
+  - Each save names the revision it started from. If another window saved first, nothing is overwritten.
+  - A per-note badge shows "Saving… / Saved / Couldn't save".
+  - Failed saves retry with backoff (up to every 15 s). The note stays open until the text is saved or the user chooses.
+  - Closing a window waits up to 4 s for open notes to save.
+  - Opening another board finishes editing first. If the board is gone, unsaved text is kept as a new note.
+- **Multiple windows.**
+  - Saves refresh only that note in other windows (`objects:changed`).
+  - The main process keeps an in-memory "lease" per note being edited. Other windows show "✎ Editing in another window", and editing there offers **Edit here instead**: the first window saves what it has (the main process waits up to 3 s) and becomes read-only.
+  - If a save is refused because the note changed elsewhere, the user chooses **Keep mine**, **Use theirs** or **Keep both** (theirs stays; mine becomes a new note).
+  - If the note is moved to the trash elsewhere while being edited, the text stays on screen with **Keep my text as a new note** or **Discard**.
+- **Fonts.** Four open-licence (SIL OFL) fonts ship with the app via `@fontsource`: Inter (default), Lora, JetBrains Mono and Caveat. Fonts installed on the computer can also be chosen, through the Local Font Access API. They're labelled as possibly looking different on another computer, because the name is stored, not the font. Sizes run from 10 to 96.
+- **Links.** Only web and email addresses. A plain click never opens a link. Ctrl/Cmd+click opens it, in the editor or on the canvas. The main process checks the address again before `shell.openExternal`.
+- **Paste.**
+  - HTML is cleaned with DOMPurify. From other programs, emphasis, headings, lists, links and alignment are kept; their colours and fonts are dropped. Text copied from another note keeps all its formatting.
+  - Ctrl+Shift+V pastes plain text.
+  - Images are never put inside notes. The user is told to paste them on the canvas instead.
+  - Paste on the canvas stays images and files only: pasting text there doesn't create a note.
+- **Two toolbars.**
+  - A quick bar above the note: text style, B/I/U/S, highlight, lists, link, the advanced panel, expand, and the save badge.
+  - An advanced panel with **Selected text** (font, size, colour, highlight, clear formatting, alignment, line and paragraph spacing) and **Whole note** (card or floating, background, opacity, border, corners, shadow, padding, auto or fixed height, fit, reset).
+
+| Choice | Pros | Cons | Alternatives considered |
+|---|---|---|---|
+| Tiptap 3 / ProseMirror ✅ | Mature, schema-based (the stored format is validated JSON), good paste handling and undo, React bindings. | Extensions to learn; a few internals (DOM selection timing) need care. | Lexical (younger, less schema control), Slate (more to build), Quill (weaker schema). |
+| Browser layout + Konva paint ✅ | Identical line breaks in the editor and on the canvas, all canvas features keep working, fast with many notes. | A hidden measuring DOM; strikethrough position and some sub-pixel details are approximations. | DOM overlays for every note (breaks layering and culling, slow with many), Konva `Text` layout (different line breaks from the editor). |
+| Leases + revision-checked saves ✅ | Prevents nearly all conflicts up front; the revision check guarantees no silent overwrite even if a lease is lost. | Users choose when a conflict does happen. | Revision check alone (more conflicts), CRDT merging (much larger, unnecessary until collaboration, ADR-006). |
+
+**Consequences and known limitations.**
+- The strikethrough line is placed by font metrics and may sit a pixel away from the browser's.
+- At some zoom levels, a line may be drawn 1 px from where the editor shows it. Line breaks always match.
+- The expanded editor uses a wider page (at least 720 px), so its line breaks differ from the canvas; the canvas reflows when you return.
+- Right-to-left text isn't specially handled.
+- Ctrl+Shift+E opens the expanded editor (Tiptap uses it for centring; alignment is in the panel).
+- System fonts are stored by name; another computer without the font shows a fallback.
+- `plainText` is ready for project search (M5) and the revision column for future sync (ADR-006).

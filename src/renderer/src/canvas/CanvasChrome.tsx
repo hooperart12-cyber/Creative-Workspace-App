@@ -4,6 +4,8 @@ import { useWorkspaceStore } from '../store/workspaceStore'
 import * as actions from './actions'
 import { NEW_OBJECT_MIME } from './CanvasView'
 import { BoardIcon } from '../components/icons'
+import { createNote } from '../notes/noteActions'
+import { useNoteStore } from '../notes/noteStore'
 
 const toolButton =
   'flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-canvas hover:text-ink disabled:opacity-30 aria-pressed:bg-accent/10 aria-pressed:text-accent'
@@ -15,6 +17,7 @@ export function CanvasToolbar() {
   const toggleGrid = useCanvasStore((s) => s.toggleGrid)
   const toggleSnap = useCanvasStore((s) => s.toggleSnap)
   useCanvasStore((s) => s.historyVersion) // re-render when undo/redo availability changes
+  const editingText = useNoteStore((s) => s.editing !== null)
 
   return (
     <div
@@ -50,6 +53,20 @@ export function CanvasToolbar() {
         <ImageIcon />
         Image
       </button>
+      <button
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.setData(NEW_OBJECT_MIME, 'text')
+          e.dataTransfer.effectAllowed = 'copy'
+        }}
+        onClick={() => void createNote()}
+        title="Text (T): drag onto the canvas, or click to add in the middle. Double-click the canvas to type anywhere."
+        aria-label="Add text"
+        className="flex w-14 cursor-grab flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[11px] text-ink hover:bg-canvas active:cursor-grabbing"
+      >
+        <TextIcon />
+        Text
+      </button>
       <Divider />
       <button
         className={toolButton}
@@ -72,18 +89,18 @@ export function CanvasToolbar() {
       <Divider />
       <button
         className={toolButton}
-        disabled={!history.canUndo}
+        disabled={!history.canUndo || editingText}
         onClick={() => void actions.undo()}
-        title="Undo (Ctrl+Z)"
+        title={editingText ? 'While typing, Ctrl+Z undoes typing' : 'Undo (Ctrl+Z)'}
         aria-label="Undo"
       >
         <UndoIcon />
       </button>
       <button
         className={toolButton}
-        disabled={!history.canRedo}
+        disabled={!history.canRedo || editingText}
         onClick={() => void actions.redo()}
-        title="Redo (Ctrl+Shift+Z)"
+        title={editingText ? 'While typing, Ctrl+Shift+Z redoes typing' : 'Redo (Ctrl+Shift+Z)'}
         aria-label="Redo"
       >
         <UndoIcon style={{ transform: 'scaleX(-1)' }} />
@@ -252,6 +269,14 @@ function ImageIcon() {
       <rect x="3" y="3" width="18" height="18" rx="2" />
       <circle cx="9" cy="9" r="2" />
       <path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21" />
+    </svg>
+  )
+}
+
+function TextIcon() {
+  return (
+    <svg {...svg} width={20} height={20} className="text-accent">
+      <path d="M5 6V4h14v2M12 4v16M9 20h6" />
     </svg>
   )
 }

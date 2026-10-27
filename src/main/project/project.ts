@@ -9,6 +9,7 @@ import { assets, boards, projectMeta } from '../db/schema'
 import { AssetRepository } from './assets'
 import { BoardRepository } from './boards'
 import { FolderRepository } from './folders'
+import { NoteRepository } from './notes'
 import { ObjectRepository } from './objects'
 
 export const PROJECT_EXTENSION = '.cwproj'
@@ -27,6 +28,7 @@ export class Project {
   readonly boards: BoardRepository
   readonly folders: FolderRepository
   readonly objects: ObjectRepository
+  readonly notes: NoteRepository
   readonly assets: AssetRepository
 
   private constructor(
@@ -44,6 +46,7 @@ export class Project {
     this.boards = new BoardRepository(db, meta.mainBoardId)
     this.folders = new FolderRepository(db)
     this.objects = new ObjectRepository(db, this.boards)
+    this.notes = new NoteRepository(db, this.boards)
     this.assets = new AssetRepository(db, path)
   }
 

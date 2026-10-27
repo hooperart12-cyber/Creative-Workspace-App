@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { BoardDetail, ObjectPatch, ProjectTree } from '@shared/types'
+import type { BoardDetail, CanvasObject, ObjectPatch, ProjectTree } from '@shared/types'
 import { reportError } from './projectStore'
 
 export type ItemRef = { type: 'board' | 'folder'; id: string }
@@ -32,6 +32,14 @@ interface WorkspaceState {
   goUp: () => Promise<void>
   /** Applies changes to the open board's objects immediately, before the save round-trip. */
   patchObjects: (patches: ObjectPatch[]) => void
+  /** Merges into objects' `data` immediately (note text and look). */
+  patchObjectData: (
+    patches: { id: string; data: Record<string, unknown>; revision?: number }[]
+  ) => void
+  /** Shows a just-created object straight away (the full refresh follows). */
+  addObject: (object: CanvasObject) => void
+  /** Swaps in fresh copies of objects (another window changed them). */
+  replaceObjects: (objects: CanvasObject[]) => void
 
   createFolder: (parentId: string | null) => Promise<void>
   renameFolder: (id: string, name: string) => Promise<void>
@@ -65,6 +73,20 @@ export function boardFromHash(): string | undefined {
   return match ? decodeURIComponent(match[1]) : undefined
 }
 
+/**
+ * Asked before this window shows a different board; false keeps the current board (a note
+ * being edited couldn't be saved, and leaving would hide what the user wrote). `force` is set
+ * when the current board is gone, so staying isn't possible.
+ */
+type LeaveGuard = (targetBoardId: string | null, force: boolean) => Promise<boolean>
+let leaveGuard: LeaveGuard = async () => true
+export function setLeaveGuard(fn: LeaveGuard): void {
+  leaveGuard = fn
+}
+
+/** Before closing or switching the project: false if a note's text couldn't be saved. */
+export const readyToLeaveProject = (): Promise<boolean> => leaveGuard(null, false)
+
 const guard = async (action: () => Promise<void>): Promise<void> => {
   try {
     await action()
@@ -75,10 +97,17 @@ const guard = async (action: () => Promise<void>): Promise<void> => {
 
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
   /** Shows a board without touching history. */
-  const show = async (id: string): Promise<void> => {
+  const show = async (id: string, force = false): Promise<boolean> => {
+    const current = get().board
+    if (current && current.id !== id) {
+      // Forced moves don't wait: they can happen inside the edit queue the note saves use.
+      if (force) void leaveGuard(id, true)
+      else if (!(await leaveGuard(id, false))) return false
+    }
     const board = await window.api.invoke('board:get', id)
     set({ board })
     rememberBoard(board.id)
+    return true
   }
 
   return {
@@ -114,14 +143,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
         const target =
           [...board.breadcrumb].reverse().find((crumb) => alive.has(crumb.id))?.id ??
           tree.mainBoardId
-        await show(target)
+        await show(target, target !== board.id)
       }),
 
     openBoard: (id) =>
       guard(async () => {
         const current = get().board?.id
         if (current === id) return
-        await show(id)
+        if (!(await show(id))) return
         if (current) set({ back: [...get().back, current], forward: [] })
       }),
 
@@ -130,7 +159,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
         const { back, board } = get()
         const target = back.at(-1)
         if (!target || !board) return
-        await show(target)
+        if (!(await show(target))) return
         set({ back: back.slice(0, -1), forward: [board.id, ...get().forward] })
       }),
 
@@ -139,7 +168,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
         const { forward, board } = get()
         const target = forward[0]
         if (!target || !board) return
-        await show(target)
+        if (!(await show(target))) return
         set({ forward: forward.slice(1), back: [...get().back, board.id] })
       }),
 
@@ -157,6 +186,42 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
           ...board,
           objects: board.objects.map((o) => (byId.has(o.id) ? { ...o, ...byId.get(o.id) } : o))
         }
+      })
+    },
+
+    patchObjectData: (patches) => {
+      const board = get().board
+      if (!board || patches.length === 0) return
+      const byId = new Map(patches.map((p) => [p.id, p]))
+      set({
+        board: {
+          ...board,
+          objects: board.objects.map((o) => {
+            const patch = byId.get(o.id)
+            if (!patch) return o
+            return {
+              ...o,
+              data: { ...o.data, ...patch.data },
+              revision: patch.revision ?? o.revision
+            }
+          })
+        }
+      })
+    },
+
+    addObject: (object) => {
+      const board = get().board
+      if (!board || board.id !== object.boardId || board.objects.some((o) => o.id === object.id))
+        return
+      set({ board: { ...board, objects: [...board.objects, object] } })
+    },
+
+    replaceObjects: (fresh) => {
+      const board = get().board
+      if (!board || fresh.length === 0) return
+      const byId = new Map(fresh.filter((o) => o.boardId === board.id).map((o) => [o.id, o]))
+      set({
+        board: { ...board, objects: board.objects.map((o) => byId.get(o.id) ?? o) }
       })
     },
 
@@ -208,4 +273,13 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
 // Another window (or this one) changed boards or folders: refetch.
 window.api.on('project:contentChanged', () => {
   if (useWorkspaceStore.getState().tree) void useWorkspaceStore.getState().refresh()
+})
+
+// A note's text was saved (here or in another window): refetch just that note.
+window.api.on('objects:changed', ({ boardId, objectIds }) => {
+  if (useWorkspaceStore.getState().board?.id !== boardId) return
+  void window.api
+    .invoke('notes:get', objectIds)
+    .then((fresh) => useWorkspaceStore.getState().replaceObjects(fresh))
+    .catch(() => {})
 })

@@ -50,6 +50,78 @@ To test a specific pull request instead of `main`: `git fetch origin && git chec
 
 Work through each step, and tick the box if the **Expected** result happens. If it doesn't, write down the step number and report it (Part 3). Keyboard shortcuts say **Ctrl** for Windows; on macOS use **Cmd** where Ctrl is listed, and **Option** for Alt.
 
+### M3B — Text notes (≈30 minutes)
+
+Use a fresh project (e.g. `Notes Test`) with a board card and an image on it. Have a web page with formatted text open (a Wikipedia article works well), and a word processor if you have one.
+
+**Creating and typing**
+
+| # | Do this | Expected |
+|---|---|---|
+| 3B.1 | Double-click an empty spot on the canvas and type a few words. | A note appears where you clicked, with a blinking cursor, and grows as you type. A small bar above it shows formatting buttons and **Saved** / **Saving…**. |
+| 3B.2 | Click an empty spot on the canvas (or press **Esc**). | Editing finishes and the note stays, looking exactly as it did while typing (the text doesn't jump). |
+| 3B.3 | Press **T**; click the **Text** tool in the left toolbar; drag the **Text** tool onto the canvas; right-click empty canvas → **New text here**. | Each makes a new note ready for typing: in the middle of the view, or where you dropped or right-clicked. |
+| 3B.4 | Make a new note and finish editing without typing anything. | The empty note disappears again. |
+| 3B.5 | Click a note once, then double-click it in the middle of a word. | One click only selects it (handles appear). Double-click starts editing with the cursor **where you clicked**. **Enter** on a selected note also starts editing. |
+
+**Formatting**
+
+| # | Do this | Expected |
+|---|---|---|
+| 3B.6 | Select some words and try **B**, **I**, **U**, **S**, **Ctrl+B / I / U**, highlight, bulleted and numbered lists, and the **Text style** menu (Heading 1–3). | Each applies to the selection. Lists indent with **Tab** and come back with **Shift+Tab**. |
+| 3B.7 | Click **More formatting** (the **Aa…** button). Under **Selected text**, change font, size, colour and highlight; try each alignment, line spacing and **Space after**. Then select it all and click **Clear formatting**. | Changes show immediately in the note. Fonts list four **Included with the app** fonts and, below, fonts **On this computer**. Clear formatting removes bold, colours, fonts and sizes but keeps links. |
+| 3B.8 | Select a word, press **Ctrl+K**, type `example.com`, press Enter. Then try adding `javascript:alert(1)` as a link. | The word becomes a link to `https://example.com`. The unsafe address is refused with a message. |
+| 3B.9 | Click the link normally, then **Ctrl+click** it (while editing and again after finishing). | A normal click just places the cursor or selects the note. Ctrl+click opens your web browser. |
+| 3B.10 | Finish editing and look closely at the note at 100%, 200% and 50% zoom. | The canvas shows the same formatting, line breaks and spacing as the editor did. Zoomed far out, text turns into grey lines. |
+
+**Look and size**
+
+| # | Do this | Expected |
+|---|---|---|
+| 3B.11 | In the panel under **Whole note**, switch **Style** between **Card** and **Floating text**; change background, opacity, border, corners, shadow and padding. Then click **Reset appearance**. | Floating text has no background or border; the text itself doesn't move when switching. Reset brings back the plain card, keeping the text and its formatting. |
+| 3B.12 | Select a note (not editing) and drag its side handle to make it narrower and wider. | Text re-wraps; letters never stretch or squash. The height follows the text. Only side handles are shown. |
+| 3B.13 | In the panel, set **Height** to **Fixed height**, then drag the bottom handle up so text is hidden. Scroll the mouse wheel over the selected note. Then click **Fit to content**. | Hidden text scrolls inside the note (the canvas doesn't move). Fit to content makes the note exactly tall enough again. |
+| 3B.14 | Rotate a note with the round handle (with **Shift** for 15° steps), then double-click to edit it. | It rotates like an image. The editor appears rotated in place and typing works. |
+| 3B.15 | Zoom out to about 20% and double-click a note. | The view zooms to 100% around the note so you can read what you type. |
+| 3B.16 | Click **Expand note** (or **Ctrl+Shift+E**). Type, then press **Esc** or the button to go back. | A large editor opens with the same text and cursor. Changes appear on the canvas note. **Ctrl+Z** still undoes typing done before expanding. |
+
+**Paste and keys**
+
+| # | Do this | Expected |
+|---|---|---|
+| 3B.17 | Copy a formatted paragraph (with a heading, bold and a link) from a web page or word processor and paste it into a note. | Headings, bold, italics, lists and links come through; the page's fonts and colours don't. |
+| 3B.18 | Paste the same thing with **Ctrl+Shift+V**. | Plain text only. |
+| 3B.19 | Copy an image (or take a screenshot) and press **Ctrl+V** while editing a note. Then finish editing and press **Ctrl+V** on the canvas. | Nothing goes into the note; a message suggests pasting it on the canvas. On the canvas, the image is added as usual. |
+| 3B.20 | Copy some text, click empty canvas (not editing) and press **Ctrl+V**. | No note is made: canvas paste is for images and files. |
+| 3B.21 | While editing, press **Ctrl+A**, **Delete**, **T**, **+**, **−**, the arrow keys and **Ctrl+Z**. | They only affect the text: Ctrl+A selects all the text, Delete deletes characters, letters type, arrows move the cursor. Nothing on the canvas changes, moves or zooms. |
+| 3B.22 | Edit an existing note: type a sentence, finish editing, move the note, then press **Ctrl+Z** twice and **Ctrl+Shift+Z** twice. | The first undo puts the note back, the second removes the whole sentence in one step; redo brings them back in order. |
+
+**On the canvas**
+
+| # | Do this | Expected |
+|---|---|---|
+| 3B.23 | On notes, try everything from M2: move, arrow-key nudge, group with the image, align, layer order, copy/paste, duplicate, cut and paste on another board, Delete + Ctrl+Z, lock (a locked note can't be edited). | All work as for other objects. |
+| 3B.24 | Right-click a note. | **Edit text**, **Expand note**, **Show as floating text** / **Show as card**, **Reset appearance** (and **Fit to content** for fixed-height notes), plus the usual items. |
+
+**Keeping your work safe**
+
+| # | Do this | Expected |
+|---|---|---|
+| 3B.25 | Type a long paragraph quickly without stopping. Watch the status. | It shows **Saving…** then **Saved** within a few seconds, even while you keep typing. |
+| 3B.26 | Type a few words and **immediately** close the window (✕). Reopen the project. | The words are there. |
+| 3B.27 | Quit and relaunch the app, then reopen the project. | Every note is back with its text, formatting, look, size, rotation and position. |
+| 3B.28 | Open the board in a second window. Edit a note in window 1. | Window 2 shows **✎ Editing in another window** on that note and updates as window 1 saves. |
+| 3B.29 | In window 2, double-click that note, then click **Edit here instead**. | Window 1's typing is saved and it becomes read-only ("Another window is editing this note now…"). Window 2 can now edit, starting from window 1's latest text. |
+| 3B.30 | While window 1 is editing a note, select it in window 2 and press **Delete**. | Window 1 says the note was moved to the trash and offers **Keep my text as a new note** or **Discard**. Keep makes a new note with the text. |
+
+Conflicting saves (**Keep mine / Use theirs / Keep both**) and failed saves (**Couldn't save**, **Try now**) are hard to trigger by hand; the automated tests cover them.
+
+**Feel (your opinion — most important for M3B)**
+
+- Does typing on the canvas feel natural? Is anything about the cursor, selection or scrolling awkward?
+- Are the quick bar and the formatting panel easy to find and use? Anything missing that you reach for often?
+- Do the notes look good next to images at different zoom levels?
+
 ### M3A — Images (≈25 minutes)
 
 Use a fresh project (e.g. `Image Test`) with one or two board cards on it.
@@ -332,6 +404,7 @@ npm run test:e2e     # end-to-end UI tests: builds the app, then Playwright driv
   - assets: originals stored byte-for-byte and source files untouched, content checks (fake or unsupported files), deduplication, EXIF orientation, thumbnails with transparency, export of originals
   - image objects: initial sizing, layout, proportions enforced on every update, copies sharing one asset
   - renderer helpers: tree building, camera math, rotated bounds, image level of detail, align/distribute/match size with rotated and ratio-locked images, z-order, snapping, undo history
+  - text notes: content validation and sanitising (unsafe links, images and scripts refused, invalid attributes, size limit), unreadable notes, plain-text extraction, revision-checked saves (stale revisions and notes trashed meanwhile), style and minimum-height rules, copy/trash/restore, editing leases and take-over
 - **End-to-end tests** (Playwright, `e2e/`): launch the real app with a temporary settings folder and test
   - creating boards from the toolbar (click and drag-drop)
   - dragging cards and persistence after restart
@@ -339,6 +412,7 @@ npm run test:e2e     # end-to-end UI tests: builds the app, then Playwright driv
   - delete + undo
   - sidebar drag-and-drop for boards and folders
   - images (`e2e/images.spec.ts`): Image tool import with byte-for-byte storage and thumbnails served to the UI; drawn on the canvas; proportional resize and Shift-snapped rotation with undo and persistence; dropping files (with an unsupported one explained); duplicate sharing the stored file; delete/undo/redo; pasting a screenshot, files copied in File Explorer and copied images; viewer open/fit/100%/download original/close; a second window showing the image and its changes
+  - text notes (`e2e/notes.spec.ts`): creating notes (double-click, T, toolbar) with autosave; card/floating and reset; formatting drawn on the canvas, unsafe links refused, Ctrl+click opening links; resize reflow and auto height; fixed height scrolling and fit to content; move and Shift-snapped rotation; editing zoomed in and far out; the expanded editor; paste cleaning, plain paste and images kept out of notes; keyboard isolation; undo/redo ordering; persistence after restart; two-window sync, take-over, conflicts and notes deleted elsewhere; failed saves with retry; closing a window right after typing; damaged notes; a CPU-throttled "slow machine"
 
   Failures in CI upload a Playwright report with screenshots and traces.
 

@@ -4,6 +4,7 @@
  */
 import { positionForCenter, rotatedCenter } from '@shared/geometry'
 import type { CanvasObject, ImportResult, ObjectPatch, Point } from '@shared/types'
+import { isAutoHeightNote, noteContentHeight } from '../notes/measure'
 import { history as undoHistory, useCanvasStore } from '../store/canvasStore'
 import { reportError, showNotice, useProjectStore } from '../store/projectStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
@@ -50,8 +51,11 @@ export const selectedObjects = (): CanvasObject[] => {
  */
 const enqueue = serialQueue()
 
+/** Runs a task in the edit queue without error handling (note saves handle their own). */
+export const queued = enqueue
+
 /** Runs an edit; on failure shows the error and refetches so the screen matches the data. */
-function run(edit: () => Promise<void>): Promise<void> {
+export function run(edit: () => Promise<void>): Promise<void> {
   return enqueue(async () => {
     try {
       await edit()
@@ -62,7 +66,7 @@ function run(edit: () => Promise<void>): Promise<void> {
   })
 }
 
-function record(command: Command): void {
+export function record(command: Command): void {
   undoHistory.push(command)
   canvas().bumpHistory()
 }
@@ -83,8 +87,8 @@ export const redo = () =>
 export function applyPatches(raw: ObjectPatch[], label: string): Promise<void> {
   return run(async () => {
     if (raw.length === 0) return
-    const patches = raw.map(roundPatch)
     const byId = new Map(currentObjects().map((o) => [o.id, o]))
+    const patches = raw.map((patch) => roundPatch(fitAutoHeight(patch, byId.get(patch.id))))
     const before: ObjectPatch[] = patches.map((patch) => {
       const original = byId.get(patch.id)
       const inverse: ObjectPatch = { id: patch.id }
@@ -101,6 +105,16 @@ export function applyPatches(raw: ObjectPatch[], label: string): Promise<void> {
       redo: () => api().invoke('objects:update', patches)
     })
   })
+}
+
+/**
+ * Auto-height notes are as tall as their text: a new width sets the height, and a height
+ * on its own (e.g. "Same height") is ignored.
+ */
+function fitAutoHeight(patch: ObjectPatch, object: CanvasObject | undefined): ObjectPatch {
+  if (!object || !isAutoHeightNote(object)) return patch
+  if (patch.width === undefined && patch.height === undefined) return patch
+  return { ...patch, height: noteContentHeight(object, { width: patch.width ?? object.width }) }
 }
 
 /** Keeps stored geometry tidy: zoom and resize math produce values like 209.99999999999997. */
@@ -327,7 +341,7 @@ function defaultPastePoint(ids: string[], sameBoard: boolean): Point {
 
 // ── Images ───────────────────────────────────────────────────────────────────
 
-const viewCenter = (): Point => {
+export const viewCenter = (): Point => {
   const { viewport, viewSize } = canvas()
   return screenToWorld({ x: viewSize.width / 2, y: viewSize.height / 2 }, viewport)
 }

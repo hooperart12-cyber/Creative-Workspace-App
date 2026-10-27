@@ -43,7 +43,8 @@ export function toCanvasObject(row: ObjectRow): CanvasObject {
     groupId: row.groupId,
     linkedBoardId: row.linkedBoardId,
     assetId: row.assetId,
-    data: row.data
+    data: row.data,
+    revision: row.revision
   }
 }
 

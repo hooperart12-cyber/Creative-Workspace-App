@@ -6,7 +6,9 @@ import { ArrangeBar, CanvasToolbar, ZoomControl } from '../canvas/CanvasChrome'
 import { CanvasMenu } from '../canvas/CanvasMenu'
 import { CanvasView } from '../canvas/CanvasView'
 import { ImageViewer } from '../canvas/ImageViewer'
+import { ExpandedNoteEditor } from '../notes/ExpandedNoteEditor'
 import { useCanvasStore } from '../store/canvasStore'
+import { isEditingNote, useNoteStore } from '../notes/noteStore'
 import { Breadcrumb } from './Breadcrumb'
 import { SidebarIcon } from './icons'
 import { Sidebar } from './Sidebar'
@@ -25,6 +27,10 @@ export function ProjectView({ project }: { project: ProjectSummary }) {
 
   useEffect(() => {
     void useWorkspaceStore.getState().load(boardFromHash())
+    void window.api
+      .invoke('notes:editedElsewhere')
+      .then((ids) => useNoteStore.setState({ editedElsewhere: new Set(ids) }))
+      .catch(() => {})
   }, [project.path])
 
   // Navigation shortcuts: Alt+←/→/↑, mouse back/forward buttons, Ctrl/Cmd+\ toggles the sidebar.
@@ -33,6 +39,7 @@ export function ProjectView({ project }: { project: ProjectSummary }) {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return
       if (useCanvasStore.getState().viewerObjectId) return
+      if (isEditingNote()) return
       if (e.altKey && e.key === 'ArrowLeft') void goBack()
       else if (e.altKey && e.key === 'ArrowRight') void goForward()
       else if (e.altKey && e.key === 'ArrowUp') void goUp()
@@ -117,6 +124,7 @@ export function ProjectView({ project }: { project: ProjectSummary }) {
       </div>
       <WorkspaceDialogs />
       <ImageViewer />
+      <ExpandedNoteEditor />
     </div>
   )
 }

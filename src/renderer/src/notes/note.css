@@ -1,0 +1,149 @@
+/*
+ * Note text styles (ADR-014). Used by the inline editor, the expanded editor and the hidden
+ * copy that measures text for the canvas — keep them identical so line breaks match.
+ * Sizes are in canvas units (CSS px at 100% zoom).
+ */
+.cw-note {
+  box-sizing: border-box;
+  font-family: 'CW Inter', sans-serif;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.4;
+  color: #1f1f1f;
+  text-align: left;
+  letter-spacing: normal;
+  -webkit-font-smoothing: antialiased;
+}
+
+.cw-note-content {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  /* The canvas draws with ligatures on, so the editor must too. */
+  font-variant-ligatures: normal;
+  font-feature-settings: normal;
+  outline: none;
+  min-height: 1lh;
+}
+
+.cw-note-content p {
+  margin: 0 0 0.5em;
+}
+
+.cw-note-content h1,
+.cw-note-content h2,
+.cw-note-content h3 {
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 0 0 0.4em;
+}
+.cw-note-content h1 {
+  font-size: 1.75em;
+}
+.cw-note-content h2 {
+  font-size: 1.4em;
+}
+.cw-note-content h3 {
+  font-size: 1.15em;
+}
+
+.cw-note-content ul,
+.cw-note-content ol {
+  margin: 0 0 0.5em;
+  padding: 0 0 0 1.6em;
+}
+.cw-note-content li > p {
+  margin: 0;
+}
+.cw-note-content li > ul,
+.cw-note-content li > ol {
+  margin: 0;
+}
+.cw-note-content > :last-child {
+  margin-bottom: 0;
+}
+
+/* List markers are spelled out so the canvas can draw exactly the same ones. */
+.cw-note-content ul > li::marker {
+  content: '• ';
+}
+.cw-note-content ul ul > li::marker {
+  content: '◦ ';
+}
+.cw-note-content ul ul ul > li::marker {
+  content: '▪ ';
+}
+.cw-note-content ol > li::marker {
+  content: counter(list-item) '. ';
+}
+.cw-note-content ol ol > li::marker {
+  content: counter(list-item, lower-alpha) '. ';
+}
+.cw-note-content ol ol ol > li::marker {
+  content: counter(list-item, lower-roman) '. ';
+}
+/* The browser's default is fixed-width digits, which the canvas can't draw. */
+.cw-note-content li::marker {
+  font-variant-numeric: normal;
+}
+
+.cw-note-content strong {
+  font-weight: 700;
+}
+.cw-note-content a {
+  color: #2f5bd3;
+  text-decoration: underline;
+  cursor: text;
+}
+.cw-note-content mark {
+  background-color: #fff1a8;
+  color: inherit;
+  padding: 0;
+}
+.cw-note-content * {
+  text-underline-offset: 0.15em;
+  text-decoration-thickness: 0.07em;
+}
+
+/* Placeholder in an empty note while editing (takes no space, so it can't change the layout). */
+.cw-note-content p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: #9a9893;
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* ProseMirror's own rules (the editor's built-in CSS is off so these files are the only source). */
+.ProseMirror {
+  position: relative;
+}
+.ProseMirror-hideselection *::selection {
+  background: transparent;
+}
+.ProseMirror-hideselection {
+  caret-color: transparent;
+}
+img.ProseMirror-separator {
+  display: inline !important;
+  border: none !important;
+  margin: 0 !important;
+}
+
+/* Fixed-height notes scroll without a scroll bar taking width (which would re-wrap the text). */
+.cw-note-scroll {
+  scrollbar-width: none;
+}
+.cw-note-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hidden copy used to measure text for the canvas. */
+.cw-note-measure {
+  position: fixed;
+  left: -100000px;
+  top: 0;
+  opacity: 0;
+  pointer-events: none;
+  contain: layout style;
+}

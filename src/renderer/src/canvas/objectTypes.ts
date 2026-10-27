@@ -8,8 +8,8 @@ export function lockedAspectRatio(o: CanvasObject): number | null {
   return width && height ? width / height : o.width / o.height
 }
 
-/** Images (and later notes) rotate freely; board cards don't. */
-export const canRotate = (o: CanvasObject): boolean => o.type === 'image'
+/** Images and notes rotate freely; board cards don't. */
+export const canRotate = (o: CanvasObject): boolean => o.type === 'image' || o.type === 'text'
 
 /** Objects that open in the full-size viewer. */
 export const isViewable = (o: CanvasObject): boolean => o.type === 'image' && !!o.asset

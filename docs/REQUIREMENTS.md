@@ -29,7 +29,7 @@
 | 2 | Platform and Multi-Window Support | 🟢 MVP (basic) | Electron `BrowserWindow`s; changes broadcast from the main process |
 | 3 | Projects and Organizational Structure | 🟢 **MVP – priority** (✅ core done in M1) | Nested boards + folders; Collections ⚪ Later; ADR-011 pending team review |
 | 4 | Infinite Canvas | 🟢 **MVP – priority** (✅ done in M2) | Navigation, selection, move/resize, group, lock, layers, align/distribute, grid/snap, smart guides |
-| 5 | Board Object Types | 🟢 **MVP – priority** (✅ images done in M3A) | Images first, then text and documents. Checklists, headers/dividers and containers 🟡 deprioritized |
+| 5 | Board Object Types | 🟢 **MVP – priority** (✅ images done in M3A, ✅ text notes done in M3B) | Documents next. Checklists, headers/dividers and containers 🟡 deprioritized |
 | 6 | Document Viewing and Review | 🟢 MVP (PDF only) | Other formats ⚪ Later |
 | 7 | Artwork and Image Handling | 🟢 **MVP – priority** (✅ images done in M3A) | JPEG/JPG, PNG, WebP and PDF first; other formats ⚪ Later |
 | 8 | Project Asset Libraries | 🟢 **MVP – priority** | Storage approach decided (local-first) |
@@ -41,7 +41,7 @@
 | 14 | Pinned Items and Workspace Navigation | ⚪ Later | |
 | 15 | Collaboration and Shared Workspaces | ⚪ Later | **Requires cloud backend** (see DECISIONS ADR-006) |
 | 16 | Plot Roadmaps | 🔵 Optional | |
-| 17 | Covers, Typography, and Appearance | ⚪ Later | Board covers may land with §3 |
+| 17 | Covers, Typography, and Appearance | ⚪ Later | Notes already offer bundled and system fonts (M3B); board covers and font import later |
 | 18 | Quick Capture and Importing | 🟢 MVP (images/PDF) (✅ image paste and drag-drop done in M3A) | Direct library import in M4; URL link cards ⚪ Later |
 | 19 | Keyboard Shortcuts and Quick Commands | 🟢 MVP | ✅ Canvas shortcuts done in M2; command palette in M5 |
 | 20 | Board History and Recovery | 🟢 MVP (undo/redo, trash) | ✅ Undo/redo done in M2; Trash view M4; snapshots ⚪ Later |
@@ -172,7 +172,7 @@ A collection can appear as an object on a board.
 
 ## 4. Infinite Canvas
 
-> **Status:** 🟢 **MVP – priority**. ✅ **Implemented in M2**, with free rotation of images added in M3A (Shift snaps to 15°). Text notes will rotate when they arrive in M3B; board cards don't rotate.
+> **Status:** 🟢 **MVP – priority**. ✅ **Implemented in M2**, with free rotation of images added in M3A and of text notes in M3B (Shift snaps to 15°). Board cards don't rotate.
 > **Decisions:** Built on react-konva (ADR-003). Interaction model follows Figma conventions (ADR-012).
 
 The infinite canvas is the primary application interface.
@@ -226,12 +226,14 @@ Users should be able to create either completely freeform arrangements or highly
 
 ## 5. Board Object Types
 
-> **Status:** 🟢 **MVP – priority** (Milestone M3). Build order: **Images (M3A ✅) → Text Boxes/Notes and Nested Board covers (M3B) → Documents (PDF) (M3C)**.
+> **Status:** 🟢 **MVP – priority** (Milestone M3). Build order: **Images (M3A ✅) → Text Boxes/Notes (M3B ✅) → Documents (PDF) (M3C)**. Nested board covers moved to Later (§17).
 > Checklists, Headers and Dividers, and Containers are 🟡 **deprioritized**. Tables, Connections, and Comments are ⚪ Later.
 
 The canvas should support multiple object types.
 
-### Text Boxes and Notes 🟢
+### Text Boxes and Notes 🟢 — ✅ implemented in M3B (ADR-014)
+
+> Rich text notes are edited directly on the canvas or in an expanded editor, with card or floating-text styles, auto or fixed height, autosave, and safe sharing between windows. **Images inside notes are not supported yet** (⚪ Later): paste images onto the canvas next to the note instead. Tables and checklists inside notes are also Later.
 
 - Freely placed text boxes.
 - Resizable text areas.

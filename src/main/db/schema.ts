@@ -114,6 +114,11 @@ export const boardObjects = sqliteTable(
     assetId: text('asset_id').references(() => assets.id),
     linkedBoardId: text('linked_board_id').references(() => boards.id),
     data: text('data', { mode: 'json' }).$type<Record<string, unknown>>().notNull().default({}),
+    /**
+     * Counts saves of the object's content (note text). A save names the revision it was based
+     * on and is refused if another window saved in between, so edits never silently overwrite.
+     */
+    revision: integer('revision').notNull().default(0),
     ...timestamps,
     ...softDelete
   },

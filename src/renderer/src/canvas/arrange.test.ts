@@ -34,6 +34,7 @@ function obj(
     linkedBoardId: null,
     assetId: null,
     data: {},
+    revision: 0,
     ...extra
   }
 }

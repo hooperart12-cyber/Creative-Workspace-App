@@ -55,8 +55,8 @@ RULES:
 > Outgoing agent: replace this section each session. Keep it short and factual.
 
 **Last updated:** 2026-10-24
-**Branch:** `feat/m3a-images` (PR open → merge into `main` after the project owner's review; don't merge automatically)
-**Phase:** M3A (Images) complete; M3B (text notes, board covers) and M3C (PDFs, file cards) not started.
+**Branches:** `feat/m3a-images` (PR open → `main`) and `feat/m3b-text-notes`, stacked on it (PR open → `feat/m3a-images`). Merge M3A first, then retarget M3B to `main`. Don't merge automatically.
+**Phase:** M3A (images) and M3B (rich text notes) complete, awaiting review. Board covers moved to Later. M3C (PDFs, file cards) not started.
 
 **Done**
 - M0 scaffold, M1 boards/folders, testing guide, M2 canvas (PR #5, ADR-012).
@@ -72,21 +72,30 @@ RULES:
     - Rotated bounds (`src/shared/geometry.ts`) used across the canvas maths.
     - Import flows in `actions.ts`: drop, paste, picker, one undo step, notice for skipped files.
     - `ImageViewer.tsx`.
-- Tests: 98 unit tests; 11 Playwright end-to-end tests (6 canvas + 5 images). The image tests include a real screenshot paste and, on Windows, a File Explorer file paste (via PowerShell `Set-Clipboard -Path`).
-- `docs/TESTING.md` has an M3A checklist (30 steps).
-- Packaged build verified: `sharp` loads from `app.asar.unpacked` and imports and thumbnails work.
+  - The image tests include a real screenshot paste and, on Windows, a File Explorer file paste (via PowerShell `Set-Clipboard -Path`).
+  - Packaged build verified: `sharp` loads from `app.asar.unpacked` and imports and thumbnails work.
+- M3B rich text notes, see ADR-014:
+  - **Shared:** `src/shared/notes.ts`: document schema, sanitiser (the allow-list), `readNote`, `plainTextOf`, `isSafeLink`, size limits.
+  - **Main process:**
+    - `NoteRepository` (`src/main/project/notes.ts`): create, revision-checked `saveContent`, `updateStyle`. The `revision` column comes from migration `0001_note_revision`.
+    - `NoteLeases` (`noteLeases.ts`): who is editing which note. `ipc.ts` handles `notes:*`, `links:open`, take-over (waits up to 3 s for `notes:handedOver`) and window-close flushing (`window:flushRequest`, up to 4 s).
+  - **Renderer** (`src/renderer/src/notes/`):
+    - `session.ts` is the heart: one Tiptap editor per window, autosave, retries, conflicts, leases, the undo step at the end of editing.
+    - `layout.ts` / `measure.ts`: hidden-DOM layout read back as lines and runs. `NoteNode.tsx` paints them in Konva.
+    - `NoteEditorOverlay.tsx` (inline), `ExpandedNoteEditor.tsx`, `NoteChrome.tsx` (toolbar position, notices), `NoteToolbar.tsx`, `NoteFormatPanel.tsx`.
+    - `extensions.ts` (Tiptap setup, shortcuts), `paste.ts` (DOMPurify), `fonts.ts` (bundled fonts plus the Local Font Access API), `noteActions.ts` (style changes as canvas steps).
+- Tests: 128 unit tests; 32 Playwright end-to-end tests (canvas, images, and 18 for notes in `e2e/notes.spec.ts`).
+- `docs/TESTING.md` has checklists for M3B (30 steps) and M3A (30 steps).
 
 **In progress**
 - Nothing.
 
 **Next steps**
 1. Project owner reviews the M3A PR and runs the M3A checklist (pasting from their own browser and screenshot tool is the key check), then merges.
-2. Discuss ADR-011 (separate vs. unified tree) with the team before M4.
-3. Start **M3B** (text notes, board covers). Plan first. Likely pieces:
-   - text notes with a DOM overlay editor; rotation already works through `canRotate` in `canvas/objectTypes.ts`
-   - double-click on empty canvas creates a text note (Milanote)
-   - board cover: pick an image asset for `boards.cover_asset_id` and draw it in `BoardCardNode` via `useImage` and `assetUrl`
+2. Project owner reviews the M3B PR and runs the M3B checklist (typing feel and two windows are the key checks). After M3A merges, retarget the M3B PR to `main`, then merge after review.
+3. Discuss ADR-011 (separate vs. unified tree) with the team before M4.
 4. Then **M3C**: PDF cards and viewer (pdf.js), generic file cards. Reuse `AssetRepository` (relax the image-only check per type) and the viewer pattern.
+5. Later: board covers (pick an image asset for `boards.cover_asset_id` and draw it in `BoardCardNode` via `useImage` and `assetUrl`).
 
 **Known issues / open questions**
 - Trashed items can only be restored with undo (in the same session) until the Trash view (M4).
@@ -95,6 +104,8 @@ RULES:
 - Images go to the library's top level and onto the open board only; there's no library panel until M4. Dropping images onto a board card doesn't import into that board yet.
 - Copying objects in the app replaces the system clipboard text with a short note (by design, ADR-013).
 - Unused thumbnails and originals of permanently deleted assets aren't cleaned up yet (needs the M4 Trash view).
+- Notes: known display approximations and other limits are listed at the end of ADR-014. A note moved to another board by another window while you're editing shows the "moved to the trash" choices.
+- Notes rely on two private details: Konva's `stage._lastClicks` (reset after a drag so the drag's mouse-up doesn't pair with the next click as a double-click), and ProseMirror's view for placing the cursor. Recheck both when upgrading Konva or Tiptap.
 - **Dev-only:** after hot-reloading `useCanvasShortcuts.ts`, Space+drag may stop working until the page reloads (duplicate module state). Not an issue in builds.
 - **Testing tips:**
   - Drive the canvas with real input events; positions come from `window.__cw` (see `e2e/app.ts`).
@@ -104,6 +115,7 @@ RULES:
   - "Download original" copies to a hidden `.part` file next to the destination and renames it when complete; wait for the file to exist rather than polling its contents.
   - New windows are listed first in DevTools `/json/list`.
   - Windows without OS focus don't fire blur, so use `Emulation.setFocusEmulationEnabled`.
+  - Notes: Chromium reports selection changes about a frame late, so after a click or arrow key in a note, wait until the editor's selection matches the page (`synced` / `moveCursor` in `e2e/notes.spec.ts`) before typing. With two windows, call `page.bringToFront()` before typing in a window; cursor keys are unreliable in a background window.
 
 **How to run**
 - See `docs/SETUP.md`. Short version: `npm install`, `npm run dev`. Tests: `npm test`, `npm run test:e2e`.

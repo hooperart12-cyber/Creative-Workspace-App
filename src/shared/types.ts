@@ -1,3 +1,5 @@
+import type { NoteAppearance, NoteContent, NoteSizing } from './notes'
+
 /** Summary of an open project, as seen by the renderer. */
 export interface ProjectSummary {
   id: string
@@ -112,6 +114,8 @@ export interface CanvasObject {
   linkedBoardId: string | null
   assetId: string | null
   data: Record<string, unknown>
+  /** Number of content saves (notes); a save based on an older revision is refused. */
+  revision: number
   /** Present for `board` cards: details of the board the card opens. */
   board?: { title: string; childBoardCount: number }
   /** Present for objects that show a library file (images). */
@@ -160,3 +164,41 @@ export interface CreateFolderInput {
   parentId: string | null
   name?: string
 }
+
+export interface CreateNoteInput {
+  boardId: string
+  /** Top-left corner, world coordinates. */
+  at: Point
+  width?: number
+  height?: number
+  /** Text to start with (e.g. "save my version as a copy"); empty if not given. */
+  content?: NoteContent
+  appearance?: Partial<NoteAppearance>
+  sizing?: NoteSizing
+}
+
+export interface SaveNoteInput {
+  id: string
+  /** The revision the edit started from. */
+  baseRevision: number
+  content: NoteContent
+  /** New height for auto-height notes (measured by the window that edited the text). */
+  height?: number
+}
+
+export type SaveNoteResult =
+  | { ok: true; revision: number }
+  /** Someone else saved first: their version, so the user can choose. */
+  | { ok: false; reason: 'conflict'; revision: number; content: NoteContent | null }
+  /** The note was moved to the trash (maybe in another window). */
+  | { ok: false; reason: 'deleted' }
+
+/** Whole-note changes (undoable on the canvas). */
+export interface NoteStylePatch {
+  id: string
+  appearance?: Partial<NoteAppearance>
+  sizing?: NoteSizing
+  height?: number
+}
+
+export type NoteLeaseAction = 'acquire' | 'release' | 'takeOver'
