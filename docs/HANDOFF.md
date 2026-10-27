@@ -102,7 +102,7 @@ RULES:
 - Renderer: save indicator, Backup dialog, command palette, shortcut sheet, Search, PDF indexer, draft dialog. Note session writes `recovery/` and clears a draft only after a successful save.
 
 **Done this session (M7, ADR-019)**
-- Branch `feat/m7-image-stacks`, based on M6 `19ce163`. Pull request targets `feat/m6-tags-search` and is not merged.
+- Branch `feat/m7-image-stacks`, based on M6 `19ce163`. [PR #12](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/12) targets `feat/m6-tags-search` and is not merged.
 - Migration `0006_image_stacks`: `stack_slides`, and a rebuild of `tags` / `taggings` that copies every row and allows a `slide` target. Cleanup triggers are recreated after the rename.
 - `StackRepository` (`src/main/project/stacks.ts`): combine, copy, add, remove, extract, reorder, cover, displayed slide, unstack, crop, and revision-checked undo.
 - Canvas stack, stack editor, gallery/focus viewer, crop rectangle, drop prompt (Move is the default), and search groups that can preview a slide.
@@ -114,7 +114,7 @@ RULES:
 - Renderer: Tag manager, Tag Trash, canvas pills, library and canvas tagging, search chips. Undo refuses when another window changed that assignment.
 
 **In progress**
-- M7 pull request is open against `feat/m6-tags-search`. Do not merge it. M6 [PR #11](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/11) is also still open.
+- [PR #12](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/12) is open against `feat/m6-tags-search`. Do not merge it. M6 [PR #11](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/11) is also still open.
 
 **Next steps**
 1. Review the M7 PR and run the M7 checklist in `docs/TESTING.md`.
