@@ -187,7 +187,9 @@ describe('recovery points', () => {
     cpSync(migrations, oldMigrations, { recursive: true })
     const journalPath = join(oldMigrations, 'meta', '_journal.json')
     const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as { entries: { tag: string }[] }
-    journal.entries = journal.entries.filter((entry) => entry.tag !== '0004_reliability')
+    journal.entries = journal.entries.filter(
+      (entry) => entry.tag !== '0004_reliability' && entry.tag !== '0005_tags'
+    )
     writeFileSync(journalPath, JSON.stringify(journal))
     const legacy = Project.create(dir, 'Legacy', oldMigrations)
     const legacyPath = legacy.path

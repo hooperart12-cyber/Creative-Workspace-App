@@ -118,7 +118,11 @@ export class BoardRepository {
       isMain: board.id === this.mainBoardId,
       breadcrumb,
       objects,
-      viewport: { x: row.viewportX, y: row.viewportY, zoom: row.viewportZoom }
+      viewport: { x: row.viewportX, y: row.viewportY, zoom: row.viewportZoom },
+      tagVisibility:
+        row.tagVisibility === 'hidden' || row.tagVisibility === 'always'
+          ? row.tagVisibility
+          : 'hover'
     }
   }
 
