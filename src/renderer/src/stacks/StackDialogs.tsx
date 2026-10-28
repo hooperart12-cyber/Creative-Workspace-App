@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Dialog } from 'radix-ui'
 import { assetUrl } from '@shared/assets'
 import { cropPixels, type ImageCrop } from '@shared/crop'
@@ -9,6 +9,7 @@ import { useProjectStore } from '../store/projectStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { TagEditor } from '../tags/TagEditor'
 import { applyPatches } from '../canvas/actions'
+import { reorderSlideIds } from './reorder'
 import * as stacks from './stackActions'
 
 export function StackDialogs() {
@@ -92,59 +93,92 @@ function StackEditor() {
             </label>
           </div>
           <ul className="mt-4 space-y-2">
-            {(object.slides ?? []).map((item, index) => (
-              <li key={item.id} className="flex items-center gap-2 text-sm">
-                <button className="flex-1 text-left" onClick={() => setSlideId(item.id)}>
-                  {item.asset?.originalName ?? 'Image'}
-                  {item.id === settings.coverSlideId ? ' · Cover' : ''}
-                  {item.id === settings.displayedSlideId ? ' · Showing' : ''}
-                </button>
-                <button
-                  onClick={() =>
-                    void stacks.reorderSlides(
-                      object.id,
-                      move(object.slides ?? [], index, -1),
-                      object.revision
+            {(object.slides ?? []).map((item, index) => {
+              const name = item.asset?.originalName ?? 'Image'
+              return (
+                <li
+                  key={item.id}
+                  className="flex items-center gap-2 text-sm"
+                  onDragOver={(event) => {
+                    event.preventDefault()
+                    event.dataTransfer.dropEffect = 'move'
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault()
+                    const fromId = event.dataTransfer.getData('text/plain')
+                    const next = reorderSlideIds(
+                      (object.slides ?? []).map((slide) => slide.id),
+                      fromId,
+                      item.id
                     )
-                  }
+                    if (next) void stacks.reorderSlides(object.id, next, object.revision)
+                  }}
                 >
-                  Up
-                </button>
-                <button
-                  onClick={() =>
-                    void stacks.reorderSlides(
-                      object.id,
-                      move(object.slides ?? [], index, 1),
-                      object.revision
-                    )
-                  }
-                >
-                  Down
-                </button>
-                <button onClick={() => void stacks.setCover(object.id, item.id, object.revision)}>
-                  Cover
-                </button>
-                <button
-                  onClick={() =>
-                    useCanvasStore
-                      .getState()
-                      .setCropTarget({ objectId: object.id, slideId: item.id })
-                  }
-                >
-                  Crop
-                </button>
-                <button
-                  onClick={() => void stacks.extractSlide(object.id, item.id, object.revision)}
-                >
-                  Extract
-                </button>
-                <button
-                  onClick={() => void stacks.removeSlide(object.id, item.id, object.revision)}
-                >
-                  Remove
-                </button>
-              </li>
-            ))}
+                  <div
+                    draggable
+                    aria-label={`Drag to reorder ${name}`}
+                    className="cursor-grab"
+                    onDragStart={(event) => {
+                      event.dataTransfer.setData('text/plain', item.id)
+                      event.dataTransfer.effectAllowed = 'move'
+                    }}
+                  >
+                    <SlideImage slide={item} thumb />
+                  </div>
+                  <button className="flex-1 text-left" onClick={() => setSlideId(item.id)}>
+                    {name}
+                    {item.id === settings.coverSlideId ? ' · Cover' : ''}
+                    {item.id === settings.displayedSlideId ? ' · Showing' : ''}
+                  </button>
+                  <button
+                    aria-label={`Move ${name} up`}
+                    onClick={() =>
+                      void stacks.reorderSlides(
+                        object.id,
+                        move(object.slides ?? [], index, -1),
+                        object.revision
+                      )
+                    }
+                  >
+                    Up
+                  </button>
+                  <button
+                    aria-label={`Move ${name} down`}
+                    onClick={() =>
+                      void stacks.reorderSlides(
+                        object.id,
+                        move(object.slides ?? [], index, 1),
+                        object.revision
+                      )
+                    }
+                  >
+                    Down
+                  </button>
+                  <button onClick={() => void stacks.setCover(object.id, item.id, object.revision)}>
+                    Cover
+                  </button>
+                  <button
+                    onClick={() =>
+                      useCanvasStore
+                        .getState()
+                        .setCropTarget({ objectId: object.id, slideId: item.id })
+                    }
+                  >
+                    Crop
+                  </button>
+                  <button
+                    onClick={() => void stacks.extractSlide(object.id, item.id, object.revision)}
+                  >
+                    Extract
+                  </button>
+                  <button
+                    onClick={() => void stacks.removeSlide(object.id, item.id, object.revision)}
+                  >
+                    Remove
+                  </button>
+                </li>
+              )
+            })}
           </ul>
           <div className="mt-3 flex gap-2">
             <button
@@ -191,19 +225,204 @@ function StackViewer() {
   const setViewer = useCanvasStore((s) => s.setStackViewer)
   const object = useStack(viewer?.objectId ?? null)
   if (!viewer || !object) return null
+  return <StackViewerBody object={object} viewer={viewer} setViewer={setViewer} />
+}
+
+const MIN_SCALE = 0.02
+const MAX_SCALE = 32
+const FIT_PADDING = 48
+
+interface View {
+  x: number
+  y: number
+  scale: number
+}
+
+function StackViewerBody({
+  object,
+  viewer,
+  setViewer
+}: {
+  object: CanvasObject
+  viewer: { objectId: string; mode: 'gallery' | 'focus'; slideId: string }
+  setViewer: (
+    viewer: { objectId: string; mode: 'gallery' | 'focus'; slideId: string } | null
+  ) => void
+}) {
   const slides = object.slides ?? []
   const slide = slides.find((item) => item.id === viewer.slideId) ?? slides[0]
+  const projectId = useProjectStore((s) => s.project?.id)
+  const [area, setArea] = useState<HTMLDivElement | null>(null)
+  const [size, setSize] = useState({ width: 0, height: 0 })
+  const [manuals, setManuals] = useState<Record<string, View | null>>({})
+  const pan = useRef<{ pointerId: number; startX: number; startY: number; view: View } | null>(null)
+  const pixels =
+    slide?.asset?.width && slide.asset.height
+      ? cropPixels(slide.crop, slide.asset.width, slide.asset.height)
+      : null
+  const naturalW = pixels?.width ?? 1
+  const naturalH = pixels?.height ?? 1
+  const manual = slide ? (manuals[slide.id] ?? null) : null
+  const setManual = (view: View | null) => {
+    if (!slide) return
+    setManuals((current) => ({ ...current, [slide.id]: view }))
+  }
+  const fitted = manual === null
+  const view = useMemo((): View => {
+    if (manual) return manual
+    const scale = Math.min(
+      MAX_SCALE,
+      Math.max(
+        MIN_SCALE,
+        Math.min(
+          1,
+          (size.width - FIT_PADDING * 2) / naturalW,
+          (size.height - FIT_PADDING * 2) / naturalH
+        )
+      )
+    )
+    return {
+      scale,
+      x: (size.width - naturalW * scale) / 2,
+      y: (size.height - naturalH * scale) / 2
+    }
+  }, [manual, size, naturalW, naturalH])
+  const viewRef = useRef(view)
+  useLayoutEffect(() => {
+    viewRef.current = view
+  })
+  useLayoutEffect(() => {
+    const el = area
+    if (!el) return
+    const observer = new ResizeObserver(() =>
+      setSize({ width: el.clientWidth, height: el.clientHeight })
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [area])
+  const slideId = slide?.id
+  const zoomAt = (scale: number, at?: { x: number; y: number }) => {
+    if (!slideId) return
+    const current = viewRef.current
+    const anchor = at ?? { x: (area?.clientWidth ?? 0) / 2, y: (area?.clientHeight ?? 0) / 2 }
+    const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale))
+    const k = next / (current.scale || 1)
+    setManuals((currentViews) => ({
+      ...currentViews,
+      [slideId]: {
+        scale: next,
+        x: anchor.x - (anchor.x - current.x) * k,
+        y: anchor.y - (anchor.y - current.y) * k
+      }
+    }))
+  }
+  const zoomAtRef = useRef(zoomAt)
+  useEffect(() => {
+    zoomAtRef.current = zoomAt
+  })
+  useEffect(() => {
+    const el = area
+    if (!el) return
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      const rect = el.getBoundingClientRect()
+      const at = { x: event.clientX - rect.left, y: event.clientY - rect.top }
+      zoomAtRef.current(viewRef.current.scale * Math.exp(-event.deltaY * 0.0015), at)
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [area])
+  const index = slide ? slides.findIndex((item) => item.id === slide.id) : 0
+  const show = (delta: number) => {
+    if (slides.length < 2) return
+    const next = slides[(index + delta + slides.length) % slides.length]
+    setViewer({ ...viewer, slideId: next.id })
+  }
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
+      return
+    const keys: Record<string, () => void> = {
+      ArrowLeft: () => show(-1),
+      ArrowRight: () => show(1),
+      f: () => setManual(null),
+      '0': () => setManual(null),
+      '1': () => zoomAt(1),
+      '+': () => zoomAt(view.scale * 1.25),
+      '=': () => zoomAt(view.scale * 1.25),
+      '-': () => zoomAt(view.scale / 1.25)
+    }
+    const action = keys[event.key]
+    if (!action || event.ctrlKey || event.metaKey || event.altKey) return
+    event.preventDefault()
+    action()
+  }
+  const local = (event: { clientX: number; clientY: number }) => {
+    const rect = area!.getBoundingClientRect()
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top }
+  }
+  const button = 'rounded border border-line px-2 py-1 text-sm'
   return (
     <Dialog.Root open onOpenChange={(open) => !open && setViewer(null)}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/70" />
-        <Dialog.Content className="fixed inset-6 flex flex-col rounded-xl bg-surface p-3">
-          <div className="flex items-center gap-2">
+        <Dialog.Content
+          className="fixed inset-6 flex flex-col rounded-xl bg-surface p-3 outline-none"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault()
+            ;(event.target as HTMLElement | null)?.focus()
+          }}
+          onKeyDown={onKeyDown}
+        >
+          <div className="flex flex-wrap items-center gap-2">
             <Dialog.Title className="text-sm">
               {stackSettings(object.data).name ?? 'Stack'}
             </Dialog.Title>
+            {slide?.asset && (
+              <p className="text-xs text-muted">
+                {slide.asset.originalName} · {index + 1} of {slides.length}
+              </p>
+            )}
             <button
-              className="rounded border border-line px-2 py-1 text-sm"
+              className={button}
+              aria-label="Previous image"
+              disabled={slides.length < 2}
+              onClick={() => show(-1)}
+            >
+              ←
+            </button>
+            <button
+              className={button}
+              aria-label="Next image"
+              disabled={slides.length < 2}
+              onClick={() => show(1)}
+            >
+              →
+            </button>
+            <button
+              className={button}
+              aria-label="Zoom out"
+              onClick={() => zoomAt(view.scale / 1.25)}
+            >
+              −
+            </button>
+            <span className="w-12 text-center text-sm tabular-nums" aria-label="Zoom level">
+              {Math.round(view.scale * 100)}%
+            </span>
+            <button
+              className={button}
+              aria-label="Zoom in"
+              onClick={() => zoomAt(view.scale * 1.25)}
+            >
+              +
+            </button>
+            <button className={button} aria-pressed={fitted} onClick={() => setManual(null)}>
+              Fit
+            </button>
+            <button className={button} onClick={() => zoomAt(1)}>
+              100%
+            </button>
+            <button
+              className={button}
               onClick={() =>
                 setViewer({ ...viewer, mode: viewer.mode === 'gallery' ? 'focus' : 'gallery' })
               }
@@ -212,7 +431,7 @@ function StackViewer() {
             </button>
             {slide?.asset && (
               <button
-                className="rounded border border-line px-2 py-1 text-sm"
+                className={button}
                 onClick={() => useCanvasStore.getState().setViewerAssetId(slide.assetId)}
               >
                 Open original
@@ -220,7 +439,7 @@ function StackViewer() {
             )}
             {slide && (
               <button
-                className="rounded border border-line px-2 py-1 text-sm"
+                className={button}
                 onClick={() =>
                   useCanvasStore
                     .getState()
@@ -231,10 +450,50 @@ function StackViewer() {
               </button>
             )}
           </div>
-          <div className="mt-3 flex min-h-0 flex-1 items-center justify-center bg-canvas">
-            {slide && <SlideImage slide={slide} />}
+          <div
+            ref={setArea}
+            className="relative mt-3 min-h-0 flex-1 cursor-grab overflow-hidden bg-canvas active:cursor-grabbing"
+            onPointerDown={(event) => {
+              if (event.button !== 0 || !pixels) return
+              event.currentTarget.setPointerCapture(event.pointerId)
+              const point = local(event)
+              pan.current = { pointerId: event.pointerId, startX: point.x, startY: point.y, view }
+            }}
+            onPointerMove={(event) => {
+              const gesture = pan.current
+              if (!gesture || gesture.pointerId !== event.pointerId) return
+              const point = local(event)
+              setManual({
+                ...gesture.view,
+                x: gesture.view.x + point.x - gesture.startX,
+                y: gesture.view.y + point.y - gesture.startY
+              })
+            }}
+            onPointerUp={() => {
+              pan.current = null
+            }}
+            onPointerCancel={() => {
+              pan.current = null
+            }}
+          >
+            {slide && projectId && pixels && (
+              <div
+                className="absolute top-0 left-0 origin-top-left overflow-hidden"
+                style={{
+                  width: pixels.width,
+                  height: pixels.height,
+                  visibility: size.width > 0 ? 'visible' : 'hidden',
+                  transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`
+                }}
+              >
+                <CroppedOriginal projectId={projectId} slide={slide} />
+              </div>
+            )}
+            {slides.length === 0 && (
+              <p className="p-6 text-sm text-muted">This stack has no images yet.</p>
+            )}
           </div>
-          {viewer.mode === 'gallery' && (
+          {viewer.mode === 'gallery' && slides.length > 0 && (
             <div className="mt-3 flex gap-2 overflow-auto">
               {slides.map((item) => (
                 <button
@@ -253,6 +512,39 @@ function StackViewer() {
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+  )
+}
+
+function CroppedOriginal({ projectId, slide }: { projectId: string; slide: StackSlide }) {
+  const asset = slide.asset!
+  const pixels = cropPixels(slide.crop, asset.width ?? 1, asset.height ?? 1)
+  const [ready, setReady] = useState(false)
+  const original = assetUrl(projectId, asset.sha256, 'original')
+  const preview =
+    Math.max(asset.width ?? 0, asset.height ?? 0) > 1024
+      ? assetUrl(projectId, asset.sha256, 1024)
+      : undefined
+  const placed = {
+    position: 'absolute' as const,
+    width: asset.width ?? pixels.width,
+    height: asset.height ?? pixels.height,
+    left: -pixels.x,
+    top: -pixels.y,
+    maxWidth: 'none' as const
+  }
+  return (
+    <>
+      {preview && !ready && <img alt="" src={preview} draggable={false} style={placed} />}
+      <img
+        data-testid="stack-viewer-image"
+        alt={asset.originalName}
+        src={original}
+        draggable={false}
+        decoding="async"
+        style={placed}
+        onLoad={() => setReady(true)}
+      />
+    </>
   )
 }
 

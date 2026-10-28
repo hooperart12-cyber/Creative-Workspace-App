@@ -38,6 +38,7 @@ export async function openSearchHit(hit: SearchHit, query: string): Promise<void
       x: 0,
       y: 0
     })
+    if (hit.kind === 'stack') useCanvasStore.getState().setStackPreview(null)
     return
   }
   if (

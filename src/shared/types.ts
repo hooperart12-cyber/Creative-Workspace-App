@@ -443,6 +443,8 @@ export interface SearchHit {
   stackId?: string | null
   /** Slide that matched, when `kind` is `slide`. */
   slideId?: string | null
+  /** Name of the parent stack, when `kind` is `slide`. */
+  stackTitle?: string | null
 }
 
 export interface SearchRequest {

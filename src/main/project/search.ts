@@ -206,7 +206,7 @@ export class SearchRepository {
     const pageRows = rows.slice(0, limit)
     const last = pageRows[pageRows.length - 1]
     return {
-      hits: pageRows.map((row) => this.toHit(row, included)),
+      hits: this.attachStackTitles(pageRows.map((row) => this.toHit(row, included))),
       nextCursor: rows.length > limit && last ? encodeCursor(last) : null
     }
   }
@@ -338,6 +338,28 @@ export class SearchRepository {
       INSERT INTO search_jobs (asset_id, state)
       SELECT id, 'pending' FROM assets WHERE mime = 'application/pdf'
     `)
+  }
+
+  /** Slide hits carry the parent stack's name so a group header can open that stack. */
+  private attachStackTitles(hits: SearchHit[]): SearchHit[] {
+    const ids = [
+      ...new Set(hits.flatMap((hit) => (hit.kind === 'slide' && hit.stackId ? [hit.stackId] : [])))
+    ]
+    if (ids.length === 0) return hits
+    const rows = this.db.all<{ id: string; name: string | null }>(sql`
+      SELECT id, json_extract(data, '$.name') AS name
+      FROM board_objects
+      WHERE id IN (${sql.join(
+        ids.map((id) => sql`${id}`),
+        sql`, `
+      )})
+    `)
+    const names = new Map(rows.map((row) => [row.id, stackTitleOf(row.name)]))
+    return hits.map((hit) =>
+      hit.kind === 'slide' && hit.stackId
+        ? { ...hit, stackTitle: names.get(hit.stackId) ?? 'Stack' }
+        : hit
+    )
   }
 
   private toHit(row: HitRow, included: string[]): SearchHit {
@@ -617,6 +639,11 @@ function filterSql(filter: SearchFilter): SQL {
     return sql`s.kind IN ('entry', 'asset', 'object') AND s.mime IS NOT NULL AND s.mime NOT LIKE 'image/%' AND s.mime != 'application/pdf'`
   }
   return sql`1`
+}
+
+function stackTitleOf(value: string | null): string {
+  const name = value?.trim() ?? ''
+  return name ? name.slice(0, 80) : 'Stack'
 }
 
 function encodeCursor(row: HitRow): string {

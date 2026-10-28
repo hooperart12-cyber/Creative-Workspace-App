@@ -130,15 +130,15 @@ Use a fresh project. Have ready: one PDF with text on two pages, and one image. 
 | 7.2 | Undo, then Create stack copy. | The original cards come back. A copy leaves the cards on the board and cannot restore a layout. |
 | 7.3 | Use the arrows and the counter. Click empty canvas, then the artwork. | Arrows show while the stack is hovered or selected, wrap around, and do not drag the stack. A click on the artwork selects it. |
 | 7.4 | Zoom out below 35%. | The arrows hide. The stack still draws. |
-| 7.5 | Reorder in the stack editor and set a different cover. | The cover stays when the order changes. |
+| 7.5 | Drag a thumbnail to a new place in the stack editor. Also use Up and Down. Set a different cover. | The order changes. The cover stays the image you chose. |
 | 7.6 | Turn remember-last off, change the canvas image, switch boards, then reopen the project. | While the project stays open the canvas image remains. Reopening shows the cover. |
-| 7.7 | Open the stack. Switch Gallery and Focus. Close it. | The viewer opens on the canvas image and does not change that image. |
+| 7.7 | Open the stack. Switch Gallery and Focus. Use previous, next, the arrow keys, Fit, and 100%. Zoom and pan. | The viewer opens on the canvas image. Browsing, zooming, and panning do not change that image. The picture is the original file, cropped for this slide. |
 | 7.8 | Drop a canvas image on the stack. Choose Move, then try Copy. | Move removes the card. Copy leaves it. Cancel puts the card back. A library drop adds a reference and does not ask. |
 | 7.9 | Remove a slide, then extract another. | Remove leaves no new card. Extract places a card. The file stays. A one-image stack and an empty stack both remain. |
 | 7.10 | Separate here, undo, then Restore original layout on a combined stack. | Separate keeps each slide’s current crop. Restore uses the crop and position from before the combine, including later slide crops that are not copied back. |
 | 7.11 | Crop one card and the same file on another card. Reset one crop. | Only that appearance changes. The stored file is unchanged. Resize keeps the crop. |
 | 7.12 | Tag the stack OPU and one slide Approved. Tag another slide Draft. Search OPU and Approved, then Draft and Approved. | The first slide matches. The two sibling tags together do not. Direct-only does not treat the stack tag as the slide’s own tag. |
-| 7.13 | Open the matching slide from search. Close the preview, then use Keep displayed. | The preview does not overwrite the saved image until Keep displayed. The cover does not change. |
+| 7.13 | Open the matching slide from search. Close the preview, then use Keep displayed. Also click the stack name above the slides when the stack itself was not a match. | The stack name is the real name and opens the stack. A slide opens that slide. The preview does not overwrite the saved image until Keep displayed. The cover does not change. |
 | 7.14 | Duplicate the stack. Delete the stack. | The copy has its own slides and tags. Deleting the stack removes the board object, not the file. |
 | 7.15 | Change the stack in a second window, then undo in the first. | The undo is refused and the newer edit remains. |
 | 7.16 | Make a recovery point and export a ZIP. Open an older project. | Slides, crops, and tags come back. An older project is backed up before migration. |

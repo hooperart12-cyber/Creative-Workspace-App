@@ -270,6 +270,28 @@ describe('image stacks', () => {
     expect(direct.hits.some((hit) => hit.kind === 'slide')).toBe(false)
   })
 
+  it('names the parent stack on a slide hit when the stack itself did not match', async () => {
+    const first = await addAsset(16, 16, 1)
+    const second = await addAsset(16, 16, 2)
+    const created = project.stacks.createFromAssets(project.mainBoardId, [first, second], {
+      x: 0,
+      y: 0
+    })
+    project.stacks.updateSettings(created.stackId, { name: 'Heroes' }, created.revision)
+    const slideId = stackOnBoard()!.slides![0].id
+    const approved = project.tags.createReusable('Approved')
+    project.tags.assign(approved.id, { type: 'slide', id: slideId })
+    const page = project.search.searchPage({
+      tags: { included: [approved.id], mode: 'all', excluded: [] },
+      tagMatch: 'direct',
+      filter: 'image'
+    })
+    const slide = page.hits.find((hit) => hit.kind === 'slide')
+    expect(slide?.slideId).toBe(slideId)
+    expect(slide?.stackTitle).toBe('Heroes')
+    expect(page.hits.some((hit) => hit.kind === 'stack')).toBe(false)
+  })
+
   it('keeps a file that only a stack slide still uses', async () => {
     const assetId = await addAsset(12, 12, 9)
     project.stacks.createFromAssets(project.mainBoardId, [assetId], { x: 0, y: 0 })
