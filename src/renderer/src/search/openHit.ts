@@ -29,7 +29,7 @@ export async function openSearchHit(hit: SearchHit, query: string): Promise<void
     workspace.openLibrary(hit.sourceId)
     return
   }
-  if (hit.kind === 'object' && hit.objectId && hit.boardId) {
+  if ((hit.kind === 'object' || hit.kind === 'stack') && hit.objectId && hit.boardId) {
     await openAppearance({
       objectId: hit.objectId,
       boardId: hit.boardId,
@@ -38,6 +38,7 @@ export async function openSearchHit(hit: SearchHit, query: string): Promise<void
       x: 0,
       y: 0
     })
+    if (hit.kind === 'stack') useCanvasStore.getState().setStackPreview(null)
     return
   }
   if (
@@ -48,6 +49,19 @@ export async function openSearchHit(hit: SearchHit, query: string): Promise<void
   ) {
     const details = await window.api.invoke('library:details', hit.entryId)
     workspace.openLibrary(details.entry.folderId, hit.entryId)
+    return
+  }
+  if (hit.kind === 'slide' && hit.objectId && hit.boardId && hit.slideId) {
+    await openAppearance({
+      objectId: hit.objectId,
+      boardId: hit.boardId,
+      boardTitle: hit.title,
+      path: hit.location,
+      x: 0,
+      y: 0,
+      slideId: hit.slideId
+    })
+    useCanvasStore.getState().setStackPreview({ objectId: hit.objectId, slideId: hit.slideId })
     return
   }
   if (hit.kind === 'note') {
@@ -94,6 +108,9 @@ export async function openAppearance(appearance: BoardAppearance): Promise<void>
   await afterCanvasLayout()
   const canvas = useCanvasStore.getState()
   canvas.setSelection([appearance.objectId])
+  if (appearance.slideId) {
+    canvas.setStackPreview({ objectId: appearance.objectId, slideId: appearance.slideId })
+  }
   if (!object) return
   canvas.setViewport(
     fitViewport(

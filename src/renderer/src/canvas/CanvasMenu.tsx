@@ -104,6 +104,15 @@ function MenuItems() {
         <Item onSelect={() => void actions.addImagesFromPicker(contextPoint.current ?? undefined)}>
           Add images here…
         </Item>
+        <Item
+          onSelect={() =>
+            void import('../stacks/stackActions').then(({ createEmptyStack }) =>
+              createEmptyStack(contextPoint.current ?? { x: 0, y: 0 })
+            )
+          }
+        >
+          New image stack
+        </Item>
         <Item onSelect={() => void actions.addFilesFromPicker(contextPoint.current ?? undefined)}>
           Add files here…
         </Item>
@@ -276,6 +285,75 @@ function MenuItems() {
       )}
       {single?.assetId && (
         <Item onSelect={() => void showInLibrary(single.assetId!)}>Show in library</Item>
+      )}
+      {single?.type === 'stack' && (
+        <>
+          <Item onSelect={() => useCanvasStore.getState().setStackEditorId(single.id)}>
+            Edit stack
+          </Item>
+          <Item
+            onSelect={() => {
+              const slideId =
+                (typeof single.data.displayedSlideId === 'string' &&
+                  single.data.displayedSlideId) ||
+                single.slides?.[0]?.id
+              if (slideId) {
+                useCanvasStore.getState().setStackViewer({
+                  objectId: single.id,
+                  mode: 'gallery',
+                  slideId
+                })
+              }
+            }}
+          >
+            Open stack
+          </Item>
+          <Item
+            onSelect={() => {
+              const slideId =
+                (typeof single.data.displayedSlideId === 'string' &&
+                  single.data.displayedSlideId) ||
+                single.slides?.[0]?.id
+              if (slideId) useCanvasStore.getState().setCropTarget({ objectId: single.id, slideId })
+            }}
+          >
+            Crop displayed image
+          </Item>
+          <Separator />
+        </>
+      )}
+      {single?.type === 'image' && (
+        <Item onSelect={() => useCanvasStore.getState().setCropTarget({ objectId: single.id })}>
+          Crop
+        </Item>
+      )}
+      {unlockedImages.length >= 2 && (
+        <>
+          <Item
+            onSelect={() =>
+              void import('../stacks/stackActions').then(({ createStack }) =>
+                createStack(
+                  unlockedImages.map((o) => o.id),
+                  'combine'
+                )
+              )
+            }
+          >
+            Combine into stack
+          </Item>
+          <Item
+            onSelect={() =>
+              void import('../stacks/stackActions').then(({ createStack }) =>
+                createStack(
+                  unlockedImages.map((o) => o.id),
+                  'copy'
+                )
+              )
+            }
+          >
+            Create stack copy
+          </Item>
+        </>
       )}
       {viewable && (
         <>

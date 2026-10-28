@@ -296,6 +296,16 @@ export function LibraryView() {
           <button
             className="rounded-lg border border-line px-2 py-1"
             onClick={() =>
+              void import('../stacks/stackActions').then(({ placeAsStack }) =>
+                placeAsStack(assetIdsFor(selected), viewCenter())
+              )
+            }
+          >
+            Place as stack
+          </button>
+          <button
+            className="rounded-lg border border-line px-2 py-1"
+            onClick={() =>
               openTagEditor({
                 title: 'Tag these entries',
                 targets: selected.map((id) => ({ type: 'entry', id }))

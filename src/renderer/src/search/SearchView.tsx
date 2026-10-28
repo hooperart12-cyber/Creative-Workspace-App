@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { BoardAppearance, SearchFilter, SearchHit, TagRecord } from '@shared/types'
 import { useWorkspaceStore } from '../store/workspaceStore'
+import { groupSearchHits } from './groupHits'
 import { openAppearance, openSearchHit } from './openHit'
 
 const FILTERS: { id: SearchFilter; label: string }[] = [
@@ -207,73 +208,38 @@ export function SearchView() {
       </div>
       <p className="px-3 text-xs text-muted">{note}</p>
       <ul className="min-h-0 flex-1 overflow-auto px-3 pb-4">
-        {hits.map((hit) => (
-          <li
-            key={`${hit.kind}:${hit.sourceId}:${hit.page ?? ''}:${hit.objectId ?? ''}:${hit.entryId ?? ''}`}
-            className="border-b border-line py-2"
-          >
-            <button
-              className="block w-full text-left"
-              onClick={() => void openSearchHit(hit, text)}
-            >
-              <span className="text-sm font-medium">{hit.title}</span>
-              <span className="ml-2 text-xs text-muted">{hit.kind}</span>
-              <span className="mt-0.5 block text-xs text-muted">{hit.location}</span>
-              {hit.matchedTags && hit.matchedTags.length > 0 && (
-                <span className="mt-1 block text-xs text-muted">
-                  {hit.matchedTags
-                    .map(
-                      (tag) => `${tag.name}${tag.source === 'asset' ? ' (on the original)' : ''}`
-                    )
-                    .join(', ')}
-                </span>
-              )}
-              {hit.snippet && (
-                <span
-                  className="mt-1 block text-sm"
-                  dangerouslySetInnerHTML={{ __html: safeSnippet(hit.snippet) }}
-                />
-              )}
-            </button>
-            {hit.kind === 'entry' && hit.entryId && (
+        {groupSearchHits(hits).map((group) =>
+          group.kind === 'single' ? (
+            <HitRow
+              key={group.key}
+              hit={group.hit}
+              text={text}
+              appearanceFor={appearanceFor}
+              appearances={appearances}
+              setAppearanceFor={setAppearanceFor}
+              setAppearances={setAppearances}
+            />
+          ) : (
+            <li key={group.key} className="border-b border-line py-2">
               <button
-                className="mt-1 block text-xs text-muted"
-                onClick={() =>
-                  void window.api.invoke('library:details', hit.entryId!).then((details) => {
-                    useWorkspaceStore.getState().openLibrary(details.entry.folderId, hit.entryId)
-                  })
-                }
+                className="block w-full text-left"
+                onClick={() => void openSearchHit(group.stack, text)}
               >
-                Show in library
+                <span className="text-sm font-medium">{group.title}</span>
+                <span className="ml-2 text-xs text-muted">stack</span>
               </button>
-            )}
-            {hit.assetId && (
-              <button
-                className="mt-1 text-xs text-muted"
-                onClick={() =>
-                  void window.api.invoke('search:appearances', hit.assetId!).then((rows) => {
-                    setAppearanceFor(hit.assetId)
-                    setAppearances(rows)
-                  })
-                }
-              >
-                Used on boards
-              </button>
-            )}
-            {appearanceFor === hit.assetId && (
-              <ul className="mt-1 space-y-1">
-                {appearances.length === 0 && <li className="text-xs text-muted">Not on a board</li>}
-                {appearances.map((appearance) => (
-                  <li key={appearance.objectId}>
-                    <button className="text-xs" onClick={() => void openAppearance(appearance)}>
-                      {appearance.path}
+              <ul className="mt-1 space-y-1 pl-3">
+                {group.slides.map((hit) => (
+                  <li key={hit.slideId}>
+                    <button className="text-sm" onClick={() => void openSearchHit(hit, text)}>
+                      {hit.title}
                     </button>
                   </li>
                 ))}
               </ul>
-            )}
-          </li>
-        ))}
+            </li>
+          )
+        )}
         {cursor && (
           <li>
             <button
@@ -293,6 +259,88 @@ export function SearchView() {
         )}
       </ul>
     </div>
+  )
+}
+
+function HitRow({
+  hit,
+  text,
+  appearanceFor,
+  appearances,
+  setAppearanceFor,
+  setAppearances
+}: {
+  hit: SearchHit
+  text: string
+  appearanceFor: string | null
+  appearances: BoardAppearance[]
+  setAppearanceFor: (id: string | null) => void
+  setAppearances: (rows: BoardAppearance[]) => void
+}) {
+  return (
+    <li
+      key={`${hit.kind}:${hit.sourceId}:${hit.page ?? ''}:${hit.objectId ?? ''}:${hit.entryId ?? ''}`}
+      className="border-b border-line py-2"
+    >
+      <button className="block w-full text-left" onClick={() => void openSearchHit(hit, text)}>
+        <span className="text-sm font-medium">{hit.title}</span>
+        <span className="ml-2 text-xs text-muted">{hit.kind}</span>
+        <span className="mt-0.5 block text-xs text-muted">{hit.location}</span>
+        {hit.matchedTags && hit.matchedTags.length > 0 && (
+          <span className="mt-1 block text-xs text-muted">
+            {hit.matchedTags
+              .map(
+                (tag) =>
+                  `${tag.name}${tag.source === 'asset' ? ' (on the original)' : tag.source === 'stack' ? ' (on the stack)' : ''}`
+              )
+              .join(', ')}
+          </span>
+        )}
+        {hit.snippet && (
+          <span
+            className="mt-1 block text-sm"
+            dangerouslySetInnerHTML={{ __html: safeSnippet(hit.snippet) }}
+          />
+        )}
+      </button>
+      {hit.kind === 'entry' && hit.entryId && (
+        <button
+          className="mt-1 block text-xs text-muted"
+          onClick={() =>
+            void window.api.invoke('library:details', hit.entryId!).then((details) => {
+              useWorkspaceStore.getState().openLibrary(details.entry.folderId, hit.entryId)
+            })
+          }
+        >
+          Show in library
+        </button>
+      )}
+      {hit.assetId && (
+        <button
+          className="mt-1 text-xs text-muted"
+          onClick={() =>
+            void window.api.invoke('search:appearances', hit.assetId!).then((rows) => {
+              setAppearanceFor(hit.assetId)
+              setAppearances(rows)
+            })
+          }
+        >
+          Used on boards
+        </button>
+      )}
+      {appearanceFor === hit.assetId && (
+        <ul className="mt-1 space-y-1">
+          {appearances.length === 0 && <li className="text-xs text-muted">Not on a board</li>}
+          {appearances.map((appearance) => (
+            <li key={`${appearance.objectId}:${appearance.slideId ?? ''}`}>
+              <button className="text-xs" onClick={() => void openAppearance(appearance)}>
+                {appearance.path}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
   )
 }
 

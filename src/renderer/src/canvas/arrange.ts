@@ -210,6 +210,17 @@ export function findDropTarget(
     .find((o) => o.type === 'board' && !dragged.has(o.id) && containsPoint(objectBounds(o), point))
 }
 
+/** An image stack under the pointer, for dropping image cards into it. */
+export function findStackDrop(
+  objects: CanvasObject[],
+  dragged: Set<string>,
+  point: Point
+): CanvasObject | undefined {
+  return [...objects]
+    .sort((a, b) => b.zIndex - a.zIndex)
+    .find((o) => o.type === 'stack' && !dragged.has(o.id) && containsPoint(objectBounds(o), point))
+}
+
 function changed(objects: CanvasObject[], patch: ObjectPatch): boolean {
   const o = objects.find((x) => x.id === patch.id)!
   return (Object.keys(patch) as (keyof ObjectPatch)[]).some(

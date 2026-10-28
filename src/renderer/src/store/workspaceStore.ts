@@ -232,6 +232,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
           set({ surface: 'canvas' })
           return
         }
+        useCanvasStore.getState().setStackPreview(null)
         if (!(await show(id))) return
         set({ surface: 'canvas' })
         if (current) set({ back: [...get().back, current], forward: [] })

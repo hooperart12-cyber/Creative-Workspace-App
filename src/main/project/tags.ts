@@ -483,7 +483,11 @@ export class TagRepository {
   decorateBoard(detail: BoardDetail): BoardDetail {
     const objects = detail.objects.map((object) => ({
       ...object,
-      tags: this.pillsForObject(object)
+      tags: this.pillsForObject(object),
+      slides: object.slides?.map((slide) => ({
+        ...slide,
+        tags: this.pillsFor('slide', slide.id, slide.assetId, true)
+      }))
     }))
     return {
       ...detail,
@@ -512,7 +516,11 @@ export class TagRepository {
   }
 
   private pillsForObject(object: CanvasObject): TagPill[] {
-    const inherits = !!object.assetId && object.type !== 'text' && object.type !== 'board'
+    const inherits =
+      !!object.assetId &&
+      object.type !== 'text' &&
+      object.type !== 'board' &&
+      object.type !== 'stack'
     return this.pillsFor('object', object.id, object.assetId, inherits)
   }
 
@@ -609,9 +617,11 @@ export class TagRepository {
           ? this.db.get(sql`SELECT id FROM library_entries WHERE id = ${id}`)
           : type === 'board'
             ? this.db.get(sql`SELECT id FROM boards WHERE id = ${id}`)
-            : this.db.get(sql`SELECT id FROM board_objects WHERE id = ${id}`)
+            : type === 'slide'
+              ? this.db.get(sql`SELECT id FROM stack_slides WHERE id = ${id}`)
+              : this.db.get(sql`SELECT id FROM board_objects WHERE id = ${id}`)
     if (!row) throw new Error('That item no longer exists.')
-    if (!['asset', 'entry', 'object', 'board'].includes(type)) {
+    if (!['asset', 'entry', 'object', 'board', 'slide'].includes(type)) {
       throw new Error('That item cannot be tagged.')
     }
   }

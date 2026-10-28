@@ -42,7 +42,9 @@ describe('tag migration', () => {
     const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as {
       entries: { tag: string }[]
     }
-    journal.entries = journal.entries.filter((entry) => entry.tag !== '0005_tags')
+    journal.entries = journal.entries.filter(
+      (entry) => entry.tag !== '0005_tags' && entry.tag !== '0006_image_stacks'
+    )
     writeFileSync(journalPath, JSON.stringify(journal))
 
     const now = Date.now()

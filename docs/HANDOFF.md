@@ -101,19 +101,25 @@ RULES:
 - `src/main/project/backup.ts`, `restore.ts`, `projectZip.ts`, `journal.ts`, `search.ts`, `backupService.ts`. Pre-migration point before `migrate()`. Restore assigns a new `project_meta.id`.
 - Renderer: save indicator, Backup dialog, command palette, shortcut sheet, Search, PDF indexer, draft dialog. Note session writes `recovery/` and clears a draft only after a successful save.
 
-**Done this session (M6, ADR-018)**
+**Done this session (M7, ADR-019)**
+- Branch `feat/m7-image-stacks`, based on M6 `19ce163`. [PR #12](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/12) targets `feat/m6-tags-search` and is not merged.
+- Migration `0006_image_stacks`: `stack_slides`, and a rebuild of `tags` / `taggings` that copies every row and allows a `slide` target. Cleanup triggers are recreated after the rename.
+- `StackRepository` (`src/main/project/stacks.ts`): combine, copy, add, remove, extract, reorder, cover, displayed slide, unstack, crop, and revision-checked undo.
+- Canvas stack, stack editor, gallery/focus viewer, crop rectangle, drop prompt (Move is the default), and search groups that can preview a slide.
+
+**Done earlier (M6, ADR-018)**
 - Migration `0005_tags` rebuilds `tags` and `taggings` and copies every existing row. `boards.tag_visibility` is a new column. Hard-delete triggers remove assignments and one-off tags only.
 - `TagRepository` (`src/main/project/tags.ts`): reusable and one-off tags, archive, Tag Trash, restore-with-rename, merge, promote, and assignment ids for undo.
 - Search filters tags in SQL before pagination. A PDF page hit names the asset, entry, or appearance that matched. Tag-only search does not emit a page per page.
 - Renderer: Tag manager, Tag Trash, canvas pills, library and canvas tagging, search chips. Undo refuses when another window changed that assignment.
 
 **In progress**
-- [PR #11](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/11) is open. Do not merge it.
+- [PR #12](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/12) is open against `feat/m6-tags-search`. Do not merge it. M6 [PR #11](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/11) is also still open.
 
 **Next steps**
-1. Review the M6 PR and run the M6 checklist in `docs/TESTING.md`.
-2. The packaged Windows install (TESTING 5.13–5.14) has still not been done by hand.
-3. Later: board covers (`boards.cover_asset_id` drawn in `BoardCardNode`). Folder tags and inheriting a linked board’s tags onto its card are not in M6.
+1. Review the M7 PR and run the M7 checklist in `docs/TESTING.md`.
+2. The packaged Windows install (TESTING 5.13–5.14 and 7.17) has still not been done by hand.
+3. Later: board covers, aspect-ratio crop presets, and page collections.
 
 **Known issues / open questions**
 - Undo history is per window and not saved across restarts (by design for now).

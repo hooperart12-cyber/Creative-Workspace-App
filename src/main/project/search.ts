@@ -99,12 +99,17 @@ export class SearchRepository {
         FROM library_entries e JOIN assets a ON a.id = e.asset_id
         WHERE e.deleted_at IS NULL
         UNION ALL
-        SELECT CASE WHEN o.type = 'text' THEN 'note' ELSE 'object' END,
+        SELECT CASE
+            WHEN o.type = 'text' THEN 'note'
+            WHEN o.type = 'stack' THEN 'stack'
+            ELSE 'object'
+          END,
           o.id, o.asset_id, NULL,
           CASE
             WHEN o.type = 'text' THEN COALESCE(
               (SELECT d.title FROM search_documents d WHERE d.kind = 'note' AND d.source_id = o.id),
               'Note')
+            WHEN o.type = 'stack' THEN COALESCE(NULLIF(json_extract(o.data, '$.name'), ''), 'Stack')
             WHEN o.type = 'board' THEN COALESCE(lb.title, 'Board card')
             ELSE COALESCE(a.original_name, 'File')
           END,
@@ -115,7 +120,14 @@ export class SearchRepository {
         JOIN boards b ON b.id = o.board_id AND b.deleted_at IS NULL
         LEFT JOIN assets a ON a.id = o.asset_id
         LEFT JOIN boards lb ON lb.id = o.linked_board_id
-        WHERE o.deleted_at IS NULL AND o.type IN ('image', 'document', 'file', 'text', 'board')
+        WHERE o.deleted_at IS NULL AND o.type IN ('image', 'document', 'file', 'text', 'board', 'stack')
+        UNION ALL
+        SELECT 'slide', sl.id, sl.asset_id, NULL, a.original_name, a.mime, NULL, o.id, o.board_id,
+          NULL, 'slide', sl.id, 1, NULL
+        FROM stack_slides sl
+        JOIN board_objects o ON o.id = sl.stack_id AND o.deleted_at IS NULL AND o.type = 'stack'
+        JOIN boards b ON b.id = o.board_id AND b.deleted_at IS NULL
+        JOIN assets a ON a.id = sl.asset_id AND a.deleted_at IS NULL
         UNION ALL
         SELECT 'board', b.id, NULL, NULL, b.title, NULL, NULL, NULL, b.id, NULL, 'board', b.id, 0, NULL
         FROM boards b WHERE b.deleted_at IS NULL
@@ -135,6 +147,17 @@ export class SearchRepository {
               FROM text_hits t
               JOIN subjects s ON s.kind = t.kind AND s.source_id = t.source_id
               WHERE t.kind != 'pdf-page'
+              UNION ALL
+              SELECT s.kind, s.source_id, s.asset_id, NULL, s.title, s.mime, s.entry_id,
+                s.object_id, s.board_id, s.folder_id, s.target_type, s.target_id, s.inherits_asset, t.doc_id
+              FROM text_hits t
+              JOIN subjects s ON s.kind = 'slide' AND s.asset_id = t.asset_id
+              WHERE t.kind = 'asset'
+              UNION ALL
+              SELECT s.kind, s.source_id, s.asset_id, NULL, s.title, s.mime, s.entry_id,
+                s.object_id, s.board_id, s.folder_id, s.target_type, s.target_id, s.inherits_asset, NULL
+              FROM subjects s
+              WHERE s.kind = 'stack' AND lower(s.title) LIKE ${'%' + text.toLowerCase().replace(/[\\%_]/g, '') + '%'}
               UNION ALL
               SELECT 'pdf-page', t.source_id, t.asset_id, t.page, t.title, a.mime,
                 ${
@@ -183,7 +206,7 @@ export class SearchRepository {
     const pageRows = rows.slice(0, limit)
     const last = pageRows[pageRows.length - 1]
     return {
-      hits: pageRows.map((row) => this.toHit(row, included)),
+      hits: this.attachStackTitles(pageRows.map((row) => this.toHit(row, included))),
       nextCursor: rows.length > limit && last ? encodeCursor(last) : null
     }
   }
@@ -204,14 +227,39 @@ export class SearchRepository {
         sql`${boardObjects.assetId} = ${assetId} AND ${boardObjects.deletedAt} IS NULL AND ${boards.deletedAt} IS NULL`
       )
       .all()
-    return rows.map((row) => ({
-      objectId: row.objectId,
-      boardId: row.boardId,
-      boardTitle: row.boardTitle,
-      path: this.boardPath(row.boardId),
-      x: row.x,
-      y: row.y
-    }))
+    const slides = this.db.all<{
+      objectId: string
+      boardId: string
+      boardTitle: string
+      x: number
+      y: number
+      slideId: string
+    }>(sql`
+      SELECT o.id AS objectId, b.id AS boardId, b.title AS boardTitle, o.x AS x, o.y AS y, sl.id AS slideId
+      FROM stack_slides sl
+      JOIN board_objects o ON o.id = sl.stack_id AND o.deleted_at IS NULL
+      JOIN boards b ON b.id = o.board_id AND b.deleted_at IS NULL
+      WHERE sl.asset_id = ${assetId}
+    `)
+    return [
+      ...rows.map((row) => ({
+        objectId: row.objectId,
+        boardId: row.boardId,
+        boardTitle: row.boardTitle,
+        path: this.boardPath(row.boardId),
+        x: row.x,
+        y: row.y
+      })),
+      ...slides.map((row) => ({
+        objectId: row.objectId,
+        boardId: row.boardId,
+        boardTitle: row.boardTitle,
+        path: this.boardPath(row.boardId),
+        x: row.x,
+        y: row.y,
+        slideId: row.slideId
+      }))
+    ]
   }
 
   addPdfPage(assetId: string, page: number, text: string, title: string): void {
@@ -292,6 +340,28 @@ export class SearchRepository {
     `)
   }
 
+  /** Slide hits carry the parent stack's name so a group header can open that stack. */
+  private attachStackTitles(hits: SearchHit[]): SearchHit[] {
+    const ids = [
+      ...new Set(hits.flatMap((hit) => (hit.kind === 'slide' && hit.stackId ? [hit.stackId] : [])))
+    ]
+    if (ids.length === 0) return hits
+    const rows = this.db.all<{ id: string; name: string | null }>(sql`
+      SELECT id, json_extract(data, '$.name') AS name
+      FROM board_objects
+      WHERE id IN (${sql.join(
+        ids.map((id) => sql`${id}`),
+        sql`, `
+      )})
+    `)
+    const names = new Map(rows.map((row) => [row.id, stackTitleOf(row.name)]))
+    return hits.map((hit) =>
+      hit.kind === 'slide' && hit.stackId
+        ? { ...hit, stackTitle: names.get(hit.stackId) ?? 'Stack' }
+        : hit
+    )
+  }
+
   private toHit(row: HitRow, included: string[]): SearchHit {
     return {
       kind: row.kind,
@@ -304,7 +374,10 @@ export class SearchRepository {
       entryId: row.entry_id,
       objectId: row.object_id,
       boardId: row.board_id,
-      matchedTags: this.matchedTags(row, included)
+      matchedTags: this.matchedTags(row, included),
+      stackId:
+        row.kind === 'slide' || row.kind === 'stack' ? (row.object_id ?? row.source_id) : null,
+      slideId: row.kind === 'slide' ? row.source_id : null
     }
   }
 
@@ -324,7 +397,7 @@ export class SearchRepository {
   private matchedTags(
     row: HitRow,
     included: string[]
-  ): { id: string; name: string; source: 'direct' | 'asset' }[] {
+  ): { id: string; name: string; source: 'direct' | 'asset' | 'stack' }[] {
     if (included.length === 0) return []
     const ids = sql.join(
       included.map((id) => sql`${id}`),
@@ -353,18 +426,42 @@ export class SearchRepository {
             )
           `)
         : []
-    const seen = new Set(direct.map((tag) => tag.id))
+    const contextual =
+      row.kind === 'slide' && row.object_id
+        ? this.db.all<{ id: string; name: string }>(sql`
+            SELECT t.id, t.name FROM tags t
+            WHERE t.deleted_at IS NULL AND t.id IN (${ids}) AND (
+              EXISTS (
+                SELECT 1 FROM taggings g
+                WHERE g.tag_id = t.id AND g.target_type = 'object' AND g.target_id = ${row.object_id}
+              )
+              OR (t.reusable = 0 AND t.owner_type = 'object' AND t.owner_id = ${row.object_id})
+            )
+          `)
+        : []
+    const seen = new Set([...direct, ...inherited].map((tag) => tag.id))
     return [
       ...direct.map((tag) => ({ ...tag, source: 'direct' as const })),
       ...inherited
         .filter((tag) => !seen.has(tag.id))
-        .map((tag) => ({ ...tag, source: 'asset' as const }))
+        .map((tag) => ({ ...tag, source: 'asset' as const })),
+      ...contextual
+        .filter((tag) => !seen.has(tag.id))
+        .map((tag) => {
+          seen.add(tag.id)
+          return { ...tag, source: 'stack' as const }
+        })
     ]
   }
 
   private location(row: HitRow): string {
     if (row.kind === 'board') return this.boardPath(row.source_id)
-    if (row.kind === 'note' || row.kind === 'object') {
+    if (
+      row.kind === 'note' ||
+      row.kind === 'object' ||
+      row.kind === 'stack' ||
+      row.kind === 'slide'
+    ) {
       return row.board_id ? this.boardPath(row.board_id) : 'Board'
     }
     if (row.kind === 'folder') return this.folderPath(row.source_id)
@@ -485,6 +582,20 @@ function tagOnSubject(tagId: string, tagMatch: 'effective' | 'direct'): SQL {
         )
       )
     )
+    OR (
+      ${tagMatch} = 'effective' AND s.kind = 'slide' AND s.object_id IS NOT NULL AND (
+        EXISTS (
+          SELECT 1 FROM taggings g
+          JOIN tags tg ON tg.id = g.tag_id AND tg.deleted_at IS NULL
+          WHERE g.tag_id = ${tagId} AND g.target_type = 'object' AND g.target_id = s.object_id
+        )
+        OR EXISTS (
+          SELECT 1 FROM tags tg
+          WHERE tg.id = ${tagId} AND tg.deleted_at IS NULL AND tg.reusable = 0
+            AND tg.owner_type = 'object' AND tg.owner_id = s.object_id
+        )
+      )
+    )
   )`
 }
 
@@ -523,11 +634,16 @@ function filterSql(filter: SearchFilter): SQL {
   if (filter === 'note') return sql`s.kind = 'note'`
   if (filter === 'folder') return sql`s.kind = 'folder'`
   if (filter === 'pdf') return sql`(s.kind = 'pdf-page' OR s.mime = 'application/pdf')`
-  if (filter === 'image') return sql`s.mime LIKE 'image/%'`
+  if (filter === 'image') return sql`(s.mime LIKE 'image/%' OR s.kind = 'stack')`
   if (filter === 'file') {
     return sql`s.kind IN ('entry', 'asset', 'object') AND s.mime IS NOT NULL AND s.mime NOT LIKE 'image/%' AND s.mime != 'application/pdf'`
   }
   return sql`1`
+}
+
+function stackTitleOf(value: string | null): string {
+  const name = value?.trim() ?? ''
+  return name ? name.slice(0, 80) : 'Stack'
 }
 
 function encodeCursor(row: HitRow): string {

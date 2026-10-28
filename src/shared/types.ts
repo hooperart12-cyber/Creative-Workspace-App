@@ -1,4 +1,6 @@
+import type { ImageCrop } from './crop'
 import type { NoteAppearance, NoteContent, NoteSizing } from './notes'
+import type { StackSettings } from './stacks'
 
 /** Summary of an open project, as seen by the renderer. */
 export interface ProjectSummary {
@@ -226,6 +228,64 @@ export interface CanvasObject {
   asset?: AssetInfo
   /** Effective tags for this appearance: its own tags, plus the original's tags for a file. */
   tags?: TagPill[]
+  /** Present for a stack: its slides, in order, with each slide's own crop. */
+  slides?: StackSlide[]
+}
+
+/** One image inside a stack. Tags on a slide are separate from the stack and from the asset. */
+export interface StackSlide {
+  id: string
+  assetId: string
+  position: number
+  crop: ImageCrop | null
+  asset?: AssetInfo
+  tags?: TagPill[]
+}
+
+export interface StackSlideSnapshot {
+  id: string
+  assetId: string
+  position: number
+  crop: ImageCrop | null
+  layout: {
+    x: number
+    y: number
+    width: number
+    height: number
+    rotation: number
+    crop: ImageCrop | null
+  } | null
+  sourceObjectId: string | null
+  tags: TagAssignment[]
+}
+
+export interface StackContentSnapshot {
+  revision: number
+  settings: StackSettings
+  slides: StackSlideSnapshot[]
+  geometry: { x: number; y: number; width: number; height: number }
+}
+
+export type StackUndo =
+  | { op: 'create'; stackId: string; revision: number; removedIds: string[] }
+  | {
+      op: 'content'
+      stackId: string
+      revision: number
+      before: StackContentSnapshot
+      removedIds: string[]
+      createdIds: string[]
+      applyGeometry: boolean
+      revivedIds?: string[]
+    }
+  | { op: 'display'; stackId: string; shown: string | null; previous: string | null }
+
+export interface StackResult {
+  stackId: string
+  revision: number
+  createdIds: string[]
+  removedIds: string[]
+  undo: StackUndo
 }
 
 /** Changes to an object's placement or arrangement (undoable). */
@@ -359,7 +419,8 @@ export interface BackupStatus {
   points: RecoveryManifest[]
 }
 
-export type SearchKind = 'board' | 'note' | 'entry' | 'folder' | 'pdf-page' | 'asset' | 'object'
+export type SearchKind =
+  'board' | 'note' | 'entry' | 'folder' | 'pdf-page' | 'asset' | 'object' | 'stack' | 'slide'
 export type SearchFilter = 'all' | 'board' | 'note' | 'pdf' | 'image' | 'file' | 'folder'
 
 export interface SearchHit {
@@ -376,8 +437,14 @@ export interface SearchHit {
   objectId?: string | null
   /** Board that owns `objectId`, or the board hit itself. */
   boardId?: string | null
-  /** Tags that made this hit match, and whether each one is on the item or on its original. */
-  matchedTags?: { id: string; name: string; source: 'direct' | 'asset' }[]
+  /** Tags that made this hit match, and whether each one is on the item, its original, or its stack. */
+  matchedTags?: { id: string; name: string; source: 'direct' | 'asset' | 'stack' }[]
+  /** Stack that owns a slide hit, or the stack hit itself. */
+  stackId?: string | null
+  /** Slide that matched, when `kind` is `slide`. */
+  slideId?: string | null
+  /** Name of the parent stack, when `kind` is `slide`. */
+  stackTitle?: string | null
 }
 
 export interface SearchRequest {
@@ -397,7 +464,7 @@ export interface SearchPage {
   nextCursor: string | null
 }
 
-export type TagTargetType = 'asset' | 'entry' | 'object' | 'board'
+export type TagTargetType = 'asset' | 'entry' | 'object' | 'board' | 'slide'
 export type TagVisibility = 'hidden' | 'hover' | 'always'
 
 export interface TagRecord {
@@ -450,6 +517,8 @@ export interface BoardAppearance {
   path: string
   x: number
   y: number
+  /** Set when the appearance is a slide inside a stack. */
+  slideId?: string | null
 }
 
 export interface NoteDraftInfo {

@@ -360,7 +360,9 @@ Requirements:
 - Do not reshape images.
 - Do not modify original artwork files.
 
-The application is not intended to provide image-editing tools.
+A person can crop one card or one stack slide by hand (ADR-019). That crop is stored on the appearance. The original file, and every other use of that file, stay unchanged. There is no filter, effect, or aspect-ratio preset.
+
+The application is not intended to provide a general image editor.
 
 ### Full-Size Image Preview
 
@@ -461,7 +463,7 @@ Mass importing should not require placing every file onto a board.
 
 ## 9. Image Stacks
 
-> **Status:** ⚪ Later
+> **Status:** ✅ **Implemented in M7** (ADR-019). Fixed or adaptive sizing, combine or copy, separate here or restore a saved layout, a gallery/focus viewer, per-slide tags, and a non-destructive crop. Page collections, annotations, and filters stay later.
 
 Image stacks are a visual grouping feature for images on a board.
 

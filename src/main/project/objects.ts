@@ -4,7 +4,10 @@ import type { Box } from '@shared/geometry'
 import type { FileAppearance } from '@shared/files'
 import type { CanvasObject, CreateImagesInput, ObjectPatch, Point } from '@shared/types'
 import type { ProjectDb } from '../db/client'
-import { assets, boardObjects, boards } from '../db/schema'
+import { cropOf } from '@shared/crop'
+import { stackSettings } from '@shared/stacks'
+import { assets, boardObjects, boards, stackSlides } from '../db/schema'
+import { cloneStackSlides } from './stacks'
 import { attachPreviews, toAssetInfo } from './assets'
 import { deletionTime, remap, toCanvasObject, type BoardRepository } from './boards'
 
@@ -250,6 +253,7 @@ export class ObjectRepository {
             })
             .run()
           newIds.set(row.id, id)
+          if (row.type === 'stack') cloneStackSlides(this.db, row.id, id)
         }
       }
     })
@@ -431,18 +435,42 @@ export class ObjectRepository {
       .get()?.boardId
   }
 
-  /** Width ÷ height of images and PDFs among `ids` (objects that must keep their proportions). */
+  /** Width ÷ height of images, cropped images, adaptive stacks, and PDFs. */
   private lockedRatios(ids: string[]): Map<string, number> {
     if (ids.length === 0) return new Map()
     const rows = this.db
-      .select({ id: boardObjects.id, width: assets.width, height: assets.height })
+      .select()
       .from(boardObjects)
-      .innerJoin(assets, eq(assets.id, boardObjects.assetId))
-      .where(and(inArray(boardObjects.id, ids), inArray(boardObjects.type, ['image', 'document'])))
+      .where(and(inArray(boardObjects.id, ids), isNull(boardObjects.deletedAt)))
       .all()
-    return new Map(
-      rows.flatMap((r) => (r.width && r.height ? [[r.id, r.width / r.height] as const] : []))
-    )
+    const ratios = new Map<string, number>()
+    for (const row of rows) {
+      if (row.type === 'image' && row.assetId) {
+        const asset = this.db.select().from(assets).where(eq(assets.id, row.assetId)).get()
+        if (!asset?.width || !asset.height) continue
+        const crop = cropOf(row.data)
+        const pixels = crop ?? { width: asset.width, height: asset.height }
+        ratios.set(row.id, pixels.width / pixels.height)
+      } else if (row.type === 'document' && row.assetId) {
+        const asset = this.db.select().from(assets).where(eq(assets.id, row.assetId)).get()
+        if (asset?.width && asset.height) ratios.set(row.id, asset.width / asset.height)
+      } else if (row.type === 'stack' && stackSettings(row.data).sizing === 'adaptive') {
+        const settings = stackSettings(row.data)
+        const slide = this.db
+          .select()
+          .from(stackSlides)
+          .where(eq(stackSlides.stackId, row.id))
+          .all()
+          .find((item) => item.id === settings.displayedSlideId)
+        if (!slide) continue
+        const asset = this.db.select().from(assets).where(eq(assets.id, slide.assetId)).get()
+        if (!asset?.width || !asset.height) continue
+        const crop = slide.cropW && slide.cropH ? { width: slide.cropW, height: slide.cropH } : null
+        const pixels = crop ?? { width: asset.width, height: asset.height }
+        ratios.set(row.id, pixels.width / pixels.height)
+      }
+    }
+    return ratios
   }
 
   private rows(ids: string[], { includeDeleted }: { includeDeleted: boolean }) {

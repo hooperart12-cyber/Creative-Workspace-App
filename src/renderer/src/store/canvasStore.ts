@@ -17,6 +17,16 @@ export interface DragState {
   dropCardId?: string
   /** Board under the pointer in the sidebar or breadcrumb. */
   dropBoardId?: string
+  /** Image stack under the pointer. */
+  dropStackId?: string
+}
+
+export interface StackDrop {
+  stackId: string
+  objectIds: string[]
+  dx: number
+  dy: number
+  origins: { id: string; x: number; y: number }[]
 }
 
 interface CanvasState {
@@ -46,6 +56,11 @@ interface CanvasState {
   fileAssetId: string | null
   /** Bumped when a PDF cover may have appeared, so the card refetches it. */
   coverEpoch: number
+  stackEditorId: string | null
+  stackViewer: { objectId: string; mode: 'gallery' | 'focus'; slideId: string } | null
+  cropTarget: { objectId: string; slideId?: string } | null
+  stackDrop: StackDrop | null
+  stackPreview: { objectId: string; slideId: string } | null
 
   setViewport: (viewport: Viewport) => void
   setViewSize: (size: Size) => void
@@ -63,6 +78,11 @@ interface CanvasState {
   setPdfAsset: (pdf: { assetId: string; page: number; query: string } | null) => void
   setFileAssetId: (id: string | null) => void
   bumpCovers: () => void
+  setStackEditorId: (id: string | null) => void
+  setStackViewer: (viewer: CanvasState['stackViewer']) => void
+  setCropTarget: (target: CanvasState['cropTarget']) => void
+  setStackDrop: (drop: StackDrop | null) => void
+  setStackPreview: (preview: CanvasState['stackPreview']) => void
 }
 
 const PREFS_KEY = 'cw.canvasPrefs'
@@ -103,6 +123,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   pdfAsset: null,
   fileAssetId: null,
   coverEpoch: 0,
+  stackEditorId: null,
+  stackViewer: null,
+  cropTarget: null,
+  stackDrop: null,
+  stackPreview: null,
 
   setViewport: (viewport) => set({ viewport }),
   setViewSize: (viewSize) => set({ viewSize }),
@@ -125,5 +150,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   setViewerAssetId: (viewerAssetId) => set({ viewerAssetId }),
   setPdfAsset: (pdfAsset) => set({ pdfAsset }),
   setFileAssetId: (fileAssetId) => set({ fileAssetId }),
-  bumpCovers: () => set({ coverEpoch: get().coverEpoch + 1 })
+  bumpCovers: () => set({ coverEpoch: get().coverEpoch + 1 }),
+  setStackEditorId: (stackEditorId) => set({ stackEditorId }),
+  setStackViewer: (stackViewer) => set({ stackViewer }),
+  setCropTarget: (cropTarget) => set({ cropTarget }),
+  setStackDrop: (stackDrop) => set({ stackDrop }),
+  setStackPreview: (stackPreview) => set({ stackPreview })
 }))
