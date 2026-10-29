@@ -105,7 +105,19 @@ const SAVE_CHANNELS = new Set<string>([
   'tags:purge',
   'tags:merge',
   'tags:promote',
-  'tags:visibility'
+  'tags:visibility',
+  'relations:createConnection',
+  'relations:updateConnection',
+  'relations:createLink',
+  'relations:updateLink',
+  'relations:setObjectLink',
+  'relations:createComment',
+  'relations:updateComment',
+  'relations:addReply',
+  'relations:editReply',
+  'relations:deleteReply',
+  'relations:setBoardView',
+  'relations:fetchPreview'
 ])
 
 function handle<C extends IpcChannel>(channel: C, handler: Handler<C>): void {
@@ -242,7 +254,8 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
 
   handle('board:get', (event, id) => {
     const project = requireProject(event)
-    return project.tags.decorateBoard(project.stacks.attach(project.boards.get(id)))
+    const board = project.tags.decorateBoard(project.stacks.attach(project.boards.get(id)))
+    return { ...board, objects: project.relations.decorate(board.objects) }
   })
 
   handle('board:create', (event, input) => {
@@ -810,8 +823,83 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
   })
 
   handle('links:open', async (_event, url) => {
-    if (!isSafeLink(url)) throw new Error('Only web and email links can be opened.')
+    if (!isSafeLink(url) || url.startsWith('cw:'))
+      throw new Error('Only web and email links can be opened.')
     await shell.openExternal(url)
+  })
+
+  handle('relations:createConnection', (event, boardId, data) => {
+    const project = requireProject(event)
+    const created = project.relations.createConnection(boardId, data.start, data.end, data)
+    broadcastContent(project)
+    return created
+  })
+  handle('relations:updateConnection', (event, id, baseRevision, data) => {
+    const project = requireProject(event)
+    const saved = project.relations.updateConnection(id, baseRevision, data)
+    broadcastContent(project)
+    return saved
+  })
+  handle('relations:createLink', (event, boardId, at, data) => {
+    const project = requireProject(event)
+    const created = project.relations.createLink(boardId, at, data)
+    broadcastContent(project)
+    return created
+  })
+  handle('relations:updateLink', (event, id, baseRevision, data) => {
+    const project = requireProject(event)
+    const saved = project.relations.updateLink(id, baseRevision, data)
+    broadcastContent(project)
+    return saved
+  })
+  handle('relations:setObjectLink', (event, id, baseRevision, destination) => {
+    const project = requireProject(event)
+    const saved = project.relations.setObjectLink(id, baseRevision, destination)
+    broadcastContent(project)
+    return saved
+  })
+  handle('relations:createComment', (event, boardId, at, data, body) => {
+    const project = requireProject(event)
+    const created = project.relations.createComment(boardId, at, data, body)
+    broadcastContent(project)
+    return created
+  })
+  handle('relations:updateComment', (event, id, baseRevision, data) => {
+    const project = requireProject(event)
+    const saved = project.relations.updateComment(id, baseRevision, data)
+    broadcastContent(project)
+    return saved
+  })
+  handle('relations:addReply', (event, id, baseRevision, body) => {
+    const project = requireProject(event)
+    const saved = project.relations.addReply(id, baseRevision, body)
+    broadcastContent(project)
+    return saved
+  })
+  handle('relations:editReply', (event, commentId, messageId, baseRevision, body) => {
+    const project = requireProject(event)
+    const saved = project.relations.editReply(commentId, messageId, baseRevision, body)
+    broadcastContent(project)
+    return saved
+  })
+  handle('relations:deleteReply', (event, commentId, messageId, baseRevision) => {
+    const project = requireProject(event)
+    const saved = project.relations.deleteReply(commentId, messageId, baseRevision)
+    broadcastContent(project)
+    return saved
+  })
+  handle('relations:setBoardView', (event, boardId, patch) => {
+    const project = requireProject(event)
+    project.relations.setBoardView(boardId, patch)
+    broadcastContent(project)
+  })
+  handle('relations:integrity', (event) => requireProject(event).relations.integrity())
+  handle('relations:fetchPreview', async (event, id, baseRevision) => {
+    const project = requireProject(event)
+    const { fetchLinkPreview } = await import('./project/linkPreview')
+    const saved = await fetchLinkPreview(project, id, baseRevision)
+    broadcastContent(project)
+    return saved
   })
 
   handle('window:flushed', (event) => {

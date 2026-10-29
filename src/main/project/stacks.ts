@@ -1302,7 +1302,7 @@ function slideValues(
   }
 }
 
-function copyOwnedTags(
+export function copyOwnedTags(
   db: ProjectDb,
   fromType: string,
   fromId: string,
@@ -1356,7 +1356,7 @@ function copyOwnedTags(
 }
 
 /** Copies slides onto a duplicated stack and points its cover at the new slide ids. */
-export function cloneStackSlides(db: ProjectDb, fromId: string, toId: string): void {
+export function cloneStackSlides(db: ProjectDb, fromId: string, toId: string): Map<string, string> {
   const slides = db
     .select()
     .from(stackSlides)
@@ -1375,7 +1375,7 @@ export function cloneStackSlides(db: ProjectDb, fromId: string, toId: string): v
   copyOwnedTags(db, 'object', fromId, 'object', toId)
   for (const [fromSlide, toSlide] of map) copyOwnedTags(db, 'slide', fromSlide, 'slide', toSlide)
   const object = db.select().from(boardObjects).where(eq(boardObjects.id, toId)).get()
-  if (!object) return
+  if (!object) return map
   const settings = stackSettings(object.data)
   db.update(boardObjects)
     .set({
@@ -1390,4 +1390,5 @@ export function cloneStackSlides(db: ProjectDb, fromId: string, toId: string): v
     })
     .where(eq(boardObjects.id, toId))
     .run()
+  return map
 }

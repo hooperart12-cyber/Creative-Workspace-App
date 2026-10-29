@@ -1,4 +1,6 @@
 import type { ImageCrop } from './crop'
+import type { CommentView } from './comments'
+import type { ConnectionDisplay, CrossingStyle } from './connections'
 import type { NoteAppearance, NoteContent, NoteSizing } from './notes'
 import type { StackSettings } from './stacks'
 
@@ -230,6 +232,17 @@ export interface CanvasObject {
   tags?: TagPill[]
   /** Present for a stack: its slides, in order, with each slide's own crop. */
   slides?: StackSlide[]
+  /** Present for a comment: the original message and replies, oldest first. */
+  messages?: { id: string; body: string; createdAt: number; editedAt: number | null }[]
+  /** Present for an external link after the user asks for a preview. */
+  preview?: {
+    url: string
+    title: string | null
+    description: string | null
+    imageFile: string | null
+    fetchedAt: number
+    error: string | null
+  } | null
 }
 
 /** One image inside a stack. Tags on a slide are separate from the stack and from the asset. */
@@ -313,6 +326,9 @@ export interface BoardDetail {
   viewport: Viewport
   /** How tag pills are drawn on this board. */
   tagVisibility: TagVisibility
+  connectionDisplay: ConnectionDisplay
+  crossingStyle: CrossingStyle
+  commentView: CommentView
   /** Tags on the board itself. They do not appear on cards that link to it. */
   tags?: TagPill[]
 }
@@ -420,8 +436,20 @@ export interface BackupStatus {
 }
 
 export type SearchKind =
-  'board' | 'note' | 'entry' | 'folder' | 'pdf-page' | 'asset' | 'object' | 'stack' | 'slide'
-export type SearchFilter = 'all' | 'board' | 'note' | 'pdf' | 'image' | 'file' | 'folder'
+  | 'board'
+  | 'note'
+  | 'entry'
+  | 'folder'
+  | 'pdf-page'
+  | 'asset'
+  | 'object'
+  | 'stack'
+  | 'slide'
+  | 'connection'
+  | 'link'
+  | 'comment'
+export type SearchFilter =
+  'all' | 'board' | 'note' | 'pdf' | 'image' | 'file' | 'folder' | 'connection' | 'link' | 'comment'
 
 export interface SearchHit {
   kind: SearchKind
@@ -438,7 +466,7 @@ export interface SearchHit {
   /** Board that owns `objectId`, or the board hit itself. */
   boardId?: string | null
   /** Tags that made this hit match, and whether each one is on the item, its original, or its stack. */
-  matchedTags?: { id: string; name: string; source: 'direct' | 'asset' | 'stack' }[]
+  matchedTags?: { id: string; name: string; source: 'direct' | 'asset' | 'stack' | 'context' }[]
   /** Stack that owns a slide hit, or the stack hit itself. */
   stackId?: string | null
   /** Slide that matched, when `kind` is `slide`. */

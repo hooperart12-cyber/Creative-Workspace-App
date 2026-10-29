@@ -9,6 +9,8 @@
  *   sizing     'auto' (height follows the text) or 'fixed' (text scrolls inside)
  */
 
+import { destinationFromHref, normalizePublicUrl } from './destinations'
+
 export const NOTE_TYPE = 'text'
 export const NOTE_SCHEMA_VERSION = 1
 
@@ -144,9 +146,12 @@ export const isColor = (v: unknown): v is string =>
 /** Links may only point at web pages or email addresses (never files, scripts or app pages). */
 export function isSafeLink(href: unknown): href is string {
   if (typeof href !== 'string' || href.length > 2048) return false
+  if (href.startsWith('cw:')) return destinationFromHref(href) !== null
   try {
     const url = new URL(href)
-    return ['http:', 'https:', 'mailto:'].includes(url.protocol)
+    if (url.protocol === 'mailto:') return true
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return false
+    return normalizePublicUrl(href) !== null
   } catch {
     return false
   }

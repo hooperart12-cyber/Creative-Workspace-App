@@ -285,6 +285,62 @@ export interface IpcRequests {
   'notes:handedOver': { args: [id: string]; result: void }
   /** Opens a link from a note in the default browser or mail app (web and mail links only). */
   'links:open': { args: [url: string]; result: void }
+  'relations:createConnection': {
+    args: [boardId: string, data: import('./connections').ConnectionData]
+    result: { id: string; revision: number }
+  }
+  'relations:updateConnection': {
+    args: [id: string, baseRevision: number, data: import('./connections').ConnectionData]
+    result: { revision: number }
+  }
+  'relations:createLink': {
+    args: [boardId: string, at: Point, data: Record<string, unknown>]
+    result: { id: string; revision: number }
+  }
+  'relations:updateLink': {
+    args: [id: string, baseRevision: number, data: Record<string, unknown>]
+    result: { revision: number }
+  }
+  'relations:setObjectLink': {
+    args: [
+      id: string,
+      baseRevision: number,
+      destination: import('./destinations').Destination | null
+    ]
+    result: { revision: number }
+  }
+  'relations:createComment': {
+    args: [boardId: string, at: Point, data: import('./comments').CommentData, body: string]
+    result: { id: string; revision: number; messageId: string }
+  }
+  'relations:updateComment': {
+    args: [id: string, baseRevision: number, data: import('./comments').CommentData]
+    result: { revision: number }
+  }
+  'relations:addReply': {
+    args: [id: string, baseRevision: number, body: string]
+    result: { revision: number; messageId: string }
+  }
+  'relations:editReply': {
+    args: [commentId: string, messageId: string, baseRevision: number, body: string]
+    result: { revision: number }
+  }
+  'relations:deleteReply': {
+    args: [commentId: string, messageId: string, baseRevision: number]
+    result: { revision: number }
+  }
+  'relations:setBoardView': {
+    args: [
+      boardId: string,
+      patch: { connectionDisplay?: string; crossingStyle?: string; commentView?: string }
+    ]
+    result: void
+  }
+  'relations:integrity': { args: []; result: { kind: string; id: string; detail: string }[] }
+  'relations:fetchPreview': {
+    args: [id: string, baseRevision: number]
+    result: { revision: number }
+  }
   /** The window finished saving after `window:flushRequest`, and may close. */
   'window:flushed': { args: []; result: void }
   'backup:status': { args: []; result: BackupStatus }
@@ -490,6 +546,19 @@ export const IPC_CHANNELS = [
   'notes:editedElsewhere',
   'notes:handedOver',
   'links:open',
+  'relations:createConnection',
+  'relations:updateConnection',
+  'relations:createLink',
+  'relations:updateLink',
+  'relations:setObjectLink',
+  'relations:createComment',
+  'relations:updateComment',
+  'relations:addReply',
+  'relations:editReply',
+  'relations:deleteReply',
+  'relations:setBoardView',
+  'relations:integrity',
+  'relations:fetchPreview',
   'window:flushed',
   'backup:status',
   'backup:create',

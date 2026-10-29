@@ -112,6 +112,12 @@ export const boards = sqliteTable(
     viewportZoom: real('viewport_zoom').notNull().default(1),
     /** Canvas tag pills: hidden, shown for the item under the pointer or selected, or always on. */
     tagVisibility: text('tag_visibility').notNull().default('hover'),
+    /** How connections are drawn: full, adaptive, minimal, or hidden. */
+    connectionDisplay: text('connection_display').notNull().default('adaptive'),
+    /** Board default when a connection does not choose its own crossing style. */
+    crossingStyle: text('crossing_style').notNull().default('plain'),
+    /** Which comments are drawn: open, all, resolved, or hidden. */
+    commentView: text('comment_view').notNull().default('open'),
     ...timestamps,
     ...softDelete
   },
@@ -204,6 +210,35 @@ export const tags = sqliteTable('tags', {
   archivedAt: integer('archived_at', { mode: 'timestamp_ms' }),
   ...timestamps,
   ...softDelete
+})
+
+/** Replies on a comment card. The card itself is a board object of type `comment`. */
+export const commentMessages = sqliteTable(
+  'comment_messages',
+  {
+    id: text('id').primaryKey(),
+    commentId: text('comment_id')
+      .notNull()
+      .references(() => boardObjects.id, { onDelete: 'cascade' }),
+    body: text('body').notNull(),
+    editedAt: integer('edited_at', { mode: 'timestamp_ms' }),
+    ...timestamps,
+    ...softDelete
+  },
+  (t) => [index('comment_messages_comment_idx').on(t.commentId, t.createdAt)]
+)
+
+/** Opt-in metadata for an external link card. Never fetched just because a project opened. */
+export const linkPreviews = sqliteTable('link_previews', {
+  objectId: text('object_id')
+    .primaryKey()
+    .references(() => boardObjects.id, { onDelete: 'cascade' }),
+  url: text('url').notNull(),
+  title: text('title'),
+  description: text('description'),
+  imageFile: text('image_file'),
+  fetchedAt: integer('fetched_at', { mode: 'timestamp_ms' }).notNull(),
+  error: text('error')
 })
 
 /** One reusable tag on one asset, library entry, canvas object (including a board card), or board. */
