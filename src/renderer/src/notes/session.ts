@@ -12,6 +12,7 @@
  * Undo: while editing, Ctrl+Z undoes typing. When editing ends, the whole session becomes one
  * canvas step ("Edit text", or "Add note" for a new note).
  */
+import { destinationFromHref } from '@shared/destinations'
 import { Extension } from '@tiptap/core'
 import { Placeholder } from '@tiptap/extensions'
 import { Selection } from '@tiptap/pm/state'
@@ -687,8 +688,15 @@ function createEditor(doc: RichNode): Editor {
   })
 }
 
-/** Opens a note link in the default browser or mail app. */
+/** Opens a note link: internal destinations stay in the app, web links use the browser. */
 export function openLink(href: string): void {
+  const destination = destinationFromHref(href)
+  if (destination) {
+    void import('../relations/navigate')
+      .then(({ navigateTo }) => navigateTo(destination))
+      .catch(reportError)
+    return
+  }
   void api()
     .invoke('links:open', href)
     .catch((error: unknown) => reportError(error))

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Layer, Line, Rect, Shape, Stage, Transformer } from 'react-konva'
+import { Circle, Layer, Line, Rect, Shape, Stage, Transformer } from 'react-konva'
 import type Konva from 'konva'
 import type { CanvasObject, Point } from '@shared/types'
 import { EditableTitle } from '../components/EditableTitle'
@@ -10,6 +10,7 @@ import { expandToGroups, findDropTarget, findStackDrop, smartSnap, snapToGrid } 
 import { BoardCardNode, COLORS, TITLE_FONT_SIZE, TITLE_GAP } from './BoardCardNode'
 import {
   boundsOf,
+  containsPoint,
   intersects,
   objectBounds,
   rectFromPoints,
@@ -22,6 +23,15 @@ import { DocumentNode } from './DocumentNode'
 import { FileNode } from './FileNode'
 import { ImageNode } from './ImageNode'
 import { StackNode } from '../stacks/StackNode'
+import { ConnectionNode } from '../relations/ConnectionNode'
+import { CommentNode, LinkCardNode } from '../relations/CardNodes'
+import { RelationPanels } from '../relations/RelationPanels'
+import { DestinationPicker } from '../relations/DestinationPicker'
+import { createConnection, moveConnections } from '../relations/relationActions'
+import { navigateTo } from '../relations/navigate'
+import { defaultConnection, type Attachment } from '@shared/connections'
+import { parseComment, visibleInView } from '@shared/comments'
+import { parseDestination } from '@shared/destinations'
 import { showSlide } from '../stacks/stackActions'
 import { TagMarks } from '../tags/TagMarks'
 import { canRotate, isViewable, lockedAspectRatio } from './objectTypes'
@@ -43,6 +53,24 @@ const SNAP_DISTANCE = 6
 /** Minimum on-screen size while resizing. */
 const MIN_RESIZE = 40
 
+function attachableAt(
+  world: Point,
+  objects: CanvasObject[],
+  exceptId: string | null
+): CanvasObject | null {
+  let best: CanvasObject | null = null
+  for (const object of objects) {
+    if (object.type === 'connection' || object.locked || object.id === exceptId) continue
+    if (!containsPoint(objectBounds(object), world)) continue
+    if (!best || object.zIndex >= best.zIndex) best = object
+  }
+  return best
+}
+
+function objectAttachment(id: string): Attachment {
+  return { kind: 'object', id, placement: 'auto', pin: null, missing: false, userHeld: false }
+}
+
 type Gesture =
   | { kind: 'pan'; start: Point; origin: { x: number; y: number } }
   | {
@@ -59,6 +87,8 @@ type Gesture =
       additive: boolean
     }
   | { kind: 'marquee'; start: Point; base: Set<string> }
+  | { kind: 'connect'; start: Point; end: Point; targetId: string | null }
+  | { kind: 'comment'; at: Point; targetId: string | null }
 
 /** The infinite canvas for the open board (§4). */
 export function CanvasView() {
@@ -74,6 +104,8 @@ export function CanvasView() {
   const drag = useCanvasStore((s) => s.drag)
   const marquee = useCanvasStore((s) => s.marquee)
   const showGrid = useCanvasStore((s) => s.showGrid)
+  const tool = useCanvasStore((s) => s.tool)
+  const connectPreview = useCanvasStore((s) => s.connectPreview)
   const editingId = useNoteStore((s) => s.editing?.objectId)
   const editedElsewhere = useNoteStore((s) => s.editedElsewhere)
   const liveSizes = useNoteStore((s) => s.liveSizes)
@@ -234,7 +266,10 @@ export function CanvasView() {
   // Handles depend on what's selected: images resize only proportionally (corner handles)
   // and rotate; board cards resize freely and don't rotate.
   const transformable = useMemo(
-    () => (board?.objects ?? []).filter((o) => selection.has(o.id) && !o.locked),
+    () =>
+      (board?.objects ?? []).filter(
+        (o) => selection.has(o.id) && !o.locked && o.type !== 'connection'
+      ),
     [board?.objects, selection]
   )
   const keepRatio = transformable.some((o) => lockedAspectRatio(o) !== null)
@@ -338,6 +373,20 @@ export function CanvasView() {
     const world = screenToWorld(screen, vp)
     const id = objectIdOf(e.target)
     const objectsNow = useWorkspaceStore.getState().board?.objects ?? []
+    const tool = useCanvasStore.getState().tool
+    const fromHandle = e.target.hasName('connect-handle')
+    if ((fromHandle || tool === 'connect' || tool === 'comment') && !isSpaceHeld()) {
+      const target = objectsNow.find((object) => object.id === id && object.type !== 'connection')
+      gesture.current =
+        fromHandle || tool === 'connect'
+          ? { kind: 'connect', start: world, end: world, targetId: target?.id ?? null }
+          : { kind: 'comment', at: world, targetId: target?.id ?? null }
+      if (fromHandle || tool === 'connect') {
+        useCanvasStore.getState().setDiscardConnect(false)
+        useCanvasStore.getState().setConnectPreview({ start: world, end: world, endTargetId: null })
+      }
+      return listen()
+    }
 
     // Ctrl+click on a link in a note opens it (a plain click just selects the note).
     if (id && (evt.ctrlKey || evt.metaKey)) {
@@ -412,6 +461,18 @@ export function CanvasView() {
     }
 
     const world = screenToWorld(screen, vp)
+    if (g.kind === 'connect') {
+      g.end = world
+      const objectsNow = useWorkspaceStore.getState().board?.objects ?? []
+      const target = attachableAt(world, objectsNow, g.targetId)
+      useCanvasStore.getState().setConnectPreview({
+        start: g.start,
+        end: world,
+        endTargetId: target?.id ?? null
+      })
+      return
+    }
+    if (g.kind === 'comment') return
 
     if (g.kind === 'marquee') {
       const rect = rectFromPoints(g.start, world)
@@ -497,6 +558,38 @@ export function CanvasView() {
       state.setMarquee(null)
       return
     }
+    if (g?.kind === 'connect') {
+      const discard = state.discardConnect
+      state.setConnectPreview(null)
+      state.setDiscardConnect(false)
+      if (discard) return
+      const objectsNow = useWorkspaceStore.getState().board?.objects ?? []
+      const endTarget = attachableAt(g.end, objectsNow, g.targetId)
+      const dragged = Math.hypot(g.end.x - g.start.x, g.end.y - g.start.y)
+      if (dragged < 4 && !endTarget) return
+      const data = defaultConnection(g.start, g.end)
+      if (g.targetId) data.start.attachment = objectAttachment(g.targetId)
+      if (endTarget) data.end.attachment = objectAttachment(endTarget.id)
+      void createConnection(data)
+      return
+    }
+    if (g?.kind === 'comment') {
+      const target = board.objects.find((object) => object.id === g.targetId)
+      const displayed =
+        target?.type === 'stack'
+          ? (typeof target.data.displayedSlideId === 'string' && target.data.displayedSlideId) ||
+            target.slides?.[0]?.id ||
+            null
+          : null
+      state.setCommentDraft({
+        x: g.at.x,
+        y: g.at.y,
+        targetId: target?.id ?? null,
+        slideId: displayed,
+        scope: target?.type === 'stack' ? 'slide' : target ? 'object' : 'free'
+      })
+      return
+    }
     lastPressDragged.current = g?.kind === 'drag' && g.moved
     if (lastPressDragged.current) {
       // Konva counts the release that ends a drag as a click, so it would pair it with the next
@@ -536,13 +629,19 @@ export function CanvasView() {
       const target = board.objects.find((o) => o.id === finished.dropCardId)?.linkedBoardId
       if (target) void actions.nestObjects(g.ids, target)
     } else if (finished && (finished.dx || finished.dy)) {
-      void actions.applyPatches(
-        g.ids.map((id) => {
-          const o = g.origins.get(id)!
-          return { id, x: o.x + finished.dx, y: o.y + finished.dy }
-        }),
-        'Move'
+      const movable = g.ids.filter(
+        (id) => board.objects.find((object) => object.id === id)?.type !== 'connection'
       )
+      if (movable.length) {
+        void actions.applyPatches(
+          movable.map((id) => {
+            const o = g.origins.get(id)!
+            return { id, x: o.x + finished.dx, y: o.y + finished.dy }
+          }),
+          'Move'
+        )
+      }
+      void moveConnections(g.ids, finished.dx, finished.dy)
     }
     state.setDrag(null)
   }
@@ -557,6 +656,9 @@ export function CanvasView() {
       state.setViewerObjectId(null)
       state.setFileDetailsId(null)
       state.setPdfReaderId(object.id)
+    } else if (object?.type === 'link') {
+      const destination = parseDestination(object.data.destination)
+      if (destination) void navigateTo(destination)
     } else if (object?.type === 'file' && object.asset) {
       const state = useCanvasStore.getState()
       state.setViewerObjectId(null)
@@ -737,6 +839,8 @@ export function CanvasView() {
         setViewport({ ...vp, x: vp.x - dx, y: vp.y - dy })
       }}
     >
+      <RelationPanels />
+      <DestinationPicker />
       {viewSize.width > 0 && (
         <Stage
           ref={stage}
@@ -788,6 +892,31 @@ export function CanvasView() {
                     scrollTop={noteScroll[o.id] ?? 0}
                     onMeasured={syncMeasuredHeight}
                   />
+                ) : o.type === 'connection' ? (
+                  <ConnectionNode
+                    key={o.id}
+                    object={o}
+                    zoom={viewport.zoom}
+                    selected={selection.has(o.id)}
+                    display={board.connectionDisplay}
+                    crossing={board.crossingStyle}
+                    faded={cut.has(o.id)}
+                  />
+                ) : o.type === 'link' ? (
+                  <LinkCardNode key={o.id} object={o} faded={cut.has(o.id)} />
+                ) : o.type === 'comment' ? (
+                  visibleInView(
+                    parseComment(o.data)?.status ?? 'open',
+                    board.commentView,
+                    selection.has(o.id)
+                  ) ? (
+                    <CommentNode
+                      key={o.id}
+                      object={o}
+                      faded={cut.has(o.id)}
+                      subdued={parseComment(o.data)?.status === 'resolved'}
+                    />
+                  ) : null
                 ) : o.type === 'stack' ? (
                   <StackNode
                     key={o.id}
@@ -847,6 +976,39 @@ export function CanvasView() {
                 </Fragment>
               )
             })}
+            {tool === 'select' &&
+              selection.size <= 30 &&
+              visible.map((o) => {
+                if (!selection.has(o.id) || o.type === 'connection') return null
+                const pos = positionOf(o)
+                return (
+                  <Circle
+                    key={`${o.id}-connect`}
+                    name="connect-handle"
+                    id={o.id}
+                    x={pos.x + o.width}
+                    y={pos.y + o.height / 2}
+                    radius={Math.max(4, 7 / viewport.zoom)}
+                    fill={COLORS.accent}
+                    stroke="#fff"
+                    strokeWidth={1 / viewport.zoom}
+                  />
+                )
+              })}
+            {connectPreview && (
+              <Line
+                points={[
+                  connectPreview.start.x,
+                  connectPreview.start.y,
+                  connectPreview.end.x,
+                  connectPreview.end.y
+                ]}
+                stroke={COLORS.accent}
+                strokeWidth={2 / Math.max(viewport.zoom, 0.05)}
+                dash={[8 / viewport.zoom, 6 / viewport.zoom]}
+                listening={false}
+              />
+            )}
             <Transformer
               ref={transformer}
               rotateEnabled={rotateEnabled}

@@ -50,6 +50,28 @@ To test a specific pull request instead of `main`: `git fetch origin && git chec
 
 Work through each step, and tick the box if the **Expected** result happens. If it doesn't, write down the step number and report it (Part 3). Keyboard shortcuts say **Ctrl** for Windows; on macOS use **Cmd** where Ctrl is listed, and **Option** for Alt.
 
+### M8 — Connections, links, and comments (in progress)
+
+Use a project that already has two image cards on one board, plus a second board. M8 is not finished. A failed step in this table is a bug. Anything in **Not ready yet** is unfinished work, not a regression.
+
+| # | Do this | Expected | A failure looks like |
+|---|---|---|---|
+| 8.1 | Press L. Drag from the middle of one card to the middle of the other, then release. | A line appears with an arrow at the end you released. Move either card: that end stays on the card. | The line is missing, both ends stay where you released even after the card moves, or only the start sticks. |
+| 8.2 | Press L again. Drag from a card and release on empty canvas. | The start stays on the card. The other end stays on the empty spot when you move the card. | Both ends move with the card, or the free end jumps onto a nearby card you did not release on. |
+| 8.3 | Press L and start a drag, then press Escape before you release. | No connection is created. The tool returns to the normal pointer. | A line appears anyway, or L stays stuck on. |
+| 8.4 | Select a card. Drag the blue dot on its right edge to another card. | A connection is created without pressing L first. | The card moves instead, or nothing is created. |
+| 8.5 | Select the connection. Open Properties (P on the toolbar). Change path, color, and width. Press Swap markers. On an elbow path, turn on Avoid objects. | The line updates. Undo once puts the previous look back. Endpoints stay put. | Undo restores only part of the change, or the ends detach. |
+| 8.6 | In Properties, set Connections to Hide connections, then back to Adaptive. | Hidden lines disappear. Selecting a connection still shows it. Adaptive is not a delete: showing them again brings the same lines back. | The connections are gone from the board after you show them again. |
+| 8.7 | Press C on empty canvas, type a note, and press Ctrl+Enter. | A comment card appears with that text. Escape on an empty draft cancels it. Escape with text asks before discarding. | The letters change the canvas tool, or the comment vanishes after you click away. |
+| 8.8 | Press C on a stack that is showing a slide. Leave “This slide”, post, then switch the stack to another slide. | The comment is gone from the canvas. Open Comments and jump to it: the stack shows that slide again. | The comment stays on every slide, or jump opens a different slide. |
+| 8.9 | In the same composer, choose “The whole stack” and post. | That comment stays while you change slides. | It disappears on the next slide. |
+| 8.10 | Press Ctrl+Shift+K. Search for the other board and choose it. Double-click the new card. | The other board opens. Ctrl+K still opens the command palette, not this picker. | Ctrl+K opens the picker, or the card opens a website. |
+| 8.11 | Ctrl+Shift+K, type `https://example.com`, and choose Add website. Double-click the card. | It opens in your browser. `http://127.0.0.1` is refused. | The address loads inside the canvas, or a private address is accepted. |
+| 8.12 | Copy `https://example.com` and paste on empty canvas. Then paste a picture the same way. | The address becomes a link card. The picture still becomes an image, not a link. | The picture is replaced by a link, or the address is ignored. |
+| 8.13 | Delete a card that a connection is attached to. Undo. | The connection remains. After undo, the end is on the card again. | The connection is deleted with the card, or undo leaves the end loose. |
+
+**Not ready yet.** Do not file these as bugs until a later M8 build says they work: dragging an endpoint to a new target, curve and elbow handles, a label you can type on the line, bridge and gap drawings (Gap currently only dashes an unselected line), a link stored on an existing card, a link inside a note, Duplicate with Comments, comments following a slide that is extracted or moved to another stack, a Project Integrity panel, and exporting one board as a package or a picture. Whole-project zip export already includes the database, so connections stored there are in the zip, but that is not a separate board-share file.
+
 ### M5 — Recovery, search and commands (≈30 minutes)
 
 Use a fresh project. Have ready: a text PDF, a PNG, and a text file. The Windows installer steps use a packaged build, not `npm run dev`.

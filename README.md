@@ -4,7 +4,7 @@ A PC desktop creative workspace, inspired by Milanote (boards and organization) 
 
 It combines infinite visual canvases, interconnected boards, notes, reference images, document viewing, artwork management, and project organization in one flexible environment. The goal is to support the whole creative process, from brainstorming and research through planning, review, and organizing finished work, without forcing a rigid workflow.
 
-> **Status:** M7 complete: image stacks and per-appearance crops on top of M6 tags and search. Original files stay unchanged. Board covers stay later.
+> **Status:** M7 (image stacks and crops) is complete on its own branch. M8 (connections, links, and comments) is in progress on `feat/m8-connections-links-comments` and is not finished. Original files stay unchanged. M6 and M7 are not merged.
 > This README summarizes the full feature vision. The complete, **living** specification is [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md). The original PDF (v1.0) is archived at [`docs/archive/`](docs/archive/Creative%20Workspace%20App%20v1.0.pdf).
 
 ## Project Docs

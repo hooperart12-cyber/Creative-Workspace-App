@@ -21,6 +21,9 @@ export function CanvasToolbar() {
   useCanvasStore((s) => s.historyVersion) // re-render when undo/redo availability changes
   const editingText = useNoteStore((s) => s.editing !== null)
   const board = useWorkspaceStore((s) => s.board)
+  const tool = useCanvasStore((s) => s.tool)
+  const showProperties = useCanvasStore((s) => s.showProperties)
+  const showComments = useCanvasStore((s) => s.showComments)
 
   return (
     <div
@@ -81,6 +84,46 @@ export function CanvasToolbar() {
       >
         <FileIcon />
         File
+      </button>
+      <button
+        className={toolButton}
+        aria-pressed={tool === 'connect'}
+        onClick={() =>
+          useCanvasStore.getState().setTool(tool === 'connect' ? 'select' : 'connect', false)
+        }
+        title="Connection (L). Shift+L keeps the tool on."
+        aria-label="Connection tool"
+      >
+        ↗
+      </button>
+      <button
+        className={toolButton}
+        aria-pressed={tool === 'comment'}
+        onClick={() =>
+          useCanvasStore.getState().setTool(tool === 'comment' ? 'select' : 'comment', false)
+        }
+        title="Comment (C)"
+        aria-label="Comment tool"
+      >
+        C
+      </button>
+      <button
+        className={toolButton}
+        aria-pressed={showProperties}
+        onClick={() => useCanvasStore.getState().setShowProperties(!showProperties)}
+        title="Properties"
+        aria-label="Properties"
+      >
+        P
+      </button>
+      <button
+        className={toolButton}
+        aria-pressed={showComments}
+        onClick={() => useCanvasStore.getState().setShowComments(!showComments)}
+        title="Comments"
+        aria-label="Comments"
+      >
+        K
       </button>
       <Divider />
       <button

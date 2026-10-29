@@ -128,8 +128,17 @@ M3 is built in three parts, each with its own branch and PR.
 
 ---
 
+## M8 — Connections, links, and comments (§4, §5, §9, §12) 🚧
+Started on `feat/m8-connections-links-comments` (ADR-020). M6 and M7 stay unmerged. Boxes below are unchecked until that part is usable end to end.
+
+- [ ] Connections: attach, pin, path styles, markers, labels, routing, crossings, and zoom display
+- [ ] Internal links to a board, object, PDF page, stack, exact slide, or saved view
+- [ ] External link cards with an opt-in preview and blocked private addresses
+- [ ] Comments, replies, resolution, and the board Comments panel, including stack slides
+- [ ] Copy, move, delete, and restore keep or remap those relationships
+- [ ] Search and direct tags, without copying a tag across a connection or a comment
+
 ## Later (post-MVP), in suggested order
-3. Connections/arrows, comments, link cards (§5)
 4. Page collections, planner, reader mode (§10)
 5. Linked TOC, named anchors, pinned panel (§13, §14)
 6. Annotations and revisions (§11)

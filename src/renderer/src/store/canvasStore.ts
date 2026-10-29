@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Viewport } from '@shared/types'
+import type { Point, Viewport } from '@shared/types'
 import type { Guide } from '../canvas/arrange'
 import type { Rect, Size } from '../canvas/geometry'
 import { History } from '../canvas/history'
@@ -61,6 +61,24 @@ interface CanvasState {
   cropTarget: { objectId: string; slideId?: string } | null
   stackDrop: StackDrop | null
   stackPreview: { objectId: string; slideId: string } | null
+  tool: 'select' | 'connect' | 'comment'
+  toolPinned: boolean
+  /** A comment that has been placed but not posted yet. */
+  commentDraft: {
+    x: number
+    y: number
+    targetId: string | null
+    slideId: string | null
+    scope: 'free' | 'object' | 'stack' | 'slide'
+  } | null
+  pdfPage: number
+  showComments: boolean
+  showProperties: boolean
+  /** Rubber-band for a connection that has not been released yet. */
+  connectPreview: { start: Point; end: Point; endTargetId: string | null } | null
+  /** Escape during a connection drag. The mouseup must not create the line. */
+  discardConnect: boolean
+  destinationPicker: boolean
 
   setViewport: (viewport: Viewport) => void
   setViewSize: (size: Size) => void
@@ -83,6 +101,14 @@ interface CanvasState {
   setCropTarget: (target: CanvasState['cropTarget']) => void
   setStackDrop: (drop: StackDrop | null) => void
   setStackPreview: (preview: CanvasState['stackPreview']) => void
+  setTool: (tool: CanvasState['tool'], pinned?: boolean) => void
+  setCommentDraft: (draft: CanvasState['commentDraft']) => void
+  setPdfReader: (id: string | null, page?: number) => void
+  setShowComments: (open: boolean) => void
+  setShowProperties: (open: boolean) => void
+  setConnectPreview: (preview: CanvasState['connectPreview']) => void
+  setDiscardConnect: (discard: boolean) => void
+  setDestinationPicker: (open: boolean) => void
 }
 
 const PREFS_KEY = 'cw.canvasPrefs'
@@ -128,6 +154,15 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   cropTarget: null,
   stackDrop: null,
   stackPreview: null,
+  tool: 'select',
+  toolPinned: false,
+  commentDraft: null,
+  pdfPage: 1,
+  showComments: false,
+  showProperties: false,
+  connectPreview: null,
+  discardConnect: false,
+  destinationPicker: false,
 
   setViewport: (viewport) => set({ viewport }),
   setViewSize: (viewSize) => set({ viewSize }),
@@ -145,7 +180,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
   bumpHistory: () => set({ historyVersion: get().historyVersion + 1 }),
   setViewerObjectId: (viewerObjectId) => set({ viewerObjectId }),
-  setPdfReaderId: (pdfReaderId) => set({ pdfReaderId }),
+  setPdfReaderId: (pdfReaderId) => set({ pdfReaderId, pdfPage: 1 }),
   setFileDetailsId: (fileDetailsId) => set({ fileDetailsId }),
   setViewerAssetId: (viewerAssetId) => set({ viewerAssetId }),
   setPdfAsset: (pdfAsset) => set({ pdfAsset }),
@@ -155,5 +190,21 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   setStackViewer: (stackViewer) => set({ stackViewer }),
   setCropTarget: (cropTarget) => set({ cropTarget }),
   setStackDrop: (stackDrop) => set({ stackDrop }),
-  setStackPreview: (stackPreview) => set({ stackPreview })
+  setStackPreview: (stackPreview) => set({ stackPreview }),
+  setTool: (tool, pinned) =>
+    set({
+      tool,
+      toolPinned: pinned ?? get().toolPinned,
+      commentDraft: tool === 'comment' ? get().commentDraft : null,
+      connectPreview: tool === 'connect' ? get().connectPreview : null,
+      discardConnect:
+        tool === 'connect' ? false : get().connectPreview != null ? true : get().discardConnect
+    }),
+  setCommentDraft: (commentDraft) => set({ commentDraft }),
+  setPdfReader: (pdfReaderId, page = 1) => set({ pdfReaderId, pdfPage: page, pdfAsset: null }),
+  setShowComments: (showComments) => set({ showComments }),
+  setShowProperties: (showProperties) => set({ showProperties }),
+  setConnectPreview: (connectPreview) => set({ connectPreview }),
+  setDiscardConnect: (discardConnect) => set({ discardConnect }),
+  setDestinationPicker: (destinationPicker) => set({ destinationPicker })
 }))

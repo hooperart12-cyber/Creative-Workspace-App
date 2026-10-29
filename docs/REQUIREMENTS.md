@@ -5,7 +5,7 @@
 > **This Markdown file is the source of truth for requirements.** It was converted from the original PDF (v1.0, archived at [`docs/archive/Creative Workspace App v1.0.pdf`](archive/Creative%20Workspace%20App%20v1.0.pdf)).
 > Update it whenever a decision or scope change is made, and record the reasoning in [`DECISIONS.md`](DECISIONS.md). Progress is tracked in [`ROADMAP.md`](ROADMAP.md).
 
-**Project Status:** Architecture decided / pre-MVP
+**Project Status:** Architecture decided / pre-MVP. M8 (connections, links, comments) is being built to these requirements; see ADR-020. Unfinished M8 behavior is listed in `docs/TESTING.md` and `docs/HANDOFF.md`.
 **Platform:** PC Desktop (Windows target; developed cross-platform with Electron)
 **Development Approach:** AI-assisted coding with support from an experienced developer
 **Initial Purpose:** Personal use, with optional collaborative workspaces

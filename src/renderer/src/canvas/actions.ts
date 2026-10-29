@@ -2,6 +2,7 @@
  * Canvas and board edits. Every edit goes through here so it can be undone (§20):
  * each one performs the change, then records how to undo and redo it.
  */
+import { normalizePublicUrl } from '@shared/destinations'
 import { positionForCenter, rotatedCenter } from '@shared/geometry'
 import { ensurePdfCovers } from '../pdf/pdfCover'
 import type { CanvasObject, ImportResult, ObjectPatch, Point } from '@shared/types'
@@ -307,7 +308,31 @@ export async function paste(at?: Point): Promise<void> {
   })
   if (external) {
     const { boardId, center } = external
-    await importThenPlace(boardId, () => api().invoke('clipboard:importExternal'), center, !at)
+    const placed = await importThenPlace(
+      boardId,
+      () => api().invoke('clipboard:importExternal'),
+      center,
+      !at
+    )
+    const text = (await api().invoke('clipboard:readText')).trim()
+    const href = normalizePublicUrl(text)
+    if (!placed && href) {
+      await run(async () => {
+        const created = await api().invoke('relations:createLink', boardId, center, {
+          version: 1,
+          title: '',
+          description: '',
+          layout: 'compact',
+          destination: { kind: 'url', href }
+        })
+        canvas().setSelection([created.id])
+        record({
+          label: 'Paste link',
+          undo: () => api().invoke('objects:delete', [created.id]),
+          redo: () => api().invoke('objects:restore', [created.id])
+        })
+      })
+    }
   }
 }
 
@@ -368,10 +393,10 @@ export function placeExistingAssets(assetIds: string[], at: Point): Promise<void
 }
 
 /** Imports files dropped from File Explorer / Finder or a browser, centred on `at`. */
-export function importDroppedFiles(files: File[], at: Point): Promise<void> {
+export async function importDroppedFiles(files: File[], at: Point): Promise<void> {
   const board = workspace().board
-  if (!board || files.length === 0) return Promise.resolve()
-  return importThenPlace(
+  if (!board || files.length === 0) return
+  await importThenPlace(
     board.id,
     async () => {
       // Files on disk are imported by path (no copy through the renderer). Things without a
@@ -418,7 +443,7 @@ export async function addImagesFromPicker(at?: Point): Promise<void> {
   if (paths.length === 0) return
   const board = workspace().board
   if (!board) return
-  return importThenPlace(
+  await importThenPlace(
     board.id,
     () => api().invoke('assets:importFiles', paths, { imagesOnly: true }),
     at ?? viewCenter(),
@@ -437,7 +462,7 @@ export async function addFilesFromPicker(at?: Point): Promise<void> {
   if (paths.length === 0) return
   const board = workspace().board
   if (!board) return
-  return importThenPlace(
+  await importThenPlace(
     board.id,
     () => api().invoke('assets:importFiles', paths),
     at ?? viewCenter(),
@@ -455,18 +480,20 @@ async function importThenPlace(
   importWork: () => Promise<ImportResult | null>,
   center: Point,
   avoidOverlap: boolean
-): Promise<void> {
+): Promise<boolean> {
   let result: ImportResult | null
   try {
     result = await withProgress(importWork)
   } catch (error) {
     reportError(error)
-    return
+    return false
   }
-  if (result) {
+  if (result && result.imported.length > 0) {
     const imported = result
     await run(() => placeImported(imported, boardId, center, avoidOverlap))
+    return true
   }
+  return false
 }
 
 /** Imports in progress; "Importing…" stays up until the last one finishes. */

@@ -45,6 +45,13 @@ export function useCanvasShortcuts(): void {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         const canvas = useCanvasStore.getState()
+        if (canvas.connectPreview || canvas.tool === 'connect') {
+          e.preventDefault()
+          canvas.setDiscardConnect(true)
+          canvas.setConnectPreview(null)
+          if (canvas.tool !== 'select') canvas.setTool('select', false)
+          return
+        }
         const inDialog = (e.target as HTMLElement | null)?.closest?.('[role="dialog"]')
         if (canvas.pdfReaderId && !inDialog) {
           e.preventDefault()
@@ -77,6 +84,24 @@ export function useCanvasShortcuts(): void {
         fn()
       }
 
+      if (e.code === 'KeyL' && !mod) {
+        handled(() => {
+          const current = useCanvasStore.getState()
+          current.setTool('connect', e.shiftKey ? !current.toolPinned : false)
+        })
+        return
+      }
+      if (e.code === 'KeyC' && !mod) {
+        handled(() => {
+          const current = useCanvasStore.getState()
+          current.setTool('comment', e.shiftKey ? !current.toolPinned : false)
+        })
+        return
+      }
+      if (e.key === 'Escape' && useCanvasStore.getState().tool !== 'select') {
+        handled(() => useCanvasStore.getState().setTool('select', false))
+        return
+      }
       if (e.code === 'Space' && !mod) {
         if (!spaceHeld) {
           spaceHeld = true
@@ -101,6 +126,8 @@ export function useCanvasShortcuts(): void {
         }
         if (e.code === 'KeyL' && e.shiftKey)
           return handled(() => void actions.toggleLockSelection())
+        if (e.code === 'KeyK' && e.shiftKey)
+          return handled(() => useCanvasStore.getState().setDestinationPicker(true))
         if (e.code === 'BracketRight') {
           return handled(() => void actions.reorderSelection(e.shiftKey ? 'front' : 'forward'))
         }

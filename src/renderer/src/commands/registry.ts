@@ -95,6 +95,44 @@ export function commands(): AppCommand[] {
       run: () => void actions.redo()
     },
     {
+      id: 'connect',
+      title: 'Connection tool',
+      group: 'Canvas',
+      shortcut: 'L',
+      when: () => workspace.surface === 'canvas',
+      run: () => useCanvasStore.getState().setTool('connect', false)
+    },
+    {
+      id: 'comment',
+      title: 'Comment tool',
+      group: 'Canvas',
+      shortcut: 'C',
+      when: () => workspace.surface === 'canvas',
+      run: () => useCanvasStore.getState().setTool('comment', false)
+    },
+    {
+      id: 'link-card',
+      title: 'Create link',
+      group: 'Canvas',
+      shortcut: `${mod}+Shift+K`,
+      when: () => workspace.surface === 'canvas',
+      run: () => useCanvasStore.getState().setDestinationPicker(true)
+    },
+    {
+      id: 'comments-panel',
+      title: 'Comments',
+      group: 'Canvas',
+      when: () => workspace.surface === 'canvas',
+      run: () => useCanvasStore.getState().setShowComments(true)
+    },
+    {
+      id: 'properties',
+      title: 'Properties',
+      group: 'Canvas',
+      when: () => workspace.surface === 'canvas',
+      run: () => useCanvasStore.getState().setShowProperties(true)
+    },
+    {
       id: 'note',
       title: 'New text note',
       group: 'Text editing',

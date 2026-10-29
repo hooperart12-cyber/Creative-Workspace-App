@@ -228,6 +228,7 @@ export function ProjectView({ project }: { project: ProjectSummary }) {
       {pdfReaderId && (
         <PdfReader
           objectId={pdfReaderId}
+          initialPage={useCanvasStore.getState().pdfPage}
           onClose={() => useCanvasStore.getState().setPdfReaderId(null)}
         />
       )}

@@ -113,13 +113,16 @@ RULES:
 - Search filters tags in SQL before pagination. A PDF page hit names the asset, entry, or appearance that matched. Tag-only search does not emit a page per page.
 - Renderer: Tag manager, Tag Trash, canvas pills, library and canvas tagging, search chips. Undo refuses when another window changed that assignment.
 
-**In progress**
-- [PR #12](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/12) is open against `feat/m6-tags-search`. Do not merge it. M6 [PR #11](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/11) is also still open.
+**In progress (M8, ADR-020)**
+- Branch `feat/m8-connections-links-comments`, taken from the M7 tip. Do not merge [PR #11](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/11) or [PR #12](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/12).
+- Migration `0007_connections_links_comments`. Connections, link cards, and comments are board objects. Geometry, detach/reattach, and copy remapping are in `src/shared/connections.ts`, `src/shared/destinations.ts`, `src/shared/comments.ts`, and `src/main/project/relationRepair.ts`.
+- The canvas can draw a connection (L, or the dot on a selected card), post a comment (C, including this slide or the whole stack), open the Comments panel, and add a link card from Choose destination (Ctrl+Shift+K) or by pasting one public URL.
+- Still open: endpoint and curve handles, real bridge/gap drawing, label editing on the line, object-attached links, rich-text destination insertion, Duplicate with Comments, slide extract/move comment transfer, the integrity panel, visual and board-package export, and Playwright coverage. Do not describe those as finished.
 
 **Next steps**
-1. Review the M7 PR and run the M7 checklist in `docs/TESTING.md`.
-2. The packaged Windows install (TESTING 5.13–5.14 and 7.17) has still not been done by hand.
-3. Later: board covers, aspect-ratio crop presets, and page collections.
+1. Finish the M8 gaps listed above, then run typecheck, lint, unit tests, build, and Playwright.
+2. Open the M8 pull request against `feat/m7-image-stacks`. Do not retarget M6 or M7.
+3. The packaged Windows install (TESTING 5.13–5.14 and 7.17) has still not been done by hand.
 
 **Known issues / open questions**
 - Undo history is per window and not saved across restarts (by design for now).
