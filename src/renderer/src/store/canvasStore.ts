@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { ConnectionData } from '@shared/connections'
 import type { Point, Viewport } from '@shared/types'
 import type { Guide } from '../canvas/arrange'
 import type { Rect, Size } from '../canvas/geometry'
@@ -79,6 +80,18 @@ interface CanvasState {
   /** Escape during a connection drag. The mouseup must not create the line. */
   discardConnect: boolean
   destinationPicker: boolean
+  /** Where a chosen destination should be written. A plain open creates a card. */
+  linkTarget:
+    | { kind: 'card' }
+    | { kind: 'object'; id: string }
+    | { kind: 'label'; id: string }
+    | { kind: 'link'; id: string }
+    | { kind: 'note' }
+    | null
+  /** Live geometry while an endpoint, bend, or label is dragged. */
+  connectionDraft: { id: string; data: ConnectionData } | null
+  labelEdit: string | null
+  lineChoices: { ids: string[]; x: number; y: number } | null
 
   setViewport: (viewport: Viewport) => void
   setViewSize: (size: Size) => void
@@ -109,6 +122,10 @@ interface CanvasState {
   setConnectPreview: (preview: CanvasState['connectPreview']) => void
   setDiscardConnect: (discard: boolean) => void
   setDestinationPicker: (open: boolean) => void
+  setLinkTarget: (target: CanvasState['linkTarget']) => void
+  setConnectionDraft: (draft: CanvasState['connectionDraft']) => void
+  setLabelEdit: (id: string | null) => void
+  setLineChoices: (choices: CanvasState['lineChoices']) => void
 }
 
 const PREFS_KEY = 'cw.canvasPrefs'
@@ -163,6 +180,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   connectPreview: null,
   discardConnect: false,
   destinationPicker: false,
+  linkTarget: null,
+  connectionDraft: null,
+  labelEdit: null,
+  lineChoices: null,
 
   setViewport: (viewport) => set({ viewport }),
   setViewSize: (viewSize) => set({ viewSize }),
@@ -206,5 +227,13 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   setShowProperties: (showProperties) => set({ showProperties }),
   setConnectPreview: (connectPreview) => set({ connectPreview }),
   setDiscardConnect: (discardConnect) => set({ discardConnect }),
-  setDestinationPicker: (destinationPicker) => set({ destinationPicker })
+  setDestinationPicker: (destinationPicker) =>
+    set({
+      destinationPicker,
+      linkTarget: destinationPicker ? (get().linkTarget ?? { kind: 'card' }) : null
+    }),
+  setLinkTarget: (linkTarget) => set({ linkTarget, destinationPicker: linkTarget != null }),
+  setConnectionDraft: (connectionDraft) => set({ connectionDraft }),
+  setLabelEdit: (labelEdit) => set({ labelEdit }),
+  setLineChoices: (lineChoices) => set({ lineChoices })
 }))

@@ -2,6 +2,8 @@
  * Canvas and board edits. Every edit goes through here so it can be undone (§20):
  * each one performs the change, then records how to undo and redo it.
  */
+import { parseComment } from '@shared/comments'
+import { parseConnection, releaseGroupEndpoint } from '@shared/connections'
 import { normalizePublicUrl } from '@shared/destinations'
 import { positionForCenter, rotatedCenter } from '@shared/geometry'
 import { ensurePdfCovers } from '../pdf/pdfCover'
@@ -618,12 +620,110 @@ export function groupSelection(): Promise<void> {
 }
 
 export function ungroupSelection(): Promise<void> {
-  return applyPatches(
-    selectedObjects()
-      .filter((o) => o.groupId)
-      .map((o) => ({ id: o.id, groupId: null })),
-    'Ungroup'
+  const selected = selectedObjects().filter((object) => object.groupId && !object.locked)
+  if (selected.length === 0) return Promise.resolve()
+  const selectedIds = new Set(selected.map((object) => object.id))
+  const groupIds = new Set(selected.map((object) => object.groupId as string))
+  const emptied = new Set(
+    [...groupIds].filter(
+      (groupId) =>
+        !currentObjects().some(
+          (object) => object.groupId === groupId && !selectedIds.has(object.id)
+        )
+    )
   )
+  const patches = selected.map((object) => ({ id: object.id, groupId: null as string | null }))
+  const connections = currentObjects().flatMap((object) => {
+    if (object.type !== 'connection') return []
+    const before = parseConnection(object.data)
+    if (!before) return []
+    const next = {
+      ...before,
+      start: releaseGroupEndpoint(before.start, emptied),
+      end: releaseGroupEndpoint(before.end, emptied)
+    }
+    if (next.start === before.start && next.end === before.end) return []
+    return [{ object, before, next }]
+  })
+  return run(async () => {
+    const byId = new Map(currentObjects().map((object) => [object.id, object]))
+    const before = patches.map((patch) => ({
+      id: patch.id,
+      groupId: byId.get(patch.id)?.groupId ?? null
+    }))
+    workspace().patchObjects(patches)
+    await api().invoke('objects:update', patches)
+    for (const change of connections) {
+      await api().invoke(
+        'relations:updateConnection',
+        change.object.id,
+        change.object.revision,
+        change.next
+      )
+    }
+    record({
+      label: 'Ungroup',
+      undo: async () => {
+        await api().invoke('objects:update', before)
+        for (const change of connections) {
+          const current = workspace().board?.objects.find((item) => item.id === change.object.id)
+          if (current)
+            await api().invoke(
+              'relations:updateConnection',
+              current.id,
+              current.revision,
+              change.before
+            )
+        }
+      },
+      redo: async () => {
+        await api().invoke('objects:update', patches)
+        for (const change of connections) {
+          const current = workspace().board?.objects.find((item) => item.id === change.object.id)
+          if (current)
+            await api().invoke(
+              'relations:updateConnection',
+              current.id,
+              current.revision,
+              change.next
+            )
+        }
+      }
+    })
+  })
+}
+
+export function duplicateWithComments(): Promise<void> {
+  return run(async () => {
+    const board = workspace().board
+    const selected = selectedObjects()
+    const bounds = boundsOf(selected)
+    if (!board || !bounds) return
+    const ids = new Set(selected.map((object) => object.id))
+    for (const object of board.objects) {
+      if (object.type !== 'connection') continue
+      const data = parseConnection(object.data)
+      const start = data?.start.attachment?.id
+      const end = data?.end.attachment?.id
+      if (start && end && ids.has(start) && ids.has(end)) ids.add(object.id)
+    }
+    for (const object of board.objects) {
+      if (object.type !== 'comment') continue
+      const data = parseComment(object.data)
+      if (data?.anchor.targetId && ids.has(data.anchor.targetId)) ids.add(object.id)
+    }
+    const at = { x: bounds.x + PASTE_OFFSET, y: bounds.y + PASTE_OFFSET }
+    const source = [...ids]
+    let created = await api().invoke('objects:copyTo', source, board.id, at)
+    canvas().setSelection(created)
+    record({
+      label: 'Duplicate with comments',
+      undo: () => api().invoke('objects:delete', created),
+      redo: async () => {
+        created = await api().invoke('objects:copyTo', source, board.id, at)
+      }
+    })
+  })
 }
 
 /** Locks the selection, or unlocks it if everything selected is already locked. */

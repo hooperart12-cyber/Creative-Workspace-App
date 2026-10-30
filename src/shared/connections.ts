@@ -539,6 +539,74 @@ export function labelPosition(points: Point[], label: ConnectionLabel): Point {
 }
 
 /** Parameter along the path closest to a dragged label, plus the signed perpendicular offset. */
+/** Turns a dragged elbow handle into a horizontal or vertical bend. The path style stays elbow. */
+export function elbowFromPoint(start: Point, end: Point, point: Point): ElbowRoute {
+  const dx = Math.abs(end.x - start.x) || 1
+  const dy = Math.abs(end.y - start.y) || 1
+  const horizontal = Math.abs(point.x - start.x) / dx >= Math.abs(point.y - start.y) / dy
+  if (horizontal) {
+    const span = end.x - start.x || 1
+    return { first: 'h', split: clamp((point.x - start.x) / span, 0.05, 0.95) }
+  }
+  const span = end.y - start.y || 1
+  return { first: 'v', split: clamp((point.y - start.y) / span, 0.05, 0.95) }
+}
+
+/** The corner a person drags. Avoid-routing is visual and is not the handle. */
+export function elbowHandle(start: Point, end: Point, elbow: ElbowRoute): Point {
+  return elbowPoints(start, end, elbow)[1]
+}
+
+/** Semicircle that hops over a crossing. It is not stored. */
+export function bridgeArc(points: Point[], t: number, radius: number): Point[] {
+  const at = pointAlong(points, t)
+  const arc: Point[] = []
+  for (let i = 0; i <= 8; i += 1) {
+    const u = -radius + (2 * radius * i) / 8
+    const v = Math.sin(Math.PI * (i / 8)) * radius
+    arc.push({
+      x: at.point.x + at.tangent.x * u + at.normal.x * v,
+      y: at.point.y + at.tangent.y * u + at.normal.y * v
+    })
+  }
+  return arc
+}
+
+/** Pieces of a path with a hole around each crossing. The stored points stay intact. */
+export function gapSubpaths(points: Point[], crossings: number[], gap: number): Point[][] {
+  if (points.length < 2 || crossings.length === 0) return [points]
+  const total = pathLength(points) || 1
+  const cuts = gapIntervals(total, crossings, gap)
+  const inside = (distance: number) => cuts.some(([from, to]) => distance >= from && distance <= to)
+  const steps = Math.max(12, Math.ceil(total / 6))
+  const runs: Point[][] = []
+  let run: Point[] = []
+  for (let i = 0; i <= steps; i += 1) {
+    const distance = (i / steps) * total
+    const point = pointAlong(points, distance / total).point
+    if (inside(distance)) {
+      if (run.length > 1) runs.push(run)
+      run = []
+    } else run.push(point)
+  }
+  if (run.length > 1) runs.push(run)
+  return runs.length > 0 ? runs : [points]
+}
+
+/** After a group is emptied, a group endpoint stays where it was and remembers the group id. */
+export function releaseGroupEndpoint(endpoint: Endpoint, emptied: ReadonlySet<string>): Endpoint {
+  const attachment = endpoint.attachment
+  if (
+    !attachment ||
+    attachment.kind !== 'group' ||
+    !emptied.has(attachment.id) ||
+    attachment.userHeld
+  ) {
+    return endpoint
+  }
+  return { ...endpoint, attachment: { ...attachment, missing: true, userHeld: false } }
+}
+
 export function labelFromPoint(points: Point[], point: Point): { t: number; offset: number } {
   const length = pathLength(points) || 1
   let best = { distance: Infinity, walked: 0, offset: 0 }

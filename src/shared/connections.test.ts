@@ -9,7 +9,10 @@ import {
   defaultConnection,
   displayStroke,
   distanceToPath,
+  bridgeArc,
+  elbowFromPoint,
   findCrossings,
+  gapSubpaths,
   hitsAt,
   labelFromPoint,
   labelPosition,
@@ -17,6 +20,7 @@ import {
   pasteStyle,
   pinForLocal,
   pointOnEdge,
+  releaseGroupEndpoint,
   remapConnection,
   resolveConnection,
   resolveEndpoint,
@@ -374,5 +378,35 @@ describe('connection geometry', () => {
       connectionPoints(data, obstacles.filter((item) => near.has(item.id)).slice(0, 8))
     }
     expect(Date.now() - started).toBeLessThan(2000)
+  })
+
+  it('keeps a dragged elbow on one side and opens a gap without changing the stored line', () => {
+    const bend = elbowFromPoint({ x: 0, y: 0 }, { x: 100, y: 40 }, { x: 70, y: 4 })
+    expect(bend.first).toBe('h')
+    expect(bend.split).toBeGreaterThan(0.6)
+    const line = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 }
+    ]
+    const pieces = gapSubpaths(line, [0.5], 8)
+    expect(pieces.length).toBe(2)
+    expect(pieces[0][0]).toEqual({ x: 0, y: 0 })
+    expect(bridgeArc(line, 0.5, 6).length).toBe(9)
+    const endpoint = {
+      x: 3,
+      y: 4,
+      attachment: {
+        kind: 'group' as const,
+        id: 'group-1',
+        placement: 'auto' as const,
+        pin: null,
+        missing: false,
+        userHeld: false
+      }
+    }
+    const released = releaseGroupEndpoint(endpoint, new Set(['group-1']))
+    expect(released.attachment?.missing).toBe(true)
+    expect(released.attachment?.id).toBe('group-1')
+    expect(released.x).toBe(3)
   })
 })

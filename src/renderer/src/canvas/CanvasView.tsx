@@ -24,12 +24,23 @@ import { FileNode } from './FileNode'
 import { ImageNode } from './ImageNode'
 import { StackNode } from '../stacks/StackNode'
 import { ConnectionNode } from '../relations/ConnectionNode'
+import { ConnectionHandles } from '../relations/ConnectionHandles'
+import { LabelEditor, LineChooser } from '../relations/RelationPanels'
 import { CommentNode, LinkCardNode } from '../relations/CardNodes'
 import { RelationPanels } from '../relations/RelationPanels'
 import { DestinationPicker } from '../relations/DestinationPicker'
-import { createConnection, moveConnections } from '../relations/relationActions'
+import { createConnection, moveConnections, updateConnection } from '../relations/relationActions'
 import { navigateTo } from '../relations/navigate'
-import { defaultConnection, type Attachment } from '@shared/connections'
+import {
+  connectionPoints,
+  defaultConnection,
+  findCrossings,
+  hitsAt,
+  labelFromPoint,
+  parseConnection,
+  type Attachment,
+  type CrossingStyle
+} from '@shared/connections'
 import { parseComment, visibleInView } from '@shared/comments'
 import { parseDestination } from '@shared/destinations'
 import { showSlide } from '../stacks/stackActions'
@@ -263,6 +274,45 @@ export function CanvasView() {
     return sorted.filter((o) => selection.has(o.id) || intersects(objectBounds(o), padded))
   }, [sorted, viewport, viewSize, selection])
 
+  const crossingMarks = useMemo(() => {
+    const marks = new Map<string, { gaps: number[]; bridges: number[] }>()
+    const boardStyle = board?.crossingStyle ?? 'plain'
+    const items: {
+      id: string
+      points: { x: number; y: number }[]
+      zIndex: number
+      chosen: CrossingStyle
+    }[] = []
+    for (const object of visible) {
+      if (object.type !== 'connection') continue
+      const data = parseConnection(object.data)
+      if (!data) continue
+      const chosen: CrossingStyle = data.crossing === 'inherit' ? boardStyle : data.crossing
+      items.push({
+        id: object.id,
+        points: connectionPoints(data),
+        zIndex: object.zIndex,
+        chosen
+      })
+    }
+    if (!items.some((item) => item.chosen !== 'plain')) return marks
+    for (const crossing of findCrossings(items)) {
+      const above = items.find((item) => item.id === crossing.above)
+      const below = items.find((item) => item.id === crossing.below)
+      if (above?.chosen === 'bridge') {
+        const mark = marks.get(crossing.above) ?? { gaps: [], bridges: [] }
+        mark.bridges.push(labelFromPoint(above.points, crossing.point).t)
+        marks.set(crossing.above, mark)
+      }
+      if (below?.chosen === 'gap') {
+        const mark = marks.get(crossing.below) ?? { gaps: [], bridges: [] }
+        mark.gaps.push(crossing.t)
+        marks.set(crossing.below, mark)
+      }
+    }
+    return marks
+  }, [visible, board?.crossingStyle])
+
   // Handles depend on what's selected: images resize only proportionally (corner handles)
   // and rotate; board cards resize freely and don't rotate.
   const transformable = useMemo(
@@ -348,6 +398,30 @@ export function CanvasView() {
     }
     if (evt.button !== 0) return
 
+    if (e.target.hasName('object-link')) {
+      const linkedId = (e.target as Konva.Node).getAttr('connectionId') as string | undefined
+      const host = (useWorkspaceStore.getState().board?.objects ?? []).find(
+        (object) => object.id === linkedId
+      )
+      const destination = parseDestination(host?.data.navLink)
+      if (destination) void navigateTo(destination)
+      return
+    }
+    if (e.target.hasName('relation-handle') || e.target.hasName('label-text')) {
+      const connectionId =
+        ((e.target as Konva.Node).getAttr('connectionId') as string | undefined) ??
+        objectIdOf(e.target)
+      const linked = (useWorkspaceStore.getState().board?.objects ?? []).find(
+        (object) => object.id === connectionId
+      )
+      const data = linked ? parseConnection(linked.data) : null
+      if ((e.target.hasName('label-open') || evt.ctrlKey || evt.metaKey) && data?.labelLink) {
+        void navigateTo(data.labelLink)
+        return
+      }
+      if (e.target.hasName('relation-handle')) return
+    }
+
     const previousArrow = e.target.hasName('stack-prev') || e.target.findAncestor('.stack-prev')
     const nextArrow = e.target.hasName('stack-next') || e.target.findAncestor('.stack-next')
     if (previousArrow || nextArrow) {
@@ -373,6 +447,30 @@ export function CanvasView() {
     const world = screenToWorld(screen, vp)
     const id = objectIdOf(e.target)
     const objectsNow = useWorkspaceStore.getState().board?.objects ?? []
+    if (evt.altKey && id) {
+      const clicked = objectsNow.find((object) => object.id === id)
+      if (clicked?.type === 'connection') {
+        const hits = hitsAt(
+          world,
+          objectsNow.flatMap((object) => {
+            if (object.type !== 'connection') return []
+            const data = parseConnection(object.data)
+            return data
+              ? [{ id: object.id, points: connectionPoints(data), zIndex: object.zIndex }]
+              : []
+          }),
+          14 / vp.zoom
+        )
+        if (hits.length > 1) {
+          useCanvasStore.getState().setLineChoices({
+            ids: hits.map((hit) => hit.id),
+            x: evt.clientX,
+            y: evt.clientY
+          })
+          return
+        }
+      }
+    }
     const tool = useCanvasStore.getState().tool
     const fromHandle = e.target.hasName('connect-handle')
     if ((fromHandle || tool === 'connect' || tool === 'comment') && !isSpaceHeld()) {
@@ -590,6 +688,12 @@ export function CanvasView() {
       })
       return
     }
+    if (g?.kind === 'drag' && !g.moved) {
+      const clicked = board.objects.find((object) => object.id === g.clickedId)
+      if (clicked?.type === 'comment' && parseComment(clicked.data)?.presentation === 'pin') {
+        state.setShowComments(true)
+      }
+    }
     lastPressDragged.current = g?.kind === 'drag' && g.moved
     if (lastPressDragged.current) {
       // Konva counts the release that ends a drag as a click, so it would pair it with the next
@@ -650,6 +754,20 @@ export function CanvasView() {
     if (lastPressDragged.current || e.evt.button !== 0) return
     const id = objectIdOf(e.target)
     const object = board.objects.find((o) => o.id === id)
+    if (object?.type === 'connection' && !object.locked) {
+      const data = parseConnection(object.data)
+      if (data) {
+        if (!data.label) {
+          void updateConnection(
+            object,
+            { ...data, label: { text: 'Label', t: 0.5, offset: -18 } },
+            'Add label'
+          )
+        }
+        useCanvasStore.getState().setLabelEdit(object.id)
+      }
+      return
+    }
     if (object?.type === 'board' && object.linkedBoardId) void openBoard(object.linkedBoardId)
     else if (object?.type === 'document' && object.asset) {
       const state = useCanvasStore.getState()
@@ -841,6 +959,8 @@ export function CanvasView() {
     >
       <RelationPanels />
       <DestinationPicker />
+      <LabelEditor />
+      <LineChooser />
       {viewSize.width > 0 && (
         <Stage
           ref={stage}
@@ -901,6 +1021,8 @@ export function CanvasView() {
                     display={board.connectionDisplay}
                     crossing={board.crossingStyle}
                     faded={cut.has(o.id)}
+                    gaps={crossingMarks.get(o.id)?.gaps}
+                    bridges={crossingMarks.get(o.id)?.bridges}
                   />
                 ) : o.type === 'link' ? (
                   <LinkCardNode key={o.id} object={o} faded={cut.has(o.id)} />
@@ -995,6 +1117,38 @@ export function CanvasView() {
                   />
                 )
               })}
+            {visible.map((object) => {
+              if (object.type === 'connection' || !object.data.navLink) return null
+              const pos = positionOf(object)
+              return (
+                <Circle
+                  key={`${object.id}-nav`}
+                  name="relation-handle object-link"
+                  connectionId={object.id}
+                  x={pos.x + object.width - 10}
+                  y={pos.y + 10}
+                  radius={Math.max(5, 7 / viewport.zoom)}
+                  fill={COLORS.accent}
+                  stroke="#fff"
+                  strokeWidth={1 / viewport.zoom}
+                />
+              )
+            })}
+            {visible
+              .filter(
+                (object) =>
+                  object.type === 'connection' &&
+                  selection.size === 1 &&
+                  selection.has(object.id) &&
+                  !object.locked
+              )
+              .map((object) => (
+                <ConnectionHandles
+                  key={`${object.id}-handles`}
+                  object={object}
+                  zoom={viewport.zoom}
+                />
+              ))}
             {connectPreview && (
               <Line
                 points={[

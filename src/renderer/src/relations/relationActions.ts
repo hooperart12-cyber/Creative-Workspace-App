@@ -1,6 +1,14 @@
 /** Canvas edits for connections, links, and comments. One edit is one undo step. */
-import { defaultComment, parseComment, type CommentData } from '@shared/comments'
-import { parseConnection, type ConnectionData, type Endpoint } from '@shared/connections'
+import { anchorOnImage, defaultComment, parseComment, type CommentData } from '@shared/comments'
+import { cropOf } from '@shared/crop'
+import {
+  parseConnection,
+  pasteStyle,
+  worldToLocal,
+  type ConnectionData,
+  type ConnectionStyle,
+  type Endpoint
+} from '@shared/connections'
 import type { Destination } from '@shared/destinations'
 import type { CanvasObject, Point } from '@shared/types'
 import { record, run } from '../canvas/actions'
@@ -142,13 +150,36 @@ export function createComment(body: string): Promise<void> {
   const draft = useCanvasStore.getState().commentDraft
   if (!draft) return Promise.resolve()
   const data = defaultComment(draft)
+  const target = useWorkspaceStore
+    .getState()
+    .board?.objects.find((item) => item.id === draft.targetId)
+  const point = { x: draft.x, y: draft.y }
+  let u = data.anchor.u
+  let v = data.anchor.v
+  if (target?.asset?.width && target.asset.height) {
+    const crop = cropOf(target.data)
+    const placed = anchorOnImage(
+      target,
+      point,
+      { width: target.asset.width, height: target.asset.height },
+      crop
+    )
+    u = placed.u
+    v = placed.v
+  } else if (target) {
+    const local = worldToLocal(target, point)
+    u = Math.min(1, Math.max(0, local.x / Math.max(target.width, 1)))
+    v = Math.min(1, Math.max(0, local.y / Math.max(target.height, 1)))
+  }
   data.anchor = {
     ...data.anchor,
     scope: draft.scope,
     targetId: draft.targetId,
     slideId: draft.slideId,
     x: draft.x,
-    y: draft.y
+    y: draft.y,
+    u,
+    v
   }
   return run(async () => {
     const created = await api().invoke('relations:createComment', boardId(), draft, data, body)
@@ -219,4 +250,134 @@ export function setBoardView(patch: {
   return run(async () => {
     await api().invoke('relations:setBoardView', boardId(), patch)
   })
+}
+
+let copiedStyle: ConnectionStyle | null = null
+
+export function copyConnectionStyle(object: CanvasObject): void {
+  const data = parseConnection(object.data)
+  if (data) copiedStyle = { ...data.style }
+}
+
+export function pasteConnectionStyle(objects: CanvasObject[]): Promise<void> {
+  const style = copiedStyle
+  if (!style) return Promise.resolve()
+  const changes = objects.flatMap((object) => {
+    const before = parseConnection(object.data)
+    return before ? [{ object, before, next: pasteStyle(before, style) }] : []
+  })
+  if (changes.length === 0) return Promise.resolve()
+  return run(async () => {
+    for (const change of changes) {
+      await api().invoke(
+        'relations:updateConnection',
+        change.object.id,
+        change.object.revision,
+        change.next
+      )
+    }
+    record({
+      label: 'Paste style',
+      undo: async () => {
+        for (const change of changes) {
+          const current = useWorkspaceStore
+            .getState()
+            .board?.objects.find((item) => item.id === change.object.id)
+          if (!current) continue
+          await api().invoke(
+            'relations:updateConnection',
+            current.id,
+            current.revision,
+            change.before
+          )
+        }
+      },
+      redo: async () => {
+        for (const change of changes) {
+          const current = useWorkspaceStore
+            .getState()
+            .board?.objects.find((item) => item.id === change.object.id)
+          if (!current) continue
+          await api().invoke(
+            'relations:updateConnection',
+            current.id,
+            current.revision,
+            change.next
+          )
+        }
+      }
+    })
+  })
+}
+
+export function updateLinkCard(
+  object: CanvasObject,
+  data: Record<string, unknown>,
+  label: string
+): Promise<void> {
+  const before = { ...object.data }
+  return run(async () => {
+    await api().invoke('relations:updateLink', object.id, object.revision, data)
+    record({
+      label,
+      undo: async () => {
+        const current = useWorkspaceStore
+          .getState()
+          .board?.objects.find((item) => item.id === object.id)
+        if (current) await api().invoke('relations:updateLink', object.id, current.revision, before)
+      },
+      redo: async () => {
+        const current = useWorkspaceStore
+          .getState()
+          .board?.objects.find((item) => item.id === object.id)
+        if (current) await api().invoke('relations:updateLink', object.id, current.revision, data)
+      }
+    })
+  })
+}
+
+export function attachObjectLink(
+  object: CanvasObject,
+  destination: Destination | null
+): Promise<void> {
+  const before =
+    object.data.navLink && typeof object.data.navLink === 'object'
+      ? (object.data.navLink as Destination)
+      : null
+  return run(async () => {
+    const saved = await api().invoke(
+      'relations:setObjectLink',
+      object.id,
+      object.revision,
+      destination
+    )
+    record({
+      label: destination ? 'Attach link' : 'Remove link',
+      undo: async () => {
+        const current = useWorkspaceStore
+          .getState()
+          .board?.objects.find((item) => item.id === object.id)
+        if (current)
+          await api().invoke('relations:setObjectLink', object.id, current.revision, before)
+      },
+      redo: async () => {
+        const current = useWorkspaceStore
+          .getState()
+          .board?.objects.find((item) => item.id === object.id)
+        if (current)
+          await api().invoke('relations:setObjectLink', object.id, current.revision, destination)
+      }
+    })
+    void saved
+  })
+}
+
+let noteLinkHandler: ((destination: Destination) => void) | null = null
+
+export function setNoteLinkHandler(handler: ((destination: Destination) => void) | null): void {
+  noteLinkHandler = handler
+}
+
+export function applyNoteDestination(destination: Destination): void {
+  noteLinkHandler?.(destination)
 }

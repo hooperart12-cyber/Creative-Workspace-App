@@ -1,9 +1,11 @@
 /** One connection. The line is drawn from its resolved endpoints, not from a stored bitmap. */
 import { Group, Line, Circle, RegularPolygon, Rect, Text } from 'react-konva'
 import {
+  bridgeArc,
   connectionChrome,
   connectionPoints,
   displayStroke,
+  gapSubpaths,
   labelPosition,
   parseConnection,
   pointAlong,
@@ -15,6 +17,8 @@ import {
 } from '@shared/connections'
 import type { CanvasObject } from '@shared/types'
 import { COLORS } from '../canvas/BoardCardNode'
+import { useCanvasStore } from '../store/canvasStore'
+import { navigateTo } from './navigate'
 
 interface Props {
   object: CanvasObject
@@ -23,6 +27,8 @@ interface Props {
   display: 'full' | 'adaptive' | 'minimal' | 'hidden'
   crossing: CrossingStyle
   faded: boolean
+  gaps?: number[]
+  bridges?: number[]
 }
 
 function markerShape(
@@ -77,17 +83,30 @@ function markerShape(
   )
 }
 
-export function ConnectionNode({ object, zoom, selected, display, crossing, faded }: Props) {
-  const data = parseConnection(object.data)
+export function ConnectionNode({
+  object,
+  zoom,
+  selected,
+  display,
+  crossing,
+  faded,
+  gaps = [],
+  bridges = []
+}: Props) {
+  const draft = useCanvasStore((s) =>
+    s.connectionDraft?.id === object.id ? s.connectionDraft.data : null
+  )
+  const data = draft ?? parseConnection(object.data)
   if (!data) return null
   const chrome = connectionChrome(display, zoom, selected)
   if (!chrome.show) return null
   const points = connectionPoints(data)
-  const flat = points.flatMap((point) => [point.x - object.x, point.y - object.y])
   const stroke = displayStroke(data.style.width, zoom, chrome.minScreenStroke)
   const chosen: CrossingStyle = data.crossing === 'inherit' ? crossing : data.crossing
-  const pattern = chosen === 'gap' && !selected ? 'dashed' : data.style.pattern
+  const pattern = data.style.pattern
   const dash = pattern === 'dashed' ? [10, 8] : pattern === 'dotted' ? [1.5, 7] : undefined
+  const pieces = chosen === 'gap' && gaps.length > 0 ? gapSubpaths(points, gaps, 10) : [points]
+  const local = (path: Point[]) => path.flatMap((point) => [point.x - object.x, point.y - object.y])
   const start = pointAlong(points, 0)
   const end = pointAlong(points, 1)
   const label = data.label && chrome.label ? labelPosition(points, data.label) : null
@@ -99,16 +118,30 @@ export function ConnectionNode({ object, zoom, selected, display, crossing, fade
       y={object.y}
       opacity={faded ? 0.4 : data.style.opacity}
     >
-      <Line
-        points={flat}
-        stroke={selected ? COLORS.accent : data.style.color}
-        strokeWidth={stroke}
-        dash={dash}
-        lineCap="round"
-        lineJoin="round"
-        hitStrokeWidth={Math.max(14, 14 / zoom)}
-        tension={data.path === 'curved' ? 0 : 0}
-      />
+      {pieces.map((piece, index) => (
+        <Line
+          key={index}
+          points={local(piece)}
+          stroke={selected ? COLORS.accent : data.style.color}
+          strokeWidth={stroke}
+          dash={dash}
+          lineCap="round"
+          lineJoin="round"
+          hitStrokeWidth={index === 0 ? Math.max(14, 14 / zoom) : 0}
+          listening={index === 0}
+        />
+      ))}
+      {chosen === 'bridge' &&
+        bridges.map((t) => (
+          <Line
+            key={`bridge-${t}`}
+            points={local(bridgeArc(points, t, Math.max(8, data.style.width * 3)))}
+            stroke={selected ? COLORS.accent : data.style.color}
+            strokeWidth={stroke}
+            lineCap="round"
+            listening={false}
+          />
+        ))}
       {chrome.markers &&
         markerShape(
           data.style.startMarker,
@@ -129,12 +162,30 @@ export function ConnectionNode({ object, zoom, selected, display, crossing, fade
         )}
       {label && data.label && (
         <Text
+          name="label-text"
+          connectionId={object.id}
           x={label.x - object.x}
           y={label.y - object.y}
           text={data.label.text}
           fontSize={13}
           fill={data.style.color}
-          listening={false}
+        />
+      )}
+      {label && data.label && data.labelLink && (
+        <Circle
+          name="relation-handle label-open"
+          connectionId={object.id}
+          x={label.x - object.x + data.label.text.length * 7 + 10}
+          y={label.y - object.y + 6}
+          radius={Math.max(5, 7 / zoom)}
+          fill={COLORS.accent}
+          onMouseDown={(event) => {
+            event.cancelBubble = true
+          }}
+          onClick={(event) => {
+            event.cancelBubble = true
+            if (data.labelLink) void navigateTo(data.labelLink)
+          }}
         />
       )}
     </Group>

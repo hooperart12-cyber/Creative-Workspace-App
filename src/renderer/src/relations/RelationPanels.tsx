@@ -1,20 +1,22 @@
 /** Properties and the board comment list. Neither opens just because something is selected. */
 import { useState } from 'react'
 import { parseComment } from '@shared/comments'
-import { parseConnection, swapMarkers } from '@shared/connections'
+import { connectionPoints, labelPosition, parseConnection, swapMarkers } from '@shared/connections'
 import type { Destination } from '@shared/destinations'
 import { visibleInView } from '@shared/comments'
 import { useCanvasStore } from '../store/canvasStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import {
+  copyConnectionStyle,
   createComment,
+  pasteConnectionStyle,
   replyToComment,
   saveComment,
   setBoardView,
   updateConnection
 } from './relationActions'
 import { navigateTo } from './navigate'
-import { fitViewport, objectBounds } from '../canvas/geometry'
+import { fitViewport, objectBounds, worldToScreen } from '../canvas/geometry'
 
 export function RelationPanels() {
   const showProperties = useCanvasStore((s) => s.showProperties)
@@ -98,6 +100,201 @@ function PropertiesPanel() {
             onClick={() => void updateConnection(object, swapMarkers(connection), 'Swap markers')}
           >
             Swap markers
+          </button>
+          <label className="block">
+            Pattern
+            <select
+              aria-label="Stroke pattern"
+              className="mt-1 w-full rounded border border-line bg-canvas px-2 py-1"
+              value={connection.style.pattern}
+              onChange={(event) =>
+                void updateConnection(
+                  object,
+                  {
+                    ...connection,
+                    style: {
+                      ...connection.style,
+                      pattern: event.target.value as typeof connection.style.pattern
+                    }
+                  },
+                  'Connection pattern'
+                )
+              }
+            >
+              <option value="solid">Solid</option>
+              <option value="dashed">Dashed</option>
+              <option value="dotted">Dotted</option>
+            </select>
+          </label>
+          <label className="block">
+            Opacity
+            <input
+              aria-label="Stroke opacity"
+              className="mt-1 w-full"
+              type="number"
+              min={0}
+              max={100}
+              value={Math.round(connection.style.opacity * 100)}
+              onChange={(event) =>
+                void updateConnection(
+                  object,
+                  {
+                    ...connection,
+                    style: {
+                      ...connection.style,
+                      opacity: Math.min(100, Math.max(0, Number(event.target.value))) / 100
+                    }
+                  },
+                  'Connection opacity'
+                )
+              }
+            />
+          </label>
+          <label className="block">
+            Start marker
+            <select
+              aria-label="Start marker"
+              className="mt-1 w-full rounded border border-line bg-canvas px-2 py-1"
+              value={connection.style.startMarker}
+              onChange={(event) =>
+                void updateConnection(
+                  object,
+                  {
+                    ...connection,
+                    style: {
+                      ...connection.style,
+                      startMarker: event.target.value as typeof connection.style.startMarker
+                    }
+                  },
+                  'Start marker'
+                )
+              }
+            >
+              <option value="none">None</option>
+              <option value="arrow">Arrow</option>
+              <option value="circle">Circle</option>
+              <option value="diamond">Diamond</option>
+              <option value="bar">Bar</option>
+            </select>
+          </label>
+          <label className="block">
+            End marker
+            <select
+              aria-label="End marker"
+              className="mt-1 w-full rounded border border-line bg-canvas px-2 py-1"
+              value={connection.style.endMarker}
+              onChange={(event) =>
+                void updateConnection(
+                  object,
+                  {
+                    ...connection,
+                    style: {
+                      ...connection.style,
+                      endMarker: event.target.value as typeof connection.style.endMarker
+                    }
+                  },
+                  'End marker'
+                )
+              }
+            >
+              <option value="none">None</option>
+              <option value="arrow">Arrow</option>
+              <option value="circle">Circle</option>
+              <option value="diamond">Diamond</option>
+              <option value="bar">Bar</option>
+            </select>
+          </label>
+          <label className="block">
+            Crossing
+            <select
+              aria-label="Crossing override"
+              className="mt-1 w-full rounded border border-line bg-canvas px-2 py-1"
+              value={connection.crossing}
+              onChange={(event) =>
+                void updateConnection(
+                  object,
+                  { ...connection, crossing: event.target.value as typeof connection.crossing },
+                  'Crossing'
+                )
+              }
+            >
+              <option value="inherit">Use board setting</option>
+              <option value="plain">Plain</option>
+              <option value="bridge">Bridge</option>
+              <option value="gap">Gap</option>
+            </select>
+          </label>
+          <label className="block">
+            Label
+            <input
+              key={`${object.id}:${connection.label?.text ?? ''}`}
+              aria-label="Connection label"
+              className="mt-1 w-full rounded border border-line bg-canvas px-2 py-1"
+              defaultValue={connection.label?.text ?? ''}
+              placeholder="No label"
+              onBlur={(event) => {
+                const text = event.target.value
+                if (text === (connection.label?.text ?? '')) return
+                void updateConnection(
+                  object,
+                  {
+                    ...connection,
+                    label: text.trim()
+                      ? {
+                          text,
+                          t: connection.label?.t ?? 0.5,
+                          offset: connection.label?.offset ?? -18
+                        }
+                      : null
+                  },
+                  'Connection label'
+                )
+              }}
+            />
+          </label>
+          <button
+            className="rounded border border-line px-2 py-1"
+            onClick={() => {
+              const clear = (endpoint: typeof connection.start) =>
+                endpoint.attachment
+                  ? {
+                      ...endpoint,
+                      attachment: {
+                        ...endpoint.attachment,
+                        placement: 'auto' as const,
+                        pin: null,
+                        userHeld: false
+                      }
+                    }
+                  : endpoint
+              void updateConnection(
+                object,
+                { ...connection, start: clear(connection.start), end: clear(connection.end) },
+                'Automatic ends'
+              )
+            }}
+          >
+            Reset ends to automatic
+          </button>
+          <button
+            className="rounded border border-line px-2 py-1"
+            onClick={() => copyConnectionStyle(object)}
+          >
+            Copy style
+          </button>
+          <button
+            className="rounded border border-line px-2 py-1"
+            onClick={() => void pasteConnectionStyle([object])}
+          >
+            Paste style
+          </button>
+          <button
+            className="rounded border border-line px-2 py-1"
+            onClick={() =>
+              useCanvasStore.getState().setLinkTarget({ kind: 'label', id: object.id })
+            }
+          >
+            {connection.labelLink ? 'Change label link' : 'Add label link'}
           </button>
           {connection.path === 'elbow' && (
             <label className="flex items-center gap-2">
@@ -351,6 +548,95 @@ function CommentComposer() {
         <button className="rounded bg-ink px-2 py-1 text-surface">Post</button>
       </div>
     </form>
+  )
+}
+
+export function LabelEditor() {
+  const id = useCanvasStore((s) => s.labelEdit)
+  if (!id) return null
+  return <LabelField key={id} id={id} />
+}
+
+function LabelField({ id }: { id: string }) {
+  const object = useWorkspaceStore((s) => s.board?.objects.find((item) => item.id === id))
+  const viewport = useCanvasStore((s) => s.viewport)
+  const data = object ? parseConnection(object.data) : null
+  const [text, setText] = useState(data?.label?.text ?? '')
+  if (!object || !data) return null
+  const at = data.label
+    ? labelPosition(connectionPoints(data), data.label)
+    : { x: data.start.x, y: data.start.y }
+  const screen = worldToScreen(at, viewport)
+  const close = () => useCanvasStore.getState().setLabelEdit(null)
+  const save = () => {
+    const trimmed = text.trim()
+    void updateConnection(
+      object,
+      {
+        ...data,
+        label: trimmed
+          ? { text: trimmed, t: data.label?.t ?? 0.5, offset: data.label?.offset ?? -18 }
+          : null
+      },
+      trimmed ? 'Edit label' : 'Remove label'
+    )
+    close()
+  }
+  return (
+    <form
+      className="absolute z-30"
+      style={{ left: screen.x, top: screen.y }}
+      onSubmit={(event) => {
+        event.preventDefault()
+        save()
+      }}
+    >
+      <input
+        autoFocus
+        aria-label="Edit connection label"
+        className="rounded border border-line bg-surface px-2 py-1 text-sm shadow-sm"
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        onKeyDown={(event) => {
+          event.stopPropagation()
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            close()
+          }
+        }}
+      />
+    </form>
+  )
+}
+
+export function LineChooser() {
+  const choices = useCanvasStore((s) => s.lineChoices)
+  const objects = useWorkspaceStore((s) => s.board?.objects ?? [])
+  if (!choices) return null
+  return (
+    <div
+      role="menu"
+      aria-label="Overlapping connections"
+      className="fixed z-40 min-w-40 rounded-lg border border-line bg-surface p-1 shadow-lg"
+      style={{ left: choices.x, top: choices.y }}
+    >
+      {choices.ids.map((id) => {
+        const data = parseConnection(objects.find((item) => item.id === id)?.data)
+        return (
+          <button
+            key={id}
+            type="button"
+            className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-canvas"
+            onClick={() => {
+              useCanvasStore.getState().setSelection([id])
+              useCanvasStore.getState().setLineChoices(null)
+            }}
+          >
+            {data?.label?.text || 'Connection'}
+          </button>
+        )
+      })}
+    </div>
   )
 }
 

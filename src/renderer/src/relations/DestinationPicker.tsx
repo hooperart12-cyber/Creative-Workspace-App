@@ -1,10 +1,17 @@
 /** Shared chooser for link cards, attached links, and connection labels. */
 import { useEffect, useState } from 'react'
+import { parseConnection } from '@shared/connections'
 import { normalizePublicUrl, type Destination } from '@shared/destinations'
 import type { SearchHit } from '@shared/types'
 import { useCanvasStore } from '../store/canvasStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
-import { createLink } from './relationActions'
+import {
+  applyNoteDestination,
+  attachObjectLink,
+  createLink,
+  updateConnection,
+  updateLinkCard
+} from './relationActions'
 
 function destinationFromHit(hit: SearchHit): Destination | null {
   const boardId = hit.boardId
@@ -50,13 +57,41 @@ export function DestinationPicker() {
 
   const place = (destination: Destination) => {
     const canvas = useCanvasStore.getState()
-    const zoom = canvas.viewport.zoom || 1
-    const at = {
-      x: (canvas.viewSize.width / 2 - canvas.viewport.x) / zoom,
-      y: (canvas.viewSize.height / 2 - canvas.viewport.y) / zoom
-    }
+    const target = canvas.linkTarget
+    const objects = useWorkspaceStore.getState().board?.objects ?? []
     close()
-    void createLink(at, destination, '')
+    if (target?.kind === 'note') {
+      applyNoteDestination(destination)
+      return
+    }
+    if (target?.kind === 'object') {
+      const object = objects.find((item) => item.id === target.id)
+      if (object) void attachObjectLink(object, destination)
+      return
+    }
+    if (target?.kind === 'label') {
+      const object = objects.find((item) => item.id === target.id)
+      const data = object ? parseConnection(object.data) : null
+      if (object && data)
+        void updateConnection(object, { ...data, labelLink: destination }, 'Label link')
+      return
+    }
+    if (target?.kind === 'link') {
+      const object = objects.find((item) => item.id === target.id)
+      if (object) {
+        void updateLinkCard(object, { ...object.data, destination }, 'Change destination')
+      }
+      return
+    }
+    const zoom = canvas.viewport.zoom || 1
+    void createLink(
+      {
+        x: (canvas.viewSize.width / 2 - canvas.viewport.x) / zoom,
+        y: (canvas.viewSize.height / 2 - canvas.viewport.y) / zoom
+      },
+      destination,
+      ''
+    )
   }
 
   return (
