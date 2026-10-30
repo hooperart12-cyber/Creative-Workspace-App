@@ -21,7 +21,7 @@ import {
 } from '@shared/connections'
 import type { CanvasObject, Point } from '@shared/types'
 import { COLORS } from '../canvas/BoardCardNode'
-import { containsPoint, objectBounds } from '../canvas/geometry'
+import { containsPoint, objectBounds, screenToWorld } from '../canvas/geometry'
 import { useCanvasStore } from '../store/canvasStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { updateConnection } from './relationActions'
@@ -104,6 +104,16 @@ function placeEndpoint(
   }
 }
 
+/** Pointer position in board space. The stage scale makes a Konva drag report screen pixels. */
+function clientToWorld(event: MouseEvent): Point {
+  const canvas = document.querySelector('[data-testid="canvas"]')
+  const rect = canvas?.getBoundingClientRect()
+  const screen = rect
+    ? { x: event.clientX - rect.left, y: event.clientY - rect.top }
+    : { x: event.clientX, y: event.clientY }
+  return screenToWorld(screen, useCanvasStore.getState().viewport)
+}
+
 function Handle({
   at,
   zoom,
@@ -120,16 +130,22 @@ function Handle({
       name="relation-handle"
       x={at.x}
       y={at.y}
-      radius={Math.max(4, 6 / zoom)}
+      radius={Math.max(8, 12 / zoom)}
       fill="#fff"
       stroke={COLORS.accent}
       strokeWidth={1.5 / Math.max(zoom, 0.05)}
-      draggable
       onMouseDown={(event) => {
         event.cancelBubble = true
+        event.evt.preventDefault()
+        const move = (evt: MouseEvent) => onDrag(clientToWorld(evt), evt)
+        const up = (evt: MouseEvent) => {
+          window.removeEventListener('mousemove', move)
+          window.removeEventListener('mouseup', up)
+          onDrop(clientToWorld(evt), evt)
+        }
+        window.addEventListener('mousemove', move)
+        window.addEventListener('mouseup', up)
       }}
-      onDragMove={(event) => onDrag({ x: event.target.x(), y: event.target.y() }, event.evt)}
-      onDragEnd={(event) => onDrop({ x: event.target.x(), y: event.target.y() }, event.evt)}
     />
   )
 }
@@ -153,16 +169,21 @@ export function ConnectionHandles({ object, zoom }: { object: CanvasObject; zoom
   const curves = data.path === 'curved' ? curveControls(data.start, data.end, data.curve) : null
   const bend = data.path === 'elbow' ? elbowHandle(data.start, data.end, data.elbow) : null
   const labelAt = data.label ? labelPosition(points, data.label) : null
-  const snapBox = snap ? objects.find((item) => item.id === snap) : null
+  const snapObject = snap ? objects.find((item) => item.id === snap) : null
+  const snapBox = snapObject
+    ? objectBounds(snapObject)
+    : snap
+      ? groupBounds(objects.filter((item) => item.groupId === snap))
+      : null
 
   return (
     <>
       {snapBox && (
         <Rect
-          x={objectBounds(snapBox).x}
-          y={objectBounds(snapBox).y}
-          width={objectBounds(snapBox).width}
-          height={objectBounds(snapBox).height}
+          x={snapBox.x}
+          y={snapBox.y}
+          width={snapBox.width}
+          height={snapBox.height}
           stroke={COLORS.accent}
           strokeWidth={1.5 / Math.max(zoom, 0.05)}
           listening={false}
@@ -174,7 +195,9 @@ export function ConnectionHandles({ object, zoom }: { object: CanvasObject; zoom
         zoom={zoom}
         onDrag={(point, event) => {
           const endpoint = placeEndpoint(point, objects, event.altKey, event.shiftKey)
-          setSnap(endpoint.attachment?.kind === 'object' ? endpoint.attachment.id : null)
+          setSnap(
+            endpoint.attachment && !endpoint.attachment.missing ? endpoint.attachment.id : null
+          )
           show(resolveConnection({ ...data, start: endpoint }, worldOf(objects)))
         }}
         onDrop={(point, event) => {
@@ -187,7 +210,9 @@ export function ConnectionHandles({ object, zoom }: { object: CanvasObject; zoom
         zoom={zoom}
         onDrag={(point, event) => {
           const endpoint = placeEndpoint(point, objects, event.altKey, event.shiftKey)
-          setSnap(endpoint.attachment?.kind === 'object' ? endpoint.attachment.id : null)
+          setSnap(
+            endpoint.attachment && !endpoint.attachment.missing ? endpoint.attachment.id : null
+          )
           show(resolveConnection({ ...data, end: endpoint }, worldOf(objects)))
         }}
         onDrop={(point, event) => {

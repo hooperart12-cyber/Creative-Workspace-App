@@ -342,7 +342,7 @@ export function CanvasView() {
         : layer.find((node: Konva.Node) => {
             if (!node.hasName('object')) return false
             const o = board?.objects.find((x) => x.id === node.id())
-            return !!o && selection.has(o.id) && !o.locked
+            return !!o && selection.has(o.id) && !o.locked && o.type !== 'connection'
           })
     tr.nodes(targets)
     tr.getLayer()?.batchDraw()
@@ -752,6 +752,7 @@ export function CanvasView() {
 
   const onDoubleClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
     if (lastPressDragged.current || e.evt.button !== 0) return
+    if (e.target.hasName('relation-handle')) return
     const id = objectIdOf(e.target)
     const object = board.objects.find((o) => o.id === id)
     if (object?.type === 'connection' && !object.locked) {
