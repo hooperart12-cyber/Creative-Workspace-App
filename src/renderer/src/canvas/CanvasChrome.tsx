@@ -8,6 +8,7 @@ import { createNote } from '../notes/noteActions'
 import { useNoteStore } from '../notes/noteStore'
 import type { TagVisibility } from '@shared/types'
 import { reportError } from '../store/projectStore'
+import { openIntegrity } from '../relations/relationActions'
 
 const toolButton =
   'flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-canvas hover:text-ink disabled:opacity-30 aria-pressed:bg-accent/10 aria-pressed:text-accent'
@@ -24,6 +25,7 @@ export function CanvasToolbar() {
   const tool = useCanvasStore((s) => s.tool)
   const showProperties = useCanvasStore((s) => s.showProperties)
   const showComments = useCanvasStore((s) => s.showComments)
+  const showIntegrity = useCanvasStore((s) => s.showIntegrity)
 
   return (
     <div
@@ -124,6 +126,17 @@ export function CanvasToolbar() {
         aria-label="Comments"
       >
         K
+      </button>
+      <button
+        className={toolButton}
+        aria-pressed={showIntegrity}
+        onClick={() =>
+          showIntegrity ? useCanvasStore.getState().setShowIntegrity(false) : void openIntegrity()
+        }
+        title="Project integrity"
+        aria-label="Project integrity"
+      >
+        I
       </button>
       <Divider />
       <button

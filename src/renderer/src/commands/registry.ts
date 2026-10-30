@@ -4,6 +4,7 @@ import * as actions from '../canvas/actions'
 import { createNote, editSelectedNote } from '../notes/noteActions'
 import { isEditingNote } from '../notes/noteStore'
 import { openTagManager } from '../tags/TagManager'
+import { openIntegrity } from '../relations/relationActions'
 
 export interface AppCommand {
   id: string
@@ -131,6 +132,13 @@ export function commands(): AppCommand[] {
       group: 'Canvas',
       when: () => workspace.surface === 'canvas',
       run: () => useCanvasStore.getState().setShowProperties(true)
+    },
+    {
+      id: 'integrity',
+      title: 'Project integrity',
+      group: 'Canvas',
+      when: () => workspace.surface === 'canvas',
+      run: () => void openIntegrity()
     },
     {
       id: 'note',

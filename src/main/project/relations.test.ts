@@ -67,6 +67,33 @@ describe('relations', () => {
     expect(back?.end.attachment?.id).toBe(note.id)
   })
 
+  it('keeps a detached endpoint when asked and can put the reference back', () => {
+    const board = project.mainBoardId
+    const note = project.notes.create({ boardId: board, at: { x: 40, y: 40 } })
+    const data = defaultConnection({ x: 0, y: 0 }, { x: 80, y: 80 })
+    data.end.attachment = {
+      kind: 'object',
+      id: note.id,
+      placement: 'auto',
+      pin: null,
+      missing: false,
+      userHeld: false
+    }
+    const created = project.relations.createConnection(board, data.start, data.end, data)
+    project.objects.delete([note.id])
+    expect(project.relations.integrity().map((issue) => issue.id)).toContain(created.id)
+    const kept = project.relations.repair(created.id, 'keep')
+    expect(project.relations.integrity()).toEqual([])
+    const held = parseConnection(
+      project.boards.get(board).objects.find((object) => object.id === created.id)?.data
+    )
+    expect(held?.end.attachment?.missing).toBe(true)
+    expect(held?.end.attachment?.userHeld).toBe(true)
+    expect(project.boards.get(board).objects.some((object) => object.id === created.id)).toBe(true)
+    project.relations.restore(created.id, kept.revision, kept.before)
+    expect(project.relations.integrity().map((issue) => issue.id)).toContain(created.id)
+  })
+
   it('copies a comment thread onto the new object and keeps an outside link', () => {
     const board = project.mainBoardId
     const note = project.notes.create({ boardId: board, at: { x: 10, y: 10 } })

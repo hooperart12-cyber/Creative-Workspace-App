@@ -336,7 +336,18 @@ export interface IpcRequests {
     ]
     result: void
   }
-  'relations:integrity': { args: []; result: { kind: string; id: string; detail: string }[] }
+  'relations:integrity': {
+    args: []
+    result: { kind: string; id: string; boardId: string; detail: string }[]
+  }
+  'relations:repair': {
+    args: [id: string, action: 'keep' | 'reattach' | 'clear']
+    result: { type: string; revision: number; before: Record<string, unknown> }
+  }
+  'relations:restore': {
+    args: [id: string, baseRevision: number, data: Record<string, unknown>]
+    result: { revision: number }
+  }
   'relations:fetchPreview': {
     args: [id: string, baseRevision: number]
     result: { revision: number }
@@ -558,6 +569,8 @@ export const IPC_CHANNELS = [
   'relations:deleteReply',
   'relations:setBoardView',
   'relations:integrity',
+  'relations:repair',
+  'relations:restore',
   'relations:fetchPreview',
   'window:flushed',
   'backup:status',

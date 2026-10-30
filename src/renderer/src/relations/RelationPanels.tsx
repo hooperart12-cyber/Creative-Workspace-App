@@ -15,6 +15,7 @@ import {
   setBoardView,
   updateConnection
 } from './relationActions'
+import { IntegrityPanel } from './IntegrityPanel'
 import { navigateTo } from './navigate'
 import { fitViewport, objectBounds, worldToScreen } from '../canvas/geometry'
 
@@ -25,6 +26,7 @@ export function RelationPanels() {
     <>
       {showProperties && <PropertiesPanel />}
       {showComments && <CommentsPanel />}
+      <IntegrityPanel />
       <CommentComposer />
     </>
   )

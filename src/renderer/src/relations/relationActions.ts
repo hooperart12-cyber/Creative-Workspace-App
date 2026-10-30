@@ -11,7 +11,7 @@ import {
 } from '@shared/connections'
 import type { Destination } from '@shared/destinations'
 import type { CanvasObject, Point } from '@shared/types'
-import { record, run } from '../canvas/actions'
+import { fitSelection, record, run } from '../canvas/actions'
 import { useCanvasStore } from '../store/canvasStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 
@@ -380,4 +380,49 @@ export function setNoteLinkHandler(handler: ((destination: Destination) => void)
 
 export function applyNoteDestination(destination: Destination): void {
   noteLinkHandler?.(destination)
+}
+
+export async function openIntegrity(): Promise<void> {
+  const issues = await api().invoke('relations:integrity')
+  const canvas = useCanvasStore.getState()
+  canvas.setIntegrityIssues(issues)
+  canvas.setShowIntegrity(true)
+}
+
+export async function locateIssue(boardId: string, id: string): Promise<void> {
+  if (useWorkspaceStore.getState().board?.id !== boardId) {
+    await useWorkspaceStore.getState().openBoard(boardId)
+  }
+  useCanvasStore.getState().setSelection([id])
+  fitSelection()
+}
+
+export function repairIssue(id: string, action: 'keep' | 'reattach' | 'clear'): Promise<void> {
+  const label =
+    action === 'keep'
+      ? 'Keep reference detached'
+      : action === 'clear'
+        ? 'Remove reference'
+        : 'Reattach reference'
+  return run(async () => {
+    const saved = await api().invoke('relations:repair', id, action)
+    record({
+      label,
+      undo: async () => {
+        const current = useWorkspaceStore.getState().board?.objects.find((item) => item.id === id)
+        await api().invoke(
+          'relations:restore',
+          id,
+          current?.revision ?? saved.revision,
+          saved.before
+        )
+      },
+      redo: async () => {
+        const current = useWorkspaceStore.getState().board?.objects.find((item) => item.id === id)
+        if (current) await api().invoke('relations:repair', id, action)
+      }
+    })
+    const issues = await api().invoke('relations:integrity')
+    useCanvasStore.getState().setIntegrityIssues(issues)
+  })
 }

@@ -279,8 +279,21 @@ export interface StackContentSnapshot {
   geometry: { x: number; y: number; width: number; height: number }
 }
 
+/** How a comment follows an image into or out of a stack. Undo stores these and reverses them. */
+export type CommentShift =
+  | { op: 'slide-to-object'; stackId: string; slideId: string; objectId: string }
+  | { op: 'object-to-slide'; stackId: string; slideId: string; objectId: string }
+  | { op: 'detach-slide'; slideId: string }
+  | { op: 'detach-stack'; stackId: string }
+
 export type StackUndo =
-  | { op: 'create'; stackId: string; revision: number; removedIds: string[] }
+  | {
+      op: 'create'
+      stackId: string
+      revision: number
+      removedIds: string[]
+      commentShifts?: CommentShift[]
+    }
   | {
       op: 'content'
       stackId: string
@@ -290,6 +303,7 @@ export type StackUndo =
       createdIds: string[]
       applyGeometry: boolean
       revivedIds?: string[]
+      commentShifts?: CommentShift[]
     }
   | { op: 'display'; stackId: string; shown: string | null; previous: string | null }
 

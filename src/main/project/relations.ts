@@ -16,7 +16,7 @@ import {
 import { parseDestination, type Destination } from '@shared/destinations'
 import type { CanvasObject } from '@shared/types'
 import type { ProjectDb } from '../db/client'
-import { boardObjects, boards, commentMessages, linkPreviews } from '../db/schema'
+import { boardObjects, boards, commentMessages, linkPreviews, stackSlides } from '../db/schema'
 import type { BoardRepository } from './boards'
 
 export const RELATION_CONFLICT = 'Another window changed this item. The change was not saved.'
@@ -327,7 +327,11 @@ export class RelationRepository {
     })
   }
 
-  integrity(): { kind: string; id: string; detail: string }[] {
+  /**
+   * Lists broken references. A reference the user chose to keep is omitted.
+   * Repair never deletes the connection, comment, or link.
+   */
+  integrity(): { kind: string; id: string; boardId: string; detail: string }[] {
     const rows = this.db
       .select()
       .from(boardObjects)
@@ -346,29 +350,82 @@ export class RelationRepository {
         .all()
         .map((row) => row.id)
     )
-    const issues: { kind: string; id: string; detail: string }[] = []
+    const issues: { kind: string; id: string; boardId: string; detail: string }[] = []
     for (const row of rows) {
       const data = row.data ?? {}
       if (row.type === 'connection') {
         const connection = parseConnection(data)
         for (const end of [connection?.start, connection?.end]) {
-          if (end?.attachment?.missing)
-            issues.push({ kind: 'connection', id: row.id, detail: 'An endpoint is detached.' })
+          if (end?.attachment?.missing && !end.attachment.userHeld)
+            issues.push({
+              kind: 'connection',
+              id: row.id,
+              boardId: row.boardId,
+              detail: 'An endpoint is detached.'
+            })
         }
       }
       if (row.type === 'comment') {
         const comment = parseComment(data)
         if (comment?.anchor.detached === 'missing')
-          issues.push({ kind: 'comment', id: row.id, detail: 'The commented item is missing.' })
+          issues.push({
+            kind: 'comment',
+            id: row.id,
+            boardId: row.boardId,
+            detail: 'The commented item is missing.'
+          })
       }
-      if (row.type === 'link') {
+      if (row.type === 'link' && data.referenceHeld !== true) {
         const destination = parseDestination(data.destination)
         const objectId = destination && 'objectId' in destination ? destination.objectId : null
         if (objectId && !ids.has(objectId))
-          issues.push({ kind: 'link', id: row.id, detail: 'Destination missing.' })
+          issues.push({
+            kind: 'link',
+            id: row.id,
+            boardId: row.boardId,
+            detail: 'Destination missing.'
+          })
       }
     }
     return issues
+  }
+
+  repair(
+    id: string,
+    action: 'keep' | 'reattach' | 'clear'
+  ): { type: string; revision: number; before: Record<string, unknown> } {
+    const row = this.requireRow(id)
+    if (row.type !== 'connection' && row.type !== 'comment' && row.type !== 'link') {
+      throw new Error('That item has no reference to repair.')
+    }
+    const before = { ...(row.data ?? {}) }
+    const present = this.db
+      .select({ id: boardObjects.id, groupId: boardObjects.groupId })
+      .from(boardObjects)
+      .where(isNull(boardObjects.deletedAt))
+      .all()
+    const live = new Set(present.map((item) => item.id))
+    const groups = new Set(
+      present.map((item) => item.groupId).filter((groupId): groupId is string => !!groupId)
+    )
+    const slides = new Set(
+      this.db
+        .select({ id: stackSlides.id })
+        .from(stackSlides)
+        .all()
+        .map((slide) => slide.id)
+    )
+    const next = repairedData(before, row.type, action, live, slides, groups)
+    const saved = this.writeRow(id, row.revision, next)
+    return { type: row.type, revision: saved.revision, before }
+  }
+
+  restore(id: string, baseRevision: number, data: Record<string, unknown>): { revision: number } {
+    const row = this.requireRow(id)
+    if (row.type !== 'connection' && row.type !== 'comment' && row.type !== 'link') {
+      throw new Error('That item has no reference to repair.')
+    }
+    return this.writeRow(id, baseRevision, data)
   }
 
   private saveData(
@@ -412,6 +469,82 @@ export class RelationRepository {
     if (!row) throw new Error('Object not found. It may have been deleted.')
     return row
   }
+}
+
+function repairedData(
+  raw: Record<string, unknown>,
+  type: string,
+  action: 'keep' | 'reattach' | 'clear',
+  liveObjects: Set<string>,
+  liveSlides: Set<string>,
+  liveGroups: Set<string>
+): Record<string, unknown> {
+  if (type === 'connection') {
+    const connection = parseConnection(raw)
+    if (!connection) throw new Error('That connection could not be read.')
+    let changed = false
+    for (const key of ['start', 'end'] as const) {
+      const attachment = connection[key].attachment
+      if (!attachment?.missing || attachment.userHeld) continue
+      changed = true
+      if (action === 'keep') {
+        connection[key] = { ...connection[key], attachment: { ...attachment, userHeld: true } }
+      } else if (action === 'clear') {
+        connection[key] = { ...connection[key], attachment: null }
+      } else {
+        const present =
+          attachment.kind === 'group'
+            ? liveGroups.has(attachment.id)
+            : liveObjects.has(attachment.id)
+        if (!present) throw new Error('That item is still missing.')
+        connection[key] = {
+          ...connection[key],
+          attachment: { ...attachment, missing: false, userHeld: false }
+        }
+      }
+    }
+    if (!changed) throw new Error('Nothing there needs repair.')
+    return { ...connection }
+  }
+  if (type === 'comment') {
+    const comment = parseComment(raw)
+    if (!comment || comment.anchor.detached !== 'missing')
+      throw new Error('Nothing there needs repair.')
+    if (action === 'keep') return { ...comment, anchor: { ...comment.anchor, detached: 'user' } }
+    if (action === 'clear') {
+      return {
+        ...comment,
+        anchor: {
+          ...comment.anchor,
+          scope: 'free',
+          targetId: null,
+          slideId: null,
+          detached: 'user'
+        }
+      }
+    }
+    const targetOk = !comment.anchor.targetId || liveObjects.has(comment.anchor.targetId)
+    const slideOk = !comment.anchor.slideId || liveSlides.has(comment.anchor.slideId)
+    if (!targetOk || !slideOk) throw new Error('That item is still missing.')
+    return { ...comment, anchor: { ...comment.anchor, detached: 'none' } }
+  }
+  const destination = parseDestination(raw.destination)
+  const objectId = destination && 'objectId' in destination ? destination.objectId : null
+  if (!objectId || liveObjects.has(objectId) || raw.referenceHeld === true) {
+    if (action !== 'reattach' || raw.referenceHeld !== true)
+      throw new Error('Nothing there needs repair.')
+  }
+  if (action === 'keep') return { ...raw, referenceHeld: true }
+  if (action === 'clear') {
+    const next = { ...raw }
+    delete next.destination
+    delete next.referenceHeld
+    return next
+  }
+  if (objectId && !liveObjects.has(objectId)) throw new Error('That item is still missing.')
+  const next = { ...raw }
+  delete next.referenceHeld
+  return next
 }
 
 function cleanBody(body: string): string {

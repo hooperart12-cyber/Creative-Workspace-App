@@ -10,6 +10,7 @@ import {
 } from '@shared/stacks'
 import type {
   BoardDetail,
+  CommentShift,
   Point,
   StackContentSnapshot,
   StackResult,
@@ -22,6 +23,7 @@ import type { ProjectDb } from '../db/client'
 import { assets, boardObjects, stackSlides, taggings, tags } from '../db/schema'
 import { toAssetInfo } from './assets'
 import { deletionTime, type BoardRepository } from './boards'
+import { invertCommentShifts, shiftComments } from './commentTransfer'
 import { tagNameParts } from './tagNames'
 
 export const STACK_UNDO_REFUSED =
@@ -237,19 +239,26 @@ export class StackRepository {
     const slides = this.slideRows(stackId).filter((slide) => slide.id !== slideId)
     if (slides.length === before.slides.length) throw new Error('That image is not in the stack.')
     const settings = withoutSlide(stackSettings(row.data), slideId, slides[0]?.id ?? null)
-    this.persist({
-      row,
-      expected: expectedRevision,
-      settings,
-      seeds: slides.map(rowToSeed),
-      assignNewIds: false,
-      removeIds: [],
-      createdIds: [],
-      revivedIds: [],
-      geometry: this.geometryAfter(row, settings, slides),
-      before
+    return this.db.transaction(() => {
+      const saved = this.persist({
+        row,
+        expected: expectedRevision,
+        settings,
+        seeds: slides.map(rowToSeed),
+        assignNewIds: false,
+        removeIds: [],
+        createdIds: [],
+        revivedIds: [],
+        geometry: this.geometryAfter(row, settings, slides),
+        before
+      })
+      const extra: CommentShift[] = [{ op: 'detach-slide', slideId }]
+      shiftComments(this.db, extra)
+      return attachCommentShifts(this.resultFrom(stackId, before, [], [], true), [
+        ...shiftsOf(saved),
+        ...extra
+      ])
     })
-    return this.resultFrom(stackId, before, [], [], true)
   }
 
   extract(stackId: string, slideId: string, expectedRevision: number): StackResult {
@@ -285,7 +294,7 @@ export class StackRepository {
       this.copyTags('slide', slide.id, 'object', cardId)
       const remaining = this.slideRows(stackId).filter((item) => item.id !== slideId)
       const settings = withoutSlide(stackSettings(row.data), slideId, remaining[0]?.id ?? null)
-      this.persist({
+      const saved = this.persist({
         row,
         expected: expectedRevision,
         settings,
@@ -297,7 +306,14 @@ export class StackRepository {
         geometry: this.geometryAfter(row, settings, remaining),
         before
       })
-      return this.resultFrom(stackId, before, [], [cardId], true)
+      const extra: CommentShift[] = [
+        { op: 'slide-to-object', stackId: row.id, slideId, objectId: cardId }
+      ]
+      shiftComments(this.db, extra)
+      return attachCommentShifts(this.resultFrom(stackId, before, [], [cardId], true), [
+        ...shiftsOf(saved),
+        ...extra
+      ])
     })
   }
 
@@ -416,8 +432,10 @@ export class StackRepository {
     const settings = stackSettings(row.data)
     if (mode === 'restore') {
       if (!settings.layoutCaptured) throw new Error('This stack has no saved layout to restore.')
+      const shifts = commentShiftsForRestore(stackId, slides)
       this.db.transaction(() => {
         this.reviveLayouts(slides)
+        shiftComments(this.db, shifts)
         this.markDeleted(row, expectedRevision)
       })
       return {
@@ -433,15 +451,27 @@ export class StackRepository {
           removedIds: [],
           createdIds: [],
           applyGeometry: false,
-          revivedIds: slides.map((slide) => slide.sourceObjectId).filter((id): id is string => !!id)
+          revivedIds: slides
+            .map((slide) => slide.sourceObjectId)
+            .filter((id): id is string => !!id),
+          ...(shifts.length ? { commentShifts: shifts } : {})
         }
       }
     }
-    const createdIds = this.db.transaction(() => {
-      const ids = slides.map((slide) => this.extractCard(row, slide, slides.indexOf(slide)))
+    const separated = this.db.transaction(() => {
+      const ids: string[] = []
+      const shifts: CommentShift[] = []
+      slides.forEach((slide, index) => {
+        const cardId = this.extractCard(row, slide, index)
+        ids.push(cardId)
+        shifts.push({ op: 'slide-to-object', stackId, slideId: slide.id, objectId: cardId })
+      })
+      shifts.push({ op: 'detach-stack', stackId })
+      shiftComments(this.db, shifts)
       this.markDeleted(row, expectedRevision)
-      return ids
+      return { ids, shifts }
     })
+    const createdIds = separated.ids
     return {
       stackId,
       revision: expectedRevision + 1,
@@ -455,7 +485,8 @@ export class StackRepository {
         removedIds: [],
         createdIds,
         applyGeometry: false,
-        revivedIds: []
+        revivedIds: [],
+        commentShifts: separated.shifts
       }
     }
   }
@@ -571,6 +602,8 @@ export class StackRepository {
         .where(eq(boardObjects.id, packet.stackId))
         .get()
       if (!row || row.revision !== packet.revision) throw new Error(STACK_UNDO_REFUSED)
+      if (packet.commentShifts?.length)
+        shiftComments(this.db, invertCommentShifts(packet.commentShifts))
       this.db.delete(boardObjects).where(eq(boardObjects.id, packet.stackId)).run()
       this.restoreObjects(packet.removedIds)
     })
@@ -584,6 +617,8 @@ export class StackRepository {
         .where(eq(boardObjects.id, packet.stackId))
         .get()
       if (!row || row.revision !== packet.revision) throw new Error(STACK_UNDO_REFUSED)
+      if (packet.commentShifts?.length)
+        shiftComments(this.db, invertCommentShifts(packet.commentShifts))
       const live = stackSettings(row.data)
       const restored = packet.before.settings
       const displayedSlideId =
@@ -625,6 +660,7 @@ export class StackRepository {
   }): StackResult {
     const id = randomUUID()
     const slideIds = input.slides.map(() => randomUUID())
+    const shifts = commentShiftsForSlides(id, input.slides, slideIds, input.removeIds)
     const settings: StackSettings = {
       ...blankSettings(),
       coverSlideId: slideIds[0] ?? null,
@@ -660,13 +696,20 @@ export class StackRepository {
           .where(inArray(boardObjects.id, input.removeIds))
           .run()
       }
+      shiftComments(this.db, shifts)
     })
     return {
       stackId: id,
       revision: 1,
       createdIds: [],
       removedIds: input.removeIds,
-      undo: { op: 'create', stackId: id, revision: 1, removedIds: input.removeIds }
+      undo: {
+        op: 'create',
+        stackId: id,
+        revision: 1,
+        removedIds: input.removeIds,
+        ...(shifts.length ? { commentShifts: shifts } : {})
+      }
     }
   }
 
@@ -685,6 +728,7 @@ export class StackRepository {
     const slideIds = input.seeds.map((seed) =>
       input.assignNewIds && !seed.existingId ? randomUUID() : seed.existingId!
     )
+    const shifts = commentShiftsForSlides(input.row.id, input.seeds, slideIds, input.removeIds)
     const settings = { ...input.settings }
     if (!settings.coverSlideId) settings.coverSlideId = slideIds[0] ?? null
     if (!settings.displayedSlideId) settings.displayedSlideId = settings.coverSlideId
@@ -723,6 +767,7 @@ export class StackRepository {
           .where(inArray(boardObjects.id, input.removeIds))
           .run()
       }
+      shiftComments(this.db, shifts)
     })
     const geometryChanged = !!input.geometry
     return {
@@ -738,7 +783,8 @@ export class StackRepository {
         removedIds: input.removeIds,
         createdIds: input.createdIds,
         applyGeometry: geometryChanged,
-        revivedIds: input.revivedIds
+        revivedIds: input.revivedIds,
+        ...(shifts.length ? { commentShifts: shifts } : {})
       }
     }
   }
@@ -1300,6 +1346,52 @@ function slideValues(
     sourceObjectId: layout?.id ?? saved?.sourceObjectId ?? null,
     updatedAt: now
   }
+}
+
+function commentShiftsForSlides(
+  stackId: string,
+  seeds: SlideSeed[],
+  slideIds: string[],
+  removeIds: string[]
+): CommentShift[] {
+  const removed = new Set(removeIds)
+  const shifts: CommentShift[] = []
+  seeds.forEach((seed, index) => {
+    if (seed.existingId) return
+    const objectId = seed.tagsFrom?.type === 'object' ? seed.tagsFrom.id : seed.source?.id
+    if (!objectId || !removed.has(objectId)) return
+    shifts.push({ op: 'object-to-slide', stackId, slideId: slideIds[index], objectId })
+  })
+  return shifts
+}
+
+function commentShiftsForRestore(
+  stackId: string,
+  slides: { id: string; sourceObjectId: string | null }[]
+): CommentShift[] {
+  const shifts: CommentShift[] = slides.flatMap((slide) =>
+    slide.sourceObjectId
+      ? [
+          {
+            op: 'slide-to-object' as const,
+            stackId,
+            slideId: slide.id,
+            objectId: slide.sourceObjectId
+          }
+        ]
+      : []
+  )
+  shifts.push({ op: 'detach-stack', stackId })
+  return shifts
+}
+
+function shiftsOf(result: StackResult): CommentShift[] {
+  return result.undo.op === 'display' ? [] : (result.undo.commentShifts ?? [])
+}
+
+function attachCommentShifts(result: StackResult, shifts: CommentShift[]): StackResult {
+  if (shifts.length === 0 || result.undo.op === 'display') return result
+  return { ...result, undo: { ...result.undo, commentShifts: shifts } }
 }
 
 export function copyOwnedTags(

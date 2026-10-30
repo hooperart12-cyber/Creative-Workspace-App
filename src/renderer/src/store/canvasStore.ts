@@ -75,6 +75,8 @@ interface CanvasState {
   pdfPage: number
   showComments: boolean
   showProperties: boolean
+  showIntegrity: boolean
+  integrityIssues: { kind: string; id: string; boardId: string; detail: string }[]
   /** Rubber-band for a connection that has not been released yet. */
   connectPreview: { start: Point; end: Point; endTargetId: string | null } | null
   /** Escape during a connection drag. The mouseup must not create the line. */
@@ -119,6 +121,8 @@ interface CanvasState {
   setPdfReader: (id: string | null, page?: number) => void
   setShowComments: (open: boolean) => void
   setShowProperties: (open: boolean) => void
+  setShowIntegrity: (open: boolean) => void
+  setIntegrityIssues: (issues: CanvasState['integrityIssues']) => void
   setConnectPreview: (preview: CanvasState['connectPreview']) => void
   setDiscardConnect: (discard: boolean) => void
   setDestinationPicker: (open: boolean) => void
@@ -177,6 +181,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   pdfPage: 1,
   showComments: false,
   showProperties: false,
+  showIntegrity: false,
+  integrityIssues: [],
   connectPreview: null,
   discardConnect: false,
   destinationPicker: false,
@@ -225,6 +231,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   setPdfReader: (pdfReaderId, page = 1) => set({ pdfReaderId, pdfPage: page, pdfAsset: null }),
   setShowComments: (showComments) => set({ showComments }),
   setShowProperties: (showProperties) => set({ showProperties }),
+  setShowIntegrity: (showIntegrity) => set({ showIntegrity }),
+  setIntegrityIssues: (integrityIssues) => set({ integrityIssues }),
   setConnectPreview: (connectPreview) => set({ connectPreview }),
   setDiscardConnect: (discardConnect) => set({ discardConnect }),
   setDestinationPicker: (destinationPicker) =>

@@ -117,7 +117,7 @@ RULES:
 - Branch `feat/m8-connections-links-comments`, taken from the M7 tip. Do not merge [PR #11](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/11) or [PR #12](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/12).
 - Migration `0007_connections_links_comments`. Connections, link cards, and comments are board objects. Geometry, detach/reattach, and copy remapping are in `src/shared/connections.ts`, `src/shared/destinations.ts`, `src/shared/comments.ts`, and `src/main/project/relationRepair.ts`.
 - The canvas can draw a connection (L, or the dot on a selected card), drag its ends (Alt pins, Shift attaches to a group), bend a curve or elbow, label it, and copy its stroke style. Comments (C), the Comments panel, Choose destination (Ctrl+Shift+K), pasted public URLs, attached object links, and note links to a project destination work.
-- Still open: slide extract and move do not transfer comments yet. There is no Project Integrity panel, no visual or single-board package export, and no Playwright coverage. Do not describe those as finished.
+- Still open: no visual or single-board package export. Slide comments now follow combine, extract, remove, and separate, and Project integrity can repair a broken reference without deleting it. Playwright covers the connection end, bend, label, and overlap checks only. Do not describe export as finished.
 
 **Next steps**
 1. Finish the M8 gaps listed above, then run typecheck, lint, unit tests, build, and Playwright.

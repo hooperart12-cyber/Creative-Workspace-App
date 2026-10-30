@@ -117,6 +117,8 @@ const SAVE_CHANNELS = new Set<string>([
   'relations:editReply',
   'relations:deleteReply',
   'relations:setBoardView',
+  'relations:repair',
+  'relations:restore',
   'relations:fetchPreview'
 ])
 
@@ -894,6 +896,12 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
     broadcastContent(project)
   })
   handle('relations:integrity', (event) => requireProject(event).relations.integrity())
+  handle('relations:repair', (event, id, action) =>
+    requireProject(event).relations.repair(id, action)
+  )
+  handle('relations:restore', (event, id, baseRevision, data) =>
+    requireProject(event).relations.restore(id, baseRevision, data)
+  )
   handle('relations:fetchPreview', async (event, id, baseRevision) => {
     const project = requireProject(event)
     const { fetchLinkPreview } = await import('./project/linkPreview')
