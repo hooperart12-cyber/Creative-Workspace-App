@@ -208,7 +208,6 @@ async function moveCursor(keys: string[], page: Page = t.page) {
   for (const key of keys) await page.keyboard.press(key)
   await synced(page)
 }
-const times = (n: number, key: string) => Array<string>(n).fill(key)
 
 /**
  * Moves the cursor to the end of the note. Ctrl+End does this on Windows and Linux, but macOS
