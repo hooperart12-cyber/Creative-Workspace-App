@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { and, asc, count, eq, inArray, isNull, max, or } from 'drizzle-orm'
 import { rotatedBounds } from '@shared/geometry'
+import { layoutConnections } from '@shared/layoutConnections'
 import type { BoardDetail, BoardListItem, CanvasObject, Point, Viewport } from '@shared/types'
 import type { ProjectDb } from '../db/client'
 import { assets, boardObjects, boards } from '../db/schema'
 import { attachPreviews, toAssetInfo } from './assets'
+import { remapCopiedData } from './relationRepair'
 
 export const DEFAULT_BOARD_TITLE = 'Untitled board'
 
@@ -100,8 +102,13 @@ export class BoardRepository {
       const object = toCanvasObject(objectRow)
       if (object.type === 'board') {
         const linked = object.linkedBoardId ? this.find(object.linkedBoardId) : undefined
-        if (!linked) continue // card whose board is gone; never shown
-        object.board = { title: linked.title, childBoardCount: this.childCount(linked.id) }
+        if (linked) {
+          object.board = { title: linked.title, childBoardCount: this.childCount(linked.id) }
+        } else if (object.data.unavailableBoardId) {
+          object.board = { title: 'Missing board', childBoardCount: 0 }
+        } else {
+          continue
+        }
       }
       if (object.assetId) {
         const asset = assetsById.get(object.assetId)
@@ -117,12 +124,24 @@ export class BoardRepository {
       parentBoardId: board.parentBoardId,
       isMain: board.id === this.mainBoardId,
       breadcrumb,
-      objects,
+      objects: layoutConnections(objects),
       viewport: { x: row.viewportX, y: row.viewportY, zoom: row.viewportZoom },
       tagVisibility:
         row.tagVisibility === 'hidden' || row.tagVisibility === 'always'
           ? row.tagVisibility
-          : 'hover'
+          : 'hover',
+      connectionDisplay:
+        row.connectionDisplay === 'full' ||
+        row.connectionDisplay === 'minimal' ||
+        row.connectionDisplay === 'hidden'
+          ? row.connectionDisplay
+          : 'adaptive',
+      crossingStyle:
+        row.crossingStyle === 'bridge' || row.crossingStyle === 'gap' ? row.crossingStyle : 'plain',
+      commentView:
+        row.commentView === 'all' || row.commentView === 'resolved' || row.commentView === 'hidden'
+          ? row.commentView
+          : 'open'
     }
   }
 
@@ -305,12 +324,15 @@ export class BoardRepository {
         .where(and(inArray(boardObjects.boardId, sourceIds), isNull(boardObjects.deletedAt)))
         .all()
       const groupIds = new Map<string, string>()
+      const objectIds = new Map<string, string>()
       for (const object of sourceObjects) {
         if (object.linkedBoardId && !newIds.has(object.linkedBoardId)) continue
+        const copyId = randomUUID()
+        objectIds.set(object.id, copyId)
         tx.insert(boardObjects)
           .values({
             ...object,
-            id: randomUUID(),
+            id: copyId,
             boardId: newIds.get(object.boardId)!,
             linkedBoardId: object.linkedBoardId ? newIds.get(object.linkedBoardId)! : null,
             groupId: object.groupId ? remap(groupIds, object.groupId) : null,
@@ -319,6 +341,8 @@ export class BoardRepository {
           })
           .run()
       }
+      for (const [boardId, copyId] of newIds) objectIds.set(boardId, copyId)
+      remapCopiedData(tx, objectIds, false)
 
       // The card for the copy on the target board, same size as the original card.
       const original = tx

@@ -99,9 +99,10 @@ export class SearchRepository {
         FROM library_entries e JOIN assets a ON a.id = e.asset_id
         WHERE e.deleted_at IS NULL
         UNION ALL
-        SELECT CASE
+        SELECT           CASE
             WHEN o.type = 'text' THEN 'note'
             WHEN o.type = 'stack' THEN 'stack'
+            WHEN o.type IN ('connection', 'link', 'comment') THEN o.type
             ELSE 'object'
           END,
           o.id, o.asset_id, NULL,
@@ -111,6 +112,9 @@ export class SearchRepository {
               'Note')
             WHEN o.type = 'stack' THEN COALESCE(NULLIF(json_extract(o.data, '$.name'), ''), 'Stack')
             WHEN o.type = 'board' THEN COALESCE(lb.title, 'Board card')
+            WHEN o.type = 'connection' THEN COALESCE(NULLIF(json_extract(o.data, '$.label.text'), ''), 'Connection')
+            WHEN o.type = 'link' THEN COALESCE(NULLIF(json_extract(o.data, '$.title'), ''), 'Link')
+            WHEN o.type = 'comment' THEN 'Comment'
             ELSE COALESCE(a.original_name, 'File')
           END,
           a.mime, NULL, o.id, o.board_id, NULL, 'object', o.id,
@@ -120,7 +124,7 @@ export class SearchRepository {
         JOIN boards b ON b.id = o.board_id AND b.deleted_at IS NULL
         LEFT JOIN assets a ON a.id = o.asset_id
         LEFT JOIN boards lb ON lb.id = o.linked_board_id
-        WHERE o.deleted_at IS NULL AND o.type IN ('image', 'document', 'file', 'text', 'board', 'stack')
+        WHERE o.deleted_at IS NULL AND o.type IN ('image', 'document', 'file', 'text', 'board', 'stack', 'connection', 'link', 'comment')
         UNION ALL
         SELECT 'slide', sl.id, sl.asset_id, NULL, a.original_name, a.mime, NULL, o.id, o.board_id,
           NULL, 'slide', sl.id, 1, NULL
@@ -320,6 +324,26 @@ export class SearchRepository {
       FROM board_objects WHERE type = 'text' AND deleted_at IS NULL
     `)
     this.db.run(sql`
+      INSERT INTO search_documents (kind, source_id, title, body)
+      SELECT 'connection', id,
+        COALESCE(NULLIF(substr(trim(json_extract(data, '$.label.text')), 1, 80), ''), 'Connection'),
+        COALESCE(json_extract(data, '$.label.text'), '')
+      FROM board_objects WHERE type = 'connection' AND deleted_at IS NULL
+    `)
+    this.db.run(sql`
+      INSERT INTO search_documents (kind, source_id, title, body)
+      SELECT 'link', id,
+        COALESCE(NULLIF(substr(trim(json_extract(data, '$.title')), 1, 80), ''), 'Link'),
+        trim(COALESCE(json_extract(data, '$.title'), '') || ' ' || COALESCE(json_extract(data, '$.description'), ''))
+      FROM board_objects WHERE type = 'link' AND deleted_at IS NULL
+    `)
+    this.db.run(sql`
+      INSERT INTO search_documents (kind, source_id, title, body)
+      SELECT 'comment', o.id, 'Comment',
+        COALESCE((SELECT group_concat(m.body, ' ') FROM comment_messages m WHERE m.comment_id = o.id AND m.deleted_at IS NULL), '')
+      FROM board_objects o WHERE o.type = 'comment' AND o.deleted_at IS NULL
+    `)
+    this.db.run(sql`
       INSERT INTO search_documents (kind, source_id, asset_id, title, body)
       SELECT 'entry', library_entries.id, library_entries.asset_id, library_entries.name, assets.original_name
       FROM library_entries JOIN assets ON assets.id = library_entries.asset_id
@@ -460,7 +484,10 @@ export class SearchRepository {
       row.kind === 'note' ||
       row.kind === 'object' ||
       row.kind === 'stack' ||
-      row.kind === 'slide'
+      row.kind === 'slide' ||
+      row.kind === 'connection' ||
+      row.kind === 'link' ||
+      row.kind === 'comment'
     ) {
       return row.board_id ? this.boardPath(row.board_id) : 'Board'
     }
@@ -633,6 +660,8 @@ function filterSql(filter: SearchFilter): SQL {
   if (filter === 'board') return sql`s.kind = 'board'`
   if (filter === 'note') return sql`s.kind = 'note'`
   if (filter === 'folder') return sql`s.kind = 'folder'`
+  if (filter === 'connection' || filter === 'link' || filter === 'comment')
+    return sql`s.kind = ${filter}`
   if (filter === 'pdf') return sql`(s.kind = 'pdf-page' OR s.mime = 'application/pdf')`
   if (filter === 'image') return sql`(s.mime LIKE 'image/%' OR s.kind = 'stack')`
   if (filter === 'file') {

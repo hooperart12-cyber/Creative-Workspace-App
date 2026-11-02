@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useEditorState, type Editor } from '@tiptap/react'
+import { destinationHref } from '@shared/destinations'
 import { isSafeLink } from '@shared/notes'
+import { useCanvasStore } from '../store/canvasStore'
+import { setNoteLinkHandler } from '../relations/relationActions'
 import { useNoteStore, type SaveStatus } from './noteStore'
 import { openLink, resolveConflict, resolveDeleted, saveNoteNow, setMode } from './session'
 
@@ -312,6 +315,30 @@ export function LinkEditor({ editor }: { editor: Editor }) {
         />
         <button type="submit" className="rounded-md bg-accent px-2.5 py-1 text-sm text-white">
           {current ? 'Update' : 'Add'}
+        </button>
+        <button
+          type="button"
+          className="rounded-md px-2 py-1 text-sm hover:bg-canvas"
+          onClick={() => {
+            setNoteLinkHandler((destination) => {
+              const href = destinationHref(destination)
+              const chain = editor.chain().focus().extendMarkRange('link')
+              if (editor.state.selection.empty && !editor.isActive('link')) {
+                chain
+                  .insertContent({
+                    type: 'text',
+                    text: destination.title || destination.kind,
+                    marks: [{ type: 'link', attrs: { href } }]
+                  })
+                  .run()
+              } else chain.setLink({ href }).run()
+              setNoteLinkHandler(null)
+              close()
+            })
+            useCanvasStore.getState().setLinkTarget({ kind: 'note' })
+          }}
+        >
+          In this project
         </button>
         {current && (
           <>

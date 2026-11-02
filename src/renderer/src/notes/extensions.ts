@@ -83,7 +83,7 @@ export const noteExtensions: Extensions = [
       autolink: true,
       linkOnPaste: true,
       defaultProtocol: 'https',
-      protocols: ['http', 'https', 'mailto'],
+      protocols: ['http', 'https', 'mailto', 'cw'],
       isAllowedUri: (url) => isSafeLink(url),
       shouldAutoLink: (url) => isSafeLink(url) || isSafeLink(`https://${url}`),
       HTMLAttributes: { target: null, rel: 'noopener noreferrer nofollow', class: null }

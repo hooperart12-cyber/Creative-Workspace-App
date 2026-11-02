@@ -43,7 +43,10 @@ describe('tag migration', () => {
       entries: { tag: string }[]
     }
     journal.entries = journal.entries.filter(
-      (entry) => entry.tag !== '0005_tags' && entry.tag !== '0006_image_stacks'
+      (entry) =>
+        entry.tag !== '0005_tags' &&
+        entry.tag !== '0006_image_stacks' &&
+        entry.tag !== '0007_connections_links_comments'
     )
     writeFileSync(journalPath, JSON.stringify(journal))
 

@@ -50,6 +50,39 @@ To test a specific pull request instead of `main`: `git fetch origin && git chec
 
 Work through each step, and tick the box if the **Expected** result happens. If it doesn't, write down the step number and report it (Part 3). Keyboard shortcuts say **Ctrl** for Windows; on macOS use **Cmd** where Ctrl is listed, and **Option** for Alt.
 
+### M8 — Connections, links, and comments (in progress)
+
+Use a project that already has two image cards on one board, plus a second board. M8 is not finished. A failed step in this table is a bug. Anything in **Not ready yet** is unfinished work, not a regression.
+
+| # | Do this | Expected | A failure looks like |
+|---|---|---|---|
+| 8.1 | Press L. Drag from the middle of one card to the middle of the other, then release. | A line appears with an arrow at the end you released. Move either card: that end stays on the card. | The line is missing, both ends stay where you released even after the card moves, or only the start sticks. |
+| 8.2 | Press L again. Drag from a card and release on empty canvas. | The start stays on the card. The other end stays on the empty spot when you move the card. | Both ends move with the card, or the free end jumps onto a nearby card you did not release on. |
+| 8.3 | Press L and start a drag, then press Escape before you release. | No connection is created. The tool returns to the normal pointer. | A line appears anyway, or L stays stuck on. |
+| 8.4 | Select a card. Drag the blue dot on its right edge to another card. | A connection is created without pressing L first. | The card moves instead, or nothing is created. |
+| 8.4b | Select the connection. Drag a round handle on either end onto another card. Hold Alt to pin that spot. Hold Shift over a grouped card to attach to the group. Drag onto empty canvas to detach. | The end follows the card, the pinned spot, the group, or stays free. A highlight shows the target before you release. | The end jumps to a card you did not touch, or a free end snaps back onto the old card after you reload. |
+| 8.4c | With a curved or elbow path, drag the extra handle. Double-click the line and type a label. | The bend stays when you move an attached card. The label stays horizontal and follows the line. | The bend resets, or the label rotates with the line. |
+| 8.4d | Alt-click where two lines overlap. | A list lets you pick which line. | Only the top line can ever be selected. |
+| 8.5 | Select the connection. Open Properties (P on the toolbar). Change path, color, and width. Press Swap markers. On an elbow path, turn on Avoid objects. | The line updates. Undo once puts the previous look back. Endpoints stay put. | Undo restores only part of the change, or the ends detach. |
+| 8.6 | In Properties, set Connections to Hide connections, then back to Adaptive. | Hidden lines disappear. Selecting a connection still shows it. Adaptive is not a delete: showing them again brings the same lines back. | The connections are gone from the board after you show them again. |
+| 8.7 | Press C on empty canvas, type a note, and press Ctrl+Enter. | A comment card appears with that text. Escape on an empty draft cancels it. Escape with text asks before discarding. | The letters change the canvas tool, or the comment vanishes after you click away. |
+| 8.8 | Press C on a stack that is showing a slide. Leave “This slide”, post, then switch the stack to another slide. | The comment is gone from the canvas. Open Comments and jump to it: the stack shows that slide again. | The comment stays on every slide, or jump opens a different slide. |
+| 8.9 | In the same composer, choose “The whole stack” and post. | That comment stays while you change slides. | It disappears on the next slide. |
+| 8.10 | Press Ctrl+Shift+K. Search for the other board and choose it. Double-click the new card. | The other board opens. Ctrl+K still opens the command palette, not this picker. | Ctrl+K opens the picker, or the card opens a website. |
+| 8.11 | Ctrl+Shift+K, type `https://example.com`, and choose Add website. Double-click the card. | It opens in your browser. `http://127.0.0.1` is refused. | The address loads inside the canvas, or a private address is accepted. |
+| 8.12 | Copy `https://example.com` and paste on empty canvas. Then paste a picture the same way. | The address becomes a link card. The picture still becomes an image, not a link. | The picture is replaced by a link, or the address is ignored. |
+| 8.13 | Delete a card that a connection is attached to. Undo. | The connection remains. After undo, the end is on the card again. | The connection is deleted with the card, or undo leaves the end loose. |
+| 8.14 | Right-click the canvas and choose **Export this board…**. Export PNG, then PDF, with connections and comments set to **As shown**. | You get a picture of the board’s objects, lines, labels, link cards, and visible comments. No selection handles or toolbar. Hidden connections stay hidden. The original image files are unchanged. | The picture is only the window, chrome is in the file, or hidden lines come back. |
+| 8.15 | Export a **Board package** with **Include comments and replies** off. Import it into a second project. | A new board appears. Lines between its own cards still meet. A link to a board that was not in the package stays, and Project integrity lists it. Comments were not copied. | The import changes the original project, or the line points at a card with the same name. |
+| 8.16 | Export again with **Include comments and replies** on. Import into the same project that still has the linked board. | The comment and its replies are on the new board. The link to the board that is still here opens that board. | The reply is missing, or the link is reported broken. |
+| 8.17 | Press I. On a broken reference, try Locate, Reattach, Keep detached, and Remove reference. | The item stays. Reattach works only when the target is back. Keep detached is not grabbed again when the target returns. | The connection, comment, or link is deleted. |
+| 8.18 | Drop a public web address onto a card. Choose Attach, then try again and choose Create card. Select the card and choose **Generate preview**. | Attach puts the address on the card. Create card makes a link card. Preview runs only when you ask. `http://127.0.0.1` is still refused. | The drop always makes a card, or a preview loads by itself when the project opens. |
+| 8.19 | Combine two images that have a slide comment, then extract one slide. | The comment follows that slide onto the card. It does not appear on the other image of the same file. | The comment stays on the stack, or both cards show it. |
+| 8.20 | Open the same project in a second window. In window 1, reply to a comment and move a card a connection is attached to. In window 2, change that connection’s color, then undo. | Window 2 shows the reply and the moved card. Undo in window 2 puts the color back and does not drop the reply or detach the end that window 1 moved. | One window’s save erases the other window’s newer change. |
+| 8.21 | On a board with many connections, pan, zoom, select a line, and switch Connections between Hide and Adaptive. | The board stays usable. Hidden lines return when you show them. Dragging one end does not reroute every line on the board. | The window freezes, or every line jumps when you touch one. |
+
+**Also in this build.** Bridge and gap are drawn when that crossing style is selected. A link can be attached to a card from the right-click menu, and a note can link to something in the project from the link popover’s “In this project” button. Duplicate with comments is in the right-click menu. Whole-project zip export still includes the database, which is separate from the one-board package. A hand check of steps 8.14–8.19 is still needed; the automated tests cover the package round trip, the PDF page, comment transfer, and reference repair, not the save dialog.
+
 ### M5 — Recovery, search and commands (≈30 minutes)
 
 Use a fresh project. Have ready: a text PDF, a PNG, and a text file. The Windows installer steps use a packaged build, not `npm run dev`.
@@ -588,6 +621,8 @@ npm run test:e2e     # end-to-end UI tests: builds the app, then Playwright driv
   - image, PDF and file objects: initial sizing, layout, PDF proportions enforced on every update, file cards free to resize, copies sharing one asset
   - renderer helpers: tree building, camera math, rotated bounds, image level of detail, align/distribute/match size with rotated and ratio-locked images, z-order, snapping, undo history
   - text notes: content validation and sanitising (unsafe links, images and scripts refused, invalid attributes, size limit), unreadable notes, plain-text extraction, revision-checked saves (stale revisions and notes trashed meanwhile), style and minimum-height rules, copy/trash/restore, editing leases and take-over
+  - connections, links, and comments: geometry, crossings, and hit testing; a one-board package round trip (comments off and on, a link left unresolved, a bad archive rejected); PNG and PDF writers; reference repair that does not delete the item
+  - large sets: `findCrossings` on 1,000 separated connections stays under 500 ms, and one hit test on that set stays under 100 ms. That check is the geometry only. It does not measure panning the canvas.
 - **End-to-end tests** (Playwright, `e2e/`): launch the real app with a temporary settings folder and test
   - creating boards from the toolbar (click and drag-drop)
   - dragging cards and persistence after restart

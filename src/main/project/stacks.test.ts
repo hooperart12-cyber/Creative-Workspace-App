@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import sharp from 'sharp'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { defaultComment, parseComment } from '@shared/comments'
 import { adaptiveFrame } from '@shared/stacks'
 import { rotatedCenter } from '@shared/geometry'
 import { assets, boardObjects, stackSlides, taggings } from '../db/schema'
@@ -72,6 +73,104 @@ describe('image stacks', () => {
     expect(
       project.boards.get(project.mainBoardId).objects.filter((object) => object.type === 'image')
     ).toHaveLength(2)
+  })
+
+  it('moves an image comment onto the slide and back when combine is undone', async () => {
+    const left = await addAsset(40, 40, 3)
+    const right = await addAsset(40, 40, 4)
+    const [a, b] = project.objects.createImages({
+      boardId: project.mainBoardId,
+      assetIds: [left, right],
+      center: { x: 0, y: 0 }
+    })
+    project.objects.update([
+      { id: a, x: 10, y: 20 },
+      { id: b, x: 200, y: 20 }
+    ])
+    const comment = defaultComment({ x: 12, y: 12 })
+    comment.anchor = { ...comment.anchor, scope: 'object', targetId: a, detached: 'none' }
+    const created = project.relations.createComment(
+      project.mainBoardId,
+      { x: 12, y: 12 },
+      comment,
+      'On the left'
+    )
+    const stacked = project.stacks.createFromObjects([b, a], 'combine')
+    const slideId = stackOnBoard()?.slides?.[0].id
+    const moved = parseComment(
+      project.boards.get(project.mainBoardId).objects.find((object) => object.id === created.id)
+        ?.data
+    )
+    expect(moved?.anchor).toMatchObject({
+      scope: 'slide',
+      targetId: stacked.stackId,
+      slideId,
+      detached: 'none'
+    })
+    project.stacks.undo(stacked.undo)
+    const back = parseComment(
+      project.boards.get(project.mainBoardId).objects.find((object) => object.id === created.id)
+        ?.data
+    )
+    expect(back?.anchor).toMatchObject({ scope: 'object', targetId: a, detached: 'none' })
+  })
+
+  it('moves a slide comment onto the extracted card and detaches it when the slide is removed', async () => {
+    const assetId = await addAsset(30, 30, 5)
+    const placed = project.stacks.createFromAssets(project.mainBoardId, [assetId], { x: 40, y: 40 })
+    const slideId = stackOnBoard()?.slides?.[0].id
+    expect(slideId).toBeTruthy()
+    const comment = defaultComment({ x: 8, y: 8 })
+    comment.anchor = {
+      ...comment.anchor,
+      scope: 'slide',
+      targetId: placed.stackId,
+      slideId: slideId!,
+      detached: 'none'
+    }
+    const created = project.relations.createComment(
+      project.mainBoardId,
+      { x: 8, y: 8 },
+      comment,
+      'On this image'
+    )
+    const extracted = project.stacks.extract(placed.stackId, slideId!, placed.revision)
+    const onCard = parseComment(
+      project.boards.get(project.mainBoardId).objects.find((object) => object.id === created.id)
+        ?.data
+    )
+    expect(onCard?.anchor).toMatchObject({
+      scope: 'object',
+      targetId: extracted.createdIds[0],
+      slideId: null,
+      detached: 'none'
+    })
+    project.stacks.undo(extracted.undo)
+    const onSlide = parseComment(
+      project.boards.get(project.mainBoardId).objects.find((object) => object.id === created.id)
+        ?.data
+    )
+    expect(onSlide?.anchor).toMatchObject({
+      scope: 'slide',
+      targetId: placed.stackId,
+      slideId,
+      detached: 'none'
+    })
+    const removed = project.stacks.remove(placed.stackId, slideId!, placed.revision)
+    const missing = parseComment(
+      project.boards.get(project.mainBoardId).objects.find((object) => object.id === created.id)
+        ?.data
+    )
+    expect(missing?.anchor.detached).toBe('missing')
+    expect(
+      project.boards.get(project.mainBoardId).objects.some((object) => object.id === created.id)
+    ).toBe(true)
+    project.stacks.undo(removed.undo)
+    const restored = parseComment(
+      project.boards.get(project.mainBoardId).objects.find((object) => object.id === created.id)
+        ?.data
+    )
+    expect(restored?.anchor.detached).toBe('none')
   })
 
   it('copies a stack without removing the cards or the saved layout', async () => {

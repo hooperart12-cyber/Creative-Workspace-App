@@ -6,6 +6,9 @@ import { useWorkspaceStore } from '../store/workspaceStore'
 import * as actions from './actions'
 import { contextPoint } from './CanvasView'
 import { isViewable } from './objectTypes'
+import { parseComment } from '@shared/comments'
+import { parseConnection } from '@shared/connections'
+import { parseDestination } from '@shared/destinations'
 import { readNote } from '@shared/notes'
 import type { CanvasObject } from '@shared/types'
 import { isAutoHeightNote } from '../notes/measure'
@@ -19,6 +22,12 @@ import {
 import { showInLibrary } from '../library/libraryActions'
 import { openTagEditor } from '../tags/TagManager'
 import { beginEditing } from '../notes/session'
+import {
+  copyConnectionStyle,
+  pasteConnectionStyle,
+  saveComment
+} from '../relations/relationActions'
+import { navigateTo } from '../relations/navigate'
 
 const noteMode = (o: CanvasObject) => {
   const read = readNote(o.data)
@@ -122,6 +131,20 @@ function MenuItems() {
         >
           Paste here
         </Item>
+        <Item
+          onSelect={() => {
+            const at = contextPoint.current ?? { x: 0, y: 0 }
+            useCanvasStore.getState().setCommentDraft({
+              x: at.x,
+              y: at.y,
+              targetId: null,
+              slideId: null,
+              scope: 'free'
+            })
+          }}
+        >
+          Add comment
+        </Item>
         <Separator />
         <Item shortcut="Ctrl+A" onSelect={actions.selectAll}>
           Select all
@@ -141,6 +164,10 @@ function MenuItems() {
         </Item>
         <Item shortcut="Ctrl+'" onSelect={toggleGrid}>
           {showGrid ? 'Hide grid' : 'Show grid'}
+        </Item>
+        <Separator />
+        <Item onSelect={() => useCanvasStore.getState().setShareDialog(true)}>
+          Export this board…
         </Item>
       </>
     )
@@ -403,6 +430,96 @@ function MenuItems() {
       <Item shortcut="Ctrl+D" onSelect={() => void actions.duplicateSelection()}>
         Duplicate
       </Item>
+      <Item onSelect={() => void actions.duplicateWithComments()}>Duplicate with comments</Item>
+      {single?.type === 'connection' && !single.locked && (
+        <>
+          <Separator />
+          <Item onSelect={() => useCanvasStore.getState().setLabelEdit(single.id)}>Edit label</Item>
+          <Item
+            onSelect={() => {
+              const link = parseConnection(single.data)?.labelLink
+              if (link) void navigateTo(link)
+            }}
+            disabled={!parseConnection(single.data)?.labelLink}
+          >
+            Open label link
+          </Item>
+          <Item onSelect={() => copyConnectionStyle(single)}>Copy style</Item>
+          <Item
+            onSelect={() =>
+              void pasteConnectionStyle(selected.filter((object) => object.type === 'connection'))
+            }
+          >
+            Paste style
+          </Item>
+        </>
+      )}
+      {single && single.type !== 'connection' && !single.locked && (
+        <Item
+          onSelect={() =>
+            useCanvasStore.getState().setLinkTarget({ kind: 'object', id: single.id })
+          }
+        >
+          Attach link
+        </Item>
+      )}
+      {single && parseDestination(single.data.navLink) && (
+        <Item onSelect={() => void navigateTo(parseDestination(single.data.navLink)!)}>
+          Open attached link
+        </Item>
+      )}
+      {single?.type === 'comment' && !single.locked && parseComment(single.data) && (
+        <>
+          <Item
+            onSelect={() => {
+              const data = parseComment(single.data)
+              if (!data) return
+              void saveComment(
+                single,
+                { ...data, presentation: data.presentation === 'pin' ? 'card' : 'pin' },
+                ...[]
+              )
+            }}
+          >
+            {parseComment(single.data)?.presentation === 'pin' ? 'Show as card' : 'Show as pin'}
+          </Item>
+          <Item
+            onSelect={() => {
+              const data = parseComment(single.data)
+              if (!data) return
+              void saveComment(single, {
+                ...data,
+                status: data.status === 'resolved' ? 'open' : 'resolved'
+              })
+            }}
+          >
+            {parseComment(single.data)?.status === 'resolved' ? 'Reopen' : 'Resolve'}
+          </Item>
+        </>
+      )}
+      {single && single.type !== 'comment' && single.type !== 'connection' && (
+        <Item
+          onSelect={() => {
+            const at = contextPoint.current ?? { x: single.x + single.width / 2, y: single.y }
+            const displayed =
+              single.type === 'stack'
+                ? (typeof single.data.displayedSlideId === 'string' &&
+                    single.data.displayedSlideId) ||
+                  single.slides?.[0]?.id ||
+                  null
+                : null
+            useCanvasStore.getState().setCommentDraft({
+              x: at.x,
+              y: at.y,
+              targetId: single.id,
+              slideId: single.type === 'stack' ? null : displayed,
+              scope: single.type === 'stack' ? 'stack' : 'object'
+            })
+          }}
+        >
+          {single.type === 'stack' ? 'Comment on stack' : 'Add comment'}
+        </Item>
+      )}
       <Separator />
       {selected.length > 1 && (
         <Item shortcut="Ctrl+G" onSelect={() => void actions.groupSelection()}>
@@ -443,6 +560,10 @@ function MenuItems() {
         onSelect={() => void actions.deleteObjects(unlocked.map((o) => o.id))}
       >
         Move to trash
+      </Item>
+      <Separator />
+      <Item onSelect={() => useCanvasStore.getState().setShareDialog(true)}>
+        Export this board…
       </Item>
     </>
   )

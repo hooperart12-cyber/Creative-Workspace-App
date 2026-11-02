@@ -191,7 +191,8 @@ describe('recovery points', () => {
       (entry) =>
         entry.tag !== '0004_reliability' &&
         entry.tag !== '0005_tags' &&
-        entry.tag !== '0006_image_stacks'
+        entry.tag !== '0006_image_stacks' &&
+        entry.tag !== '0007_connections_links_comments'
     )
     writeFileSync(journalPath, JSON.stringify(journal))
     const legacy = Project.create(dir, 'Legacy', oldMigrations)

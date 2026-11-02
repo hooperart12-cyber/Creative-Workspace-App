@@ -587,3 +587,27 @@ MyProject.cwproj/
 **Consequences.**
 
 - Aspect-ratio presets, page collections, annotations, OCR, filters, and cropped thumbnail files are not in M7. Search pages are still rows, so one stack’s slides can split across Load more. The asset viewer still shows the whole original.
+
+## ADR-020 — Connections, links, and comments
+
+**Date:** 2026-10-28 · **Status:** ✅ Accepted · **Requirements:** §4, §5, §9, §12 · **Extends:** ADR-012 (one undo step, revision checks), ADR-017 (search index), ADR-018 (direct tags), ADR-019 (slide identity)
+
+**Decision.**
+
+- A connection, a link card, and a comment are `board_objects` rows (`connection`, `link`, `comment`). They use the same id, revision, z-order, lock, group, trash, and direct-tag rules as other cards. Migration `0007_connections_links_comments` adds board view columns, `comment_messages`, `link_previews`, and search triggers. It does not rewrite tags or stack slides.
+- Geometry lives in `src/shared/connections.ts` so the database and the canvas compute the same path. An endpoint is a free point, an object, or a group. A pin is an edge plus a 0–1 position along that edge, so resize and rotation stay stable. Automatic placement picks the edge. `userHeld` means the person moved that end after the target left, and a later restore must not grab it back.
+- Connections are created behind other cards (lowest z). Moving a card lays the path out again when the board is read. Dragging a connection moves free ends, and attached ends only when their target moved in the same drag.
+- Deleting or moving a card off the board detaches the end at its last point and keeps the connection. Restoring the same id reattaches unless `userHeld` is set. Copying remaps ids that were part of the same copy and leaves every other destination pointing at the original. Names are never used as identity.
+- Internal destinations are board, object, PDF page, stack, exact slide id, or a saved camera. Notes store them as `cw:` links. External cards allow only `http` and `https`, with no username or password in the address, and they reject loopback, private, and link-local hosts. A preview is fetched only when someone asks, through the main process, with a redirect cap and size limits.
+- Ctrl/Cmd+K stays the command palette. Create link is Ctrl/Cmd+Shift+K. Connection is L. Comment is C. Shift while pressing L or C keeps that tool on.
+- A comment’s anchor is separate from where the card sits. On a stack, the default is the slide that is showing. The whole stack is an explicit choice. Replies do not reopen a resolved thread. Hide is a view filter, not a delete.
+- Tags do not spread across a connection, a comment, or a link. Search can find the connection’s label and the names of what it is attached to. That match is the connection’s own text, not a tag copied onto the other object.
+
+**Not in this milestone.** Live collaboration, accounts, paragraph anchors, a project-wide comment inbox, a named connection-style library, a comment edit history, board snapshots, running a remote page inside the canvas, and any change to an original image or PDF file.
+
+**Consequences.**
+
+- M8 is stacked on `feat/m7-image-stacks`. M6 and M7 stay unmerged.
+- A picture export draws the current board through the canvas layer, without selection handles. PNG is that bitmap. PDF is one page of the same bitmap, shaped to the artwork. Hidden connections and comments stay hidden unless the export dialog asks to show them.
+- A board package is one board, its objects, the files those objects use, and its tags. Comments and replies are included only when that box is checked. A destination outside the board keeps its id and title. Import creates a new board and new object ids. It reuses a stored file only when the checksum matches. It does not match a missing target by name.
+- Older test databases that stop before tags must also stop before `0007`, because Drizzle skips a migration whose timestamp is older than the newest one already applied.

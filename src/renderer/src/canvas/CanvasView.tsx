@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Layer, Line, Rect, Shape, Stage, Transformer } from 'react-konva'
+import { Circle, Layer, Line, Rect, Shape, Stage, Transformer } from 'react-konva'
 import type Konva from 'konva'
 import type { CanvasObject, Point } from '@shared/types'
 import { EditableTitle } from '../components/EditableTitle'
@@ -10,6 +10,7 @@ import { expandToGroups, findDropTarget, findStackDrop, smartSnap, snapToGrid } 
 import { BoardCardNode, COLORS, TITLE_FONT_SIZE, TITLE_GAP } from './BoardCardNode'
 import {
   boundsOf,
+  containsPoint,
   intersects,
   objectBounds,
   rectFromPoints,
@@ -22,6 +23,38 @@ import { DocumentNode } from './DocumentNode'
 import { FileNode } from './FileNode'
 import { ImageNode } from './ImageNode'
 import { StackNode } from '../stacks/StackNode'
+import { ConnectionNode } from '../relations/ConnectionNode'
+import { ConnectionHandles } from '../relations/ConnectionHandles'
+import { LabelEditor, LineChooser } from '../relations/RelationPanels'
+import { CommentNode, LinkCardNode } from '../relations/CardNodes'
+import { RelationPanels } from '../relations/RelationPanels'
+import { DestinationPicker } from '../relations/DestinationPicker'
+import {
+  createConnection,
+  createLink,
+  moveConnections,
+  updateConnection
+} from '../relations/relationActions'
+import { exportLayer } from './exportBoard'
+import { navigateTo } from '../relations/navigate'
+import {
+  connectionPoints,
+  defaultConnection,
+  findCrossings,
+  hitsAt,
+  labelFromPoint,
+  parseConnection,
+  type Attachment,
+  type CrossingStyle
+} from '@shared/connections'
+import { parseComment, visibleInView, type CommentView } from '@shared/comments'
+import {
+  contentFrame,
+  exportCommentView,
+  exportConnectionDisplay,
+  pictureBoxes
+} from '@shared/boardExport'
+import { normalizePublicUrl, parseDestination } from '@shared/destinations'
 import { showSlide } from '../stacks/stackActions'
 import { TagMarks } from '../tags/TagMarks'
 import { canRotate, isViewable, lockedAspectRatio } from './objectTypes'
@@ -43,6 +76,24 @@ const SNAP_DISTANCE = 6
 /** Minimum on-screen size while resizing. */
 const MIN_RESIZE = 40
 
+function attachableAt(
+  world: Point,
+  objects: CanvasObject[],
+  exceptId: string | null
+): CanvasObject | null {
+  let best: CanvasObject | null = null
+  for (const object of objects) {
+    if (object.type === 'connection' || object.locked || object.id === exceptId) continue
+    if (!containsPoint(objectBounds(object), world)) continue
+    if (!best || object.zIndex >= best.zIndex) best = object
+  }
+  return best
+}
+
+function objectAttachment(id: string): Attachment {
+  return { kind: 'object', id, placement: 'auto', pin: null, missing: false, userHeld: false }
+}
+
 type Gesture =
   | { kind: 'pan'; start: Point; origin: { x: number; y: number } }
   | {
@@ -59,6 +110,8 @@ type Gesture =
       additive: boolean
     }
   | { kind: 'marquee'; start: Point; base: Set<string> }
+  | { kind: 'connect'; start: Point; end: Point; targetId: string | null }
+  | { kind: 'comment'; at: Point; targetId: string | null }
 
 /** The infinite canvas for the open board (§4). */
 export function CanvasView() {
@@ -74,6 +127,9 @@ export function CanvasView() {
   const drag = useCanvasStore((s) => s.drag)
   const marquee = useCanvasStore((s) => s.marquee)
   const showGrid = useCanvasStore((s) => s.showGrid)
+  const tool = useCanvasStore((s) => s.tool)
+  const exportCapture = useCanvasStore((s) => s.exportCapture)
+  const connectPreview = useCanvasStore((s) => s.connectPreview)
   const editingId = useNoteStore((s) => s.editing?.objectId)
   const editedElsewhere = useNoteStore((s) => s.editedElsewhere)
   const liveSizes = useNoteStore((s) => s.liveSizes)
@@ -218,8 +274,26 @@ export function CanvasView() {
     [board?.objects]
   )
 
+  const connectionDisplay = exportCapture
+    ? exportConnectionDisplay(board?.connectionDisplay ?? 'adaptive', exportCapture.connections)
+    : (board?.connectionDisplay ?? 'adaptive')
+  const commentView = exportCapture
+    ? exportCommentView(board?.commentView ?? 'open', exportCapture.comments)
+    : (board?.commentView ?? 'open')
+
   // Only draw what's on screen (plus a margin), but always draw what's selected or dragged.
+  // A picture export draws the whole board and leaves hidden items hidden.
   const visible = useMemo(() => {
+    const shown = sorted.filter((object) => {
+      if (!exportCapture) return true
+      if (object.type === 'connection') return connectionDisplay !== 'hidden'
+      if (object.type === 'comment') {
+        const comment = parseComment(object.data)
+        return !!comment && visibleInView(comment.status, commentView as CommentView, false)
+      }
+      return true
+    })
+    if (exportCapture) return shown
     const area = visibleWorld(viewport, viewSize)
     const margin = 200 / viewport.zoom
     const padded = {
@@ -228,13 +302,55 @@ export function CanvasView() {
       width: area.width + margin * 2,
       height: area.height + margin * 2
     }
-    return sorted.filter((o) => selection.has(o.id) || intersects(objectBounds(o), padded))
-  }, [sorted, viewport, viewSize, selection])
+    return shown.filter((o) => selection.has(o.id) || intersects(objectBounds(o), padded))
+  }, [sorted, viewport, viewSize, selection, exportCapture, connectionDisplay, commentView])
+
+  const crossingMarks = useMemo(() => {
+    const marks = new Map<string, { gaps: number[]; bridges: number[] }>()
+    const boardStyle = board?.crossingStyle ?? 'plain'
+    const items: {
+      id: string
+      points: { x: number; y: number }[]
+      zIndex: number
+      chosen: CrossingStyle
+    }[] = []
+    for (const object of visible) {
+      if (object.type !== 'connection') continue
+      const data = parseConnection(object.data)
+      if (!data) continue
+      const chosen: CrossingStyle = data.crossing === 'inherit' ? boardStyle : data.crossing
+      items.push({
+        id: object.id,
+        points: connectionPoints(data),
+        zIndex: object.zIndex,
+        chosen
+      })
+    }
+    if (!items.some((item) => item.chosen !== 'plain')) return marks
+    for (const crossing of findCrossings(items)) {
+      const above = items.find((item) => item.id === crossing.above)
+      const below = items.find((item) => item.id === crossing.below)
+      if (above?.chosen === 'bridge') {
+        const mark = marks.get(crossing.above) ?? { gaps: [], bridges: [] }
+        mark.bridges.push(labelFromPoint(above.points, crossing.point).t)
+        marks.set(crossing.above, mark)
+      }
+      if (below?.chosen === 'gap') {
+        const mark = marks.get(crossing.below) ?? { gaps: [], bridges: [] }
+        mark.gaps.push(crossing.t)
+        marks.set(crossing.below, mark)
+      }
+    }
+    return marks
+  }, [visible, board?.crossingStyle])
 
   // Handles depend on what's selected: images resize only proportionally (corner handles)
   // and rotate; board cards resize freely and don't rotate.
   const transformable = useMemo(
-    () => (board?.objects ?? []).filter((o) => selection.has(o.id) && !o.locked),
+    () =>
+      (board?.objects ?? []).filter(
+        (o) => selection.has(o.id) && !o.locked && o.type !== 'connection'
+      ),
     [board?.objects, selection]
   )
   const keepRatio = transformable.some((o) => lockedAspectRatio(o) !== null)
@@ -257,7 +373,7 @@ export function CanvasView() {
         : layer.find((node: Konva.Node) => {
             if (!node.hasName('object')) return false
             const o = board?.objects.find((x) => x.id === node.id())
-            return !!o && selection.has(o.id) && !o.locked
+            return !!o && selection.has(o.id) && !o.locked && o.type !== 'connection'
           })
     tr.nodes(targets)
     tr.getLayer()?.batchDraw()
@@ -313,6 +429,30 @@ export function CanvasView() {
     }
     if (evt.button !== 0) return
 
+    if (e.target.hasName('object-link')) {
+      const linkedId = (e.target as Konva.Node).getAttr('connectionId') as string | undefined
+      const host = (useWorkspaceStore.getState().board?.objects ?? []).find(
+        (object) => object.id === linkedId
+      )
+      const destination = parseDestination(host?.data.navLink)
+      if (destination) void navigateTo(destination)
+      return
+    }
+    if (e.target.hasName('relation-handle') || e.target.hasName('label-text')) {
+      const connectionId =
+        ((e.target as Konva.Node).getAttr('connectionId') as string | undefined) ??
+        objectIdOf(e.target)
+      const linked = (useWorkspaceStore.getState().board?.objects ?? []).find(
+        (object) => object.id === connectionId
+      )
+      const data = linked ? parseConnection(linked.data) : null
+      if ((e.target.hasName('label-open') || evt.ctrlKey || evt.metaKey) && data?.labelLink) {
+        void navigateTo(data.labelLink)
+        return
+      }
+      if (e.target.hasName('relation-handle')) return
+    }
+
     const previousArrow = e.target.hasName('stack-prev') || e.target.findAncestor('.stack-prev')
     const nextArrow = e.target.hasName('stack-next') || e.target.findAncestor('.stack-next')
     if (previousArrow || nextArrow) {
@@ -338,6 +478,44 @@ export function CanvasView() {
     const world = screenToWorld(screen, vp)
     const id = objectIdOf(e.target)
     const objectsNow = useWorkspaceStore.getState().board?.objects ?? []
+    if (evt.altKey && id) {
+      const clicked = objectsNow.find((object) => object.id === id)
+      if (clicked?.type === 'connection') {
+        const hits = hitsAt(
+          world,
+          objectsNow.flatMap((object) => {
+            if (object.type !== 'connection') return []
+            const data = parseConnection(object.data)
+            return data
+              ? [{ id: object.id, points: connectionPoints(data), zIndex: object.zIndex }]
+              : []
+          }),
+          14 / vp.zoom
+        )
+        if (hits.length > 1) {
+          useCanvasStore.getState().setLineChoices({
+            ids: hits.map((hit) => hit.id),
+            x: evt.clientX,
+            y: evt.clientY
+          })
+          return
+        }
+      }
+    }
+    const tool = useCanvasStore.getState().tool
+    const fromHandle = e.target.hasName('connect-handle')
+    if ((fromHandle || tool === 'connect' || tool === 'comment') && !isSpaceHeld()) {
+      const target = objectsNow.find((object) => object.id === id && object.type !== 'connection')
+      gesture.current =
+        fromHandle || tool === 'connect'
+          ? { kind: 'connect', start: world, end: world, targetId: target?.id ?? null }
+          : { kind: 'comment', at: world, targetId: target?.id ?? null }
+      if (fromHandle || tool === 'connect') {
+        useCanvasStore.getState().setDiscardConnect(false)
+        useCanvasStore.getState().setConnectPreview({ start: world, end: world, endTargetId: null })
+      }
+      return listen()
+    }
 
     // Ctrl+click on a link in a note opens it (a plain click just selects the note).
     if (id && (evt.ctrlKey || evt.metaKey)) {
@@ -412,6 +590,18 @@ export function CanvasView() {
     }
 
     const world = screenToWorld(screen, vp)
+    if (g.kind === 'connect') {
+      g.end = world
+      const objectsNow = useWorkspaceStore.getState().board?.objects ?? []
+      const target = attachableAt(world, objectsNow, g.targetId)
+      useCanvasStore.getState().setConnectPreview({
+        start: g.start,
+        end: world,
+        endTargetId: target?.id ?? null
+      })
+      return
+    }
+    if (g.kind === 'comment') return
 
     if (g.kind === 'marquee') {
       const rect = rectFromPoints(g.start, world)
@@ -497,6 +687,44 @@ export function CanvasView() {
       state.setMarquee(null)
       return
     }
+    if (g?.kind === 'connect') {
+      const discard = state.discardConnect
+      state.setConnectPreview(null)
+      state.setDiscardConnect(false)
+      if (discard) return
+      const objectsNow = useWorkspaceStore.getState().board?.objects ?? []
+      const endTarget = attachableAt(g.end, objectsNow, g.targetId)
+      const dragged = Math.hypot(g.end.x - g.start.x, g.end.y - g.start.y)
+      if (dragged < 4 && !endTarget) return
+      const data = defaultConnection(g.start, g.end)
+      if (g.targetId) data.start.attachment = objectAttachment(g.targetId)
+      if (endTarget) data.end.attachment = objectAttachment(endTarget.id)
+      void createConnection(data)
+      return
+    }
+    if (g?.kind === 'comment') {
+      const target = board.objects.find((object) => object.id === g.targetId)
+      const displayed =
+        target?.type === 'stack'
+          ? (typeof target.data.displayedSlideId === 'string' && target.data.displayedSlideId) ||
+            target.slides?.[0]?.id ||
+            null
+          : null
+      state.setCommentDraft({
+        x: g.at.x,
+        y: g.at.y,
+        targetId: target?.id ?? null,
+        slideId: displayed,
+        scope: target?.type === 'stack' ? 'slide' : target ? 'object' : 'free'
+      })
+      return
+    }
+    if (g?.kind === 'drag' && !g.moved) {
+      const clicked = board.objects.find((object) => object.id === g.clickedId)
+      if (clicked?.type === 'comment' && parseComment(clicked.data)?.presentation === 'pin') {
+        state.setShowComments(true)
+      }
+    }
     lastPressDragged.current = g?.kind === 'drag' && g.moved
     if (lastPressDragged.current) {
       // Konva counts the release that ends a drag as a click, so it would pair it with the next
@@ -536,27 +764,51 @@ export function CanvasView() {
       const target = board.objects.find((o) => o.id === finished.dropCardId)?.linkedBoardId
       if (target) void actions.nestObjects(g.ids, target)
     } else if (finished && (finished.dx || finished.dy)) {
-      void actions.applyPatches(
-        g.ids.map((id) => {
-          const o = g.origins.get(id)!
-          return { id, x: o.x + finished.dx, y: o.y + finished.dy }
-        }),
-        'Move'
+      const movable = g.ids.filter(
+        (id) => board.objects.find((object) => object.id === id)?.type !== 'connection'
       )
+      if (movable.length) {
+        void actions.applyPatches(
+          movable.map((id) => {
+            const o = g.origins.get(id)!
+            return { id, x: o.x + finished.dx, y: o.y + finished.dy }
+          }),
+          'Move'
+        )
+      }
+      void moveConnections(g.ids, finished.dx, finished.dy)
     }
     state.setDrag(null)
   }
 
   const onDoubleClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
     if (lastPressDragged.current || e.evt.button !== 0) return
+    if (e.target.hasName('relation-handle')) return
     const id = objectIdOf(e.target)
     const object = board.objects.find((o) => o.id === id)
+    if (object?.type === 'connection' && !object.locked) {
+      const data = parseConnection(object.data)
+      if (data) {
+        if (!data.label) {
+          void updateConnection(
+            object,
+            { ...data, label: { text: 'Label', t: 0.5, offset: -18 } },
+            'Add label'
+          )
+        }
+        useCanvasStore.getState().setLabelEdit(object.id)
+      }
+      return
+    }
     if (object?.type === 'board' && object.linkedBoardId) void openBoard(object.linkedBoardId)
     else if (object?.type === 'document' && object.asset) {
       const state = useCanvasStore.getState()
       state.setViewerObjectId(null)
       state.setFileDetailsId(null)
       state.setPdfReaderId(object.id)
+    } else if (object?.type === 'link') {
+      const destination = parseDestination(object.data.destination)
+      if (destination) void navigateTo(destination)
     } else if (object?.type === 'file' && object.asset) {
       const state = useCanvasStore.getState()
       state.setViewerObjectId(null)
@@ -641,7 +893,9 @@ export function CanvasView() {
     if (
       types.includes(NEW_OBJECT_MIME) ||
       types.includes('Files') ||
-      types.includes('application/x-cw-entries')
+      types.includes('application/x-cw-entries') ||
+      types.includes('text/uri-list') ||
+      types.includes('text/plain')
     ) {
       e.preventDefault()
       e.dataTransfer.dropEffect = 'copy'
@@ -683,6 +937,23 @@ export function CanvasView() {
     if (e.dataTransfer.files.length > 0) {
       e.preventDefault()
       void actions.importDroppedFiles([...e.dataTransfer.files], world)
+      return
+    }
+    const href = normalizePublicUrl(
+      e.dataTransfer.getData('text/uri-list').split('\n')[0] || e.dataTransfer.getData('text/plain')
+    )
+    if (href) {
+      e.preventDefault()
+      const objects = useWorkspaceStore.getState().board?.objects ?? []
+      const target = [...objects]
+        .filter((object) => object.type !== 'connection' && object.type !== 'comment')
+        .sort((a, b) => b.zIndex - a.zIndex)
+        .find((object) => containsPoint(objectBounds(object), world))
+      if (target) {
+        useCanvasStore.getState().setUrlDrop({ href, at: world, targetId: target.id })
+      } else {
+        void createLink(world, { kind: 'url', href }, '')
+      }
       return
     }
     const kind = e.dataTransfer.getData(NEW_OBJECT_MIME)
@@ -737,6 +1008,10 @@ export function CanvasView() {
         setViewport({ ...vp, x: vp.x - dx, y: vp.y - dy })
       }}
     >
+      <RelationPanels />
+      <DestinationPicker />
+      <LabelEditor />
+      <LineChooser />
       {viewSize.width > 0 && (
         <Stage
           ref={stage}
@@ -760,7 +1035,19 @@ export function CanvasView() {
               <GridDots />
             </Layer>
           )}
-          <Layer ref={objectLayer}>
+          <Layer
+            ref={(node) => {
+              objectLayer.current = node
+              exportLayer.current = node
+            }}
+          >
+            {exportCapture && (
+              <Rect
+                listening={false}
+                fill="#f6f5f2"
+                {...contentFrame(pictureBoxes(visible, connectionDisplay, commentView))}
+              />
+            )}
             {visible.map((o) => {
               const pos = positionOf(o)
               const visibility = board.tagVisibility
@@ -788,22 +1075,49 @@ export function CanvasView() {
                     scrollTop={noteScroll[o.id] ?? 0}
                     onMeasured={syncMeasuredHeight}
                   />
+                ) : o.type === 'connection' ? (
+                  <ConnectionNode
+                    key={o.id}
+                    object={o}
+                    zoom={exportCapture ? 1 : viewport.zoom}
+                    selected={exportCapture ? false : selection.has(o.id)}
+                    display={connectionDisplay as 'full' | 'adaptive' | 'minimal' | 'hidden'}
+                    crossing={board.crossingStyle}
+                    faded={cut.has(o.id)}
+                    gaps={crossingMarks.get(o.id)?.gaps}
+                    bridges={crossingMarks.get(o.id)?.bridges}
+                  />
+                ) : o.type === 'link' ? (
+                  <LinkCardNode key={o.id} object={o} faded={cut.has(o.id)} />
+                ) : o.type === 'comment' ? (
+                  visibleInView(
+                    parseComment(o.data)?.status ?? 'open',
+                    commentView as CommentView,
+                    exportCapture ? false : selection.has(o.id)
+                  ) ? (
+                    <CommentNode
+                      key={o.id}
+                      object={o}
+                      faded={cut.has(o.id)}
+                      subdued={parseComment(o.data)?.status === 'resolved'}
+                    />
+                  ) : null
                 ) : o.type === 'stack' ? (
                   <StackNode
                     key={o.id}
                     object={o}
                     {...positionOf(o)}
                     faded={cut.has(o.id)}
-                    zoom={viewport.zoom}
-                    active={selection.has(o.id) || hoverId === o.id}
+                    zoom={exportCapture ? 3 : viewport.zoom}
+                    active={exportCapture ? false : selection.has(o.id) || hoverId === o.id}
                   />
                 ) : o.type === 'image' ? (
                   <ImageNode
                     key={o.id}
                     object={o}
                     {...positionOf(o)}
-                    faded={cut.has(o.id)}
-                    zoom={viewport.zoom}
+                    faded={exportCapture ? false : cut.has(o.id)}
+                    zoom={exportCapture ? 3 : viewport.zoom}
                   />
                 ) : o.type === 'document' ? (
                   <DocumentNode
@@ -847,37 +1161,107 @@ export function CanvasView() {
                 </Fragment>
               )
             })}
-            <Transformer
-              ref={transformer}
-              rotateEnabled={rotateEnabled}
-              // Shift while rotating snaps to 15° steps (built into Konva). With keepRatio on,
-              // Shift can't unlock the proportions.
-              keepRatio={keepRatio}
-              enabledAnchors={keepRatio ? CORNER_ANCHORS : widthOnly ? SIDE_ANCHORS : ALL_ANCHORS}
-              flipEnabled={false}
-              ignoreStroke
-              borderStroke={COLORS.accent}
-              anchorStroke={COLORS.accent}
-              anchorSize={9}
-              anchorCornerRadius={2}
-              rotateAnchorOffset={24}
-              boundBoxFunc={(oldBox, newBox) =>
-                // Proportional boxes only need their longest side to stay usable, so thin
-                // images (banners, strips) can still be resized.
-                (
-                  keepRatio
-                    ? Math.max(newBox.width, newBox.height) < MIN_RESIZE
-                    : // A side may stay as small as it already is (a one-line note seen
-                      // zoomed out), it just can't be made smaller than the minimum.
-                      (newBox.width < minWidth && newBox.width < oldBox.width) ||
-                      (newBox.height < MIN_RESIZE && newBox.height < oldBox.height)
+            {!exportCapture &&
+              tool === 'select' &&
+              selection.size <= 30 &&
+              visible.map((o) => {
+                if (!selection.has(o.id) || o.type === 'connection') return null
+                const pos = positionOf(o)
+                return (
+                  <Circle
+                    key={`${o.id}-connect`}
+                    name="connect-handle"
+                    id={o.id}
+                    x={pos.x + o.width}
+                    y={pos.y + o.height / 2}
+                    radius={Math.max(4, 7 / viewport.zoom)}
+                    fill={COLORS.accent}
+                    stroke="#fff"
+                    strokeWidth={1 / viewport.zoom}
+                  />
                 )
-                  ? oldBox
-                  : newBox
-              }
-              onTransform={onTransform}
-              onTransformEnd={onTransformEnd}
-            />
+              })}
+            {!exportCapture &&
+              visible.map((object) => {
+                if (object.type === 'connection' || !object.data.navLink) return null
+                const pos = positionOf(object)
+                return (
+                  <Circle
+                    key={`${object.id}-nav`}
+                    name="relation-handle object-link"
+                    connectionId={object.id}
+                    x={pos.x + object.width - 10}
+                    y={pos.y + 10}
+                    radius={Math.max(5, 7 / viewport.zoom)}
+                    fill={COLORS.accent}
+                    stroke="#fff"
+                    strokeWidth={1 / viewport.zoom}
+                  />
+                )
+              })}
+            {!exportCapture &&
+              visible
+                .filter(
+                  (object) =>
+                    object.type === 'connection' &&
+                    selection.size === 1 &&
+                    selection.has(object.id) &&
+                    !object.locked
+                )
+                .map((object) => (
+                  <ConnectionHandles
+                    key={`${object.id}-handles`}
+                    object={object}
+                    zoom={viewport.zoom}
+                  />
+                ))}
+            {connectPreview && (
+              <Line
+                points={[
+                  connectPreview.start.x,
+                  connectPreview.start.y,
+                  connectPreview.end.x,
+                  connectPreview.end.y
+                ]}
+                stroke={COLORS.accent}
+                strokeWidth={2 / Math.max(viewport.zoom, 0.05)}
+                dash={[8 / viewport.zoom, 6 / viewport.zoom]}
+                listening={false}
+              />
+            )}
+            {!exportCapture && (
+              <Transformer
+                ref={transformer}
+                rotateEnabled={rotateEnabled}
+                // Shift while rotating snaps to 15° steps (built into Konva). With keepRatio on,
+                // Shift can't unlock the proportions.
+                keepRatio={keepRatio}
+                enabledAnchors={keepRatio ? CORNER_ANCHORS : widthOnly ? SIDE_ANCHORS : ALL_ANCHORS}
+                flipEnabled={false}
+                ignoreStroke
+                borderStroke={COLORS.accent}
+                anchorStroke={COLORS.accent}
+                anchorSize={9}
+                anchorCornerRadius={2}
+                rotateAnchorOffset={24}
+                boundBoxFunc={(oldBox, newBox) =>
+                  // Proportional boxes only need their longest side to stay usable, so thin
+                  // images (banners, strips) can still be resized.
+                  (
+                    keepRatio
+                      ? Math.max(newBox.width, newBox.height) < MIN_RESIZE
+                      : // A side may stay as small as it already is (a one-line note seen
+                        // zoomed out), it just can't be made smaller than the minimum.
+                        (newBox.width < minWidth && newBox.width < oldBox.width) ||
+                        (newBox.height < MIN_RESIZE && newBox.height < oldBox.height)
+                  )
+                    ? oldBox
+                    : newBox
+                }
+                onTransform={onTransform}
+                onTransformEnd={onTransformEnd}
+              />
+            )}
           </Layer>
           <Layer listening={false}>
             {/* Selection outlines for locked items (they get no resize handles). */}

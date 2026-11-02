@@ -7,6 +7,12 @@ import type { ProjectDb } from '../db/client'
 import { cropOf } from '@shared/crop'
 import { stackSettings } from '@shared/stacks'
 import { assets, boardObjects, boards, stackSlides } from '../db/schema'
+import {
+  commentIdsMovingWith,
+  detachFromTargets,
+  reattachTargets,
+  remapCopiedData
+} from './relationRepair'
 import { cloneStackSlides } from './stacks'
 import { attachPreviews, toAssetInfo } from './assets'
 import { deletionTime, remap, toCanvasObject, type BoardRepository } from './boards'
@@ -150,6 +156,10 @@ export class ObjectRepository {
             .run()
         }
       }
+      detachFromTargets(
+        tx,
+        rows.map((row) => row.id)
+      )
     })
   }
 
@@ -172,6 +182,10 @@ export class ObjectRepository {
             .run()
         }
       }
+      reattachTargets(
+        tx,
+        rows.map((row) => row.id)
+      )
     })
   }
 
@@ -182,7 +196,8 @@ export class ObjectRepository {
    */
   moveToBoard(ids: string[], targetBoardId: string, at?: Point): void {
     this.boards.require(targetBoardId)
-    const rows = this.rows(ids, { includeDeleted: false })
+    const withComments = [...new Set([...ids, ...commentIdsMovingWith(this.db, ids)])]
+    const rows = this.rows(withComments, { includeDeleted: false })
     if (rows.length === 0) return
     const origin = at ?? this.boards.placementBelowContent(targetBoardId)
     const left = Math.min(...rows.map((r) => r.x))
@@ -208,6 +223,12 @@ export class ObjectRepository {
             .run()
         }
       }
+      const leaving = rows.filter((row) => row.boardId !== targetBoardId).map((row) => row.id)
+      detachFromTargets(
+        tx,
+        leaving,
+        rows.map((row) => row.id)
+      )
     })
   }
 
@@ -253,9 +274,13 @@ export class ObjectRepository {
             })
             .run()
           newIds.set(row.id, id)
-          if (row.type === 'stack') cloneStackSlides(this.db, row.id, id)
+          if (row.type === 'stack') {
+            for (const [fromSlide, toSlide] of cloneStackSlides(this.db, row.id, id))
+              newIds.set(fromSlide, toSlide)
+          }
         }
       }
+      remapCopiedData(tx, newIds, false)
     })
     return ids.filter((id) => newIds.has(id)).map((id) => newIds.get(id)!)
   }

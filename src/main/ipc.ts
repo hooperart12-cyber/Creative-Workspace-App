@@ -22,6 +22,8 @@ import { deleteRecoveryPoint, verifyPoint } from './project/backup'
 import { removeDraft, takeDrafts, writeDraft, type NoteDraft } from './project/journal'
 import { withProjectLock } from './project/lock'
 import { NoteLeases } from './project/noteLeases'
+import { exportBoardPackage, importBoardPackage } from './project/boardPackage'
+import { writeBoardPicture } from './project/boardPicture'
 import { exportProjectZip, importProjectZip } from './project/projectZip'
 import { restoreProject } from './project/restore'
 import type { Project } from './project/project'
@@ -105,7 +107,22 @@ const SAVE_CHANNELS = new Set<string>([
   'tags:purge',
   'tags:merge',
   'tags:promote',
-  'tags:visibility'
+  'tags:visibility',
+  'relations:createConnection',
+  'relations:updateConnection',
+  'relations:createLink',
+  'relations:updateLink',
+  'relations:setObjectLink',
+  'relations:createComment',
+  'relations:updateComment',
+  'relations:addReply',
+  'relations:editReply',
+  'relations:deleteReply',
+  'relations:setBoardView',
+  'relations:repair',
+  'relations:restore',
+  'relations:fetchPreview',
+  'board:importPackage'
 ])
 
 function handle<C extends IpcChannel>(channel: C, handler: Handler<C>): void {
@@ -242,7 +259,8 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
 
   handle('board:get', (event, id) => {
     const project = requireProject(event)
-    return project.tags.decorateBoard(project.stacks.attach(project.boards.get(id)))
+    const board = project.tags.decorateBoard(project.stacks.attach(project.boards.get(id)))
+    return { ...board, objects: project.relations.decorate(board.objects) }
   })
 
   handle('board:create', (event, input) => {
@@ -810,8 +828,95 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
   })
 
   handle('links:open', async (_event, url) => {
-    if (!isSafeLink(url)) throw new Error('Only web and email links can be opened.')
+    if (!isSafeLink(url) || url.startsWith('cw:'))
+      throw new Error('Only web and email links can be opened.')
     await shell.openExternal(url)
+  })
+
+  handle('relations:createConnection', (event, boardId, data) => {
+    const project = requireProject(event)
+    const created = project.relations.createConnection(boardId, data.start, data.end, data)
+    broadcastContent(project)
+    return created
+  })
+  handle('relations:updateConnection', (event, id, baseRevision, data) => {
+    const project = requireProject(event)
+    const saved = project.relations.updateConnection(id, baseRevision, data)
+    broadcastContent(project)
+    return saved
+  })
+  handle('relations:createLink', (event, boardId, at, data) => {
+    const project = requireProject(event)
+    const created = project.relations.createLink(boardId, at, data)
+    broadcastContent(project)
+    return created
+  })
+  handle('relations:updateLink', (event, id, baseRevision, data) => {
+    const project = requireProject(event)
+    const saved = project.relations.updateLink(id, baseRevision, data)
+    broadcastContent(project)
+    return saved
+  })
+  handle('relations:setObjectLink', (event, id, baseRevision, destination) => {
+    const project = requireProject(event)
+    const saved = project.relations.setObjectLink(id, baseRevision, destination)
+    broadcastContent(project)
+    return saved
+  })
+  handle('relations:createComment', (event, boardId, at, data, body) => {
+    const project = requireProject(event)
+    const created = project.relations.createComment(boardId, at, data, body)
+    broadcastContent(project)
+    return created
+  })
+  handle('relations:updateComment', (event, id, baseRevision, data) => {
+    const project = requireProject(event)
+    const saved = project.relations.updateComment(id, baseRevision, data)
+    broadcastContent(project)
+    return saved
+  })
+  handle('relations:addReply', (event, id, baseRevision, body) => {
+    const project = requireProject(event)
+    const saved = project.relations.addReply(id, baseRevision, body)
+    broadcastContent(project)
+    return saved
+  })
+  handle('relations:editReply', (event, commentId, messageId, baseRevision, body) => {
+    const project = requireProject(event)
+    const saved = project.relations.editReply(commentId, messageId, baseRevision, body)
+    broadcastContent(project)
+    return saved
+  })
+  handle('relations:deleteReply', (event, commentId, messageId, baseRevision) => {
+    const project = requireProject(event)
+    const saved = project.relations.deleteReply(commentId, messageId, baseRevision)
+    broadcastContent(project)
+    return saved
+  })
+  handle('relations:setBoardView', (event, boardId, patch) => {
+    const project = requireProject(event)
+    project.relations.setBoardView(boardId, patch)
+    broadcastContent(project)
+  })
+  handle('relations:integrity', (event) => requireProject(event).relations.integrity())
+  handle('relations:repair', (event, id, action) => {
+    const project = requireProject(event)
+    const saved = project.relations.repair(id, action)
+    broadcastContent(project)
+    return saved
+  })
+  handle('relations:restore', (event, id, baseRevision, data, linkedBoardId) => {
+    const project = requireProject(event)
+    const saved = project.relations.restore(id, baseRevision, data, linkedBoardId)
+    broadcastContent(project)
+    return saved
+  })
+  handle('relations:fetchPreview', async (event, id, baseRevision) => {
+    const project = requireProject(event)
+    const { fetchLinkPreview } = await import('./project/linkPreview')
+    const saved = await fetchLinkPreview(project, id, baseRevision)
+    broadcastContent(project)
+    return saved
   })
 
   handle('window:flushed', (event) => {
@@ -863,6 +968,24 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
       exportProjectZip({ sqlite: project.connection, projectPath: project.path, destination })
     )
   })
+  handle('board:exportPackage', async (event, boardId, destination, includeComments) => {
+    const project = requireProject(event)
+    await exportBoardPackage({ project, boardId, destination, includeComments })
+  })
+  handle('board:importPackage', async (event, zipPath, parentBoardId) => {
+    const project = requireProject(event)
+    const saved = await importBoardPackage({ project, zipPath, parentBoardId })
+    broadcastContent(project)
+    return saved
+  })
+  handle('board:writePicture', async (event, pngBase64, destination, format) => {
+    requireProject(event)
+    await writeBoardPicture({
+      png: Buffer.from(pngBase64, 'base64'),
+      destination,
+      format
+    })
+  })
   handle('project:importZip', async (_event, zipPath, parentDir, name) =>
     importProjectZip({
       zipPath,
@@ -887,6 +1010,35 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
     const result = await dialog.showOpenDialog(window, {
       title: 'Import a project archive',
       filters: [{ name: 'Zip archive', extensions: ['zip'] }],
+      properties: ['openFile']
+    })
+    return result.canceled ? null : (result.filePaths[0] ?? null)
+  })
+  handle('dialog:pickSavePicture', async (event, format) => {
+    const window = BrowserWindow.fromWebContents(event.sender)!
+    const result = await dialog.showSaveDialog(window, {
+      title: format === 'pdf' ? 'Export PDF' : 'Export PNG',
+      filters: [
+        format === 'pdf'
+          ? { name: 'PDF', extensions: ['pdf'] }
+          : { name: 'PNG', extensions: ['png'] }
+      ]
+    })
+    return result.canceled ? null : (result.filePath ?? null)
+  })
+  handle('dialog:pickSaveBoardPackage', async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)!
+    const result = await dialog.showSaveDialog(window, {
+      title: 'Export board package',
+      filters: [{ name: 'Board package', extensions: ['zip'] }]
+    })
+    return result.canceled ? null : (result.filePath ?? null)
+  })
+  handle('dialog:pickBoardPackage', async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)!
+    const result = await dialog.showOpenDialog(window, {
+      title: 'Import a board package',
+      filters: [{ name: 'Board package', extensions: ['zip'] }],
       properties: ['openFile']
     })
     return result.canceled ? null : (result.filePaths[0] ?? null)

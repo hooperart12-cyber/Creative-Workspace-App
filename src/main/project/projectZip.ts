@@ -117,7 +117,7 @@ export async function importProjectZip(input: {
   }
 }
 
-function safeRelative(value: string): string | null {
+export function safeRelative(value: string): string | null {
   if (value.includes('\0')) return null
   const normalized = value.replace(/\\/g, '/')
   if (normalized.startsWith('/') || /^[a-zA-Z]:/.test(normalized)) return null
@@ -126,7 +126,7 @@ function safeRelative(value: string): string | null {
   return parts.join('/')
 }
 
-function extractZip(zipPath: string, destination: string): Promise<void> {
+export function extractZip(zipPath: string, destination: string): Promise<void> {
   return new Promise((resolveZip, reject) => {
     yauzl.open(zipPath, { lazyEntries: true, autoClose: true }, (error, zip) => {
       if (error || !zip) {

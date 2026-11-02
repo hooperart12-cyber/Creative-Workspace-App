@@ -8,6 +8,7 @@ import { createNote } from '../notes/noteActions'
 import { useNoteStore } from '../notes/noteStore'
 import type { TagVisibility } from '@shared/types'
 import { reportError } from '../store/projectStore'
+import { openIntegrity } from '../relations/relationActions'
 
 const toolButton =
   'flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-canvas hover:text-ink disabled:opacity-30 aria-pressed:bg-accent/10 aria-pressed:text-accent'
@@ -21,6 +22,10 @@ export function CanvasToolbar() {
   useCanvasStore((s) => s.historyVersion) // re-render when undo/redo availability changes
   const editingText = useNoteStore((s) => s.editing !== null)
   const board = useWorkspaceStore((s) => s.board)
+  const tool = useCanvasStore((s) => s.tool)
+  const showProperties = useCanvasStore((s) => s.showProperties)
+  const showComments = useCanvasStore((s) => s.showComments)
+  const showIntegrity = useCanvasStore((s) => s.showIntegrity)
 
   return (
     <div
@@ -81,6 +86,57 @@ export function CanvasToolbar() {
       >
         <FileIcon />
         File
+      </button>
+      <button
+        className={toolButton}
+        aria-pressed={tool === 'connect'}
+        onClick={() =>
+          useCanvasStore.getState().setTool(tool === 'connect' ? 'select' : 'connect', false)
+        }
+        title="Connection (L). Shift+L keeps the tool on."
+        aria-label="Connection tool"
+      >
+        ↗
+      </button>
+      <button
+        className={toolButton}
+        aria-pressed={tool === 'comment'}
+        onClick={() =>
+          useCanvasStore.getState().setTool(tool === 'comment' ? 'select' : 'comment', false)
+        }
+        title="Comment (C)"
+        aria-label="Comment tool"
+      >
+        C
+      </button>
+      <button
+        className={toolButton}
+        aria-pressed={showProperties}
+        onClick={() => useCanvasStore.getState().setShowProperties(!showProperties)}
+        title="Properties"
+        aria-label="Properties"
+      >
+        P
+      </button>
+      <button
+        className={toolButton}
+        aria-pressed={showComments}
+        onClick={() => useCanvasStore.getState().setShowComments(!showComments)}
+        title="Comments"
+        aria-label="Comments"
+      >
+        K
+      </button>
+      <button
+        className={toolButton}
+        aria-pressed={showIntegrity}
+        onClick={() =>
+          showIntegrity ? useCanvasStore.getState().setShowIntegrity(false) : void openIntegrity()
+        }
+        title="Project integrity"
+        aria-label="Project integrity"
+      >
+        I
       </button>
       <Divider />
       <button
