@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { parseComment } from '@shared/comments'
 import { connectionPoints, labelPosition, parseConnection, swapMarkers } from '@shared/connections'
-import type { Destination } from '@shared/destinations'
+import { parseDestination, type Destination } from '@shared/destinations'
 import { visibleInView } from '@shared/comments'
 import { useCanvasStore } from '../store/canvasStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
@@ -13,11 +13,18 @@ import {
   replyToComment,
   saveComment,
   setBoardView,
-  updateConnection
+  updateConnection,
+  updateLinkCard,
+  attachObjectLink,
+  createLink
 } from './relationActions'
 import { IntegrityPanel } from './IntegrityPanel'
 import { navigateTo } from './navigate'
 import { fitViewport, objectBounds, worldToScreen } from '../canvas/geometry'
+import { exportPackage, exportPicture, importPackage } from '../canvas/exportBoard'
+import type { ExportVisibility } from '@shared/boardExport'
+import type { CanvasObject } from '@shared/types'
+import { reportError } from '../store/projectStore'
 
 export function RelationPanels() {
   const showProperties = useCanvasStore((s) => s.showProperties)
@@ -28,6 +35,8 @@ export function RelationPanels() {
       {showComments && <CommentsPanel />}
       <IntegrityPanel />
       <CommentComposer />
+      <BoardShareDialog />
+      <UrlDropDialog />
     </>
   )
 }
@@ -316,6 +325,7 @@ function PropertiesPanel() {
           )}
         </div>
       )}
+      {object?.type === 'link' && <LinkProperties object={object} />}
       {board && (
         <div className="mt-3 space-y-2 border-t border-line pt-3">
           <label className="block">
@@ -638,6 +648,186 @@ export function LineChooser() {
           </button>
         )
       })}
+    </div>
+  )
+}
+
+function LinkProperties({ object }: { object: CanvasObject }) {
+  const data = object.data
+  const destination = parseDestination(data.destination)
+  const layout = data.layout === 'preview' ? 'preview' : 'compact'
+  return (
+    <div className="mt-3 space-y-2 border-t border-line pt-3">
+      <label className="block">
+        Card
+        <select
+          aria-label="Link card layout"
+          className="mt-1 w-full rounded border border-line bg-canvas px-2 py-1"
+          value={layout}
+          onChange={(event) =>
+            void updateLinkCard(object, { ...data, layout: event.target.value }, 'Link layout')
+          }
+        >
+          <option value="compact">Compact</option>
+          <option value="preview">Preview</option>
+        </select>
+      </label>
+      {destination?.kind === 'url' && (
+        <button
+          type="button"
+          className="rounded border border-line px-2 py-1"
+          onClick={() =>
+            void window.api
+              .invoke('relations:fetchPreview', object.id, object.revision)
+              .catch(reportError)
+          }
+        >
+          Generate preview
+        </button>
+      )}
+    </div>
+  )
+}
+
+function BoardShareDialog() {
+  const open = useCanvasStore((s) => s.shareDialog)
+  const [connections, setConnections] = useState<ExportVisibility>('current')
+  const [comments, setComments] = useState<ExportVisibility>('current')
+  const [includeComments, setIncludeComments] = useState(false)
+  if (!open) return null
+  const close = () => useCanvasStore.getState().setShareDialog(false)
+  return (
+    <div className="absolute inset-0 z-30 flex items-start justify-center bg-black/20 pt-16">
+      <form
+        aria-label="Export board"
+        className="w-96 rounded-xl border border-line bg-surface p-4 text-sm shadow-lg"
+        onSubmit={(event) => event.preventDefault()}
+      >
+        <h2 className="font-medium">Export this board</h2>
+        <p className="mt-1 text-xs text-muted">
+          A picture uses the choices below. A package keeps the board editable. Comments are left
+          out of a package unless you include them.
+        </p>
+        <label className="mt-3 block">
+          Connections in the picture
+          <select
+            aria-label="Picture connections"
+            className="mt-1 w-full rounded border border-line bg-canvas px-2 py-1"
+            value={connections}
+            onChange={(event) => setConnections(event.target.value as ExportVisibility)}
+          >
+            <option value="current">As shown</option>
+            <option value="show">Show</option>
+            <option value="hide">Hide</option>
+          </select>
+        </label>
+        <label className="mt-2 block">
+          Comments in the picture
+          <select
+            aria-label="Picture comments"
+            className="mt-1 w-full rounded border border-line bg-canvas px-2 py-1"
+            value={comments}
+            onChange={(event) => setComments(event.target.value as ExportVisibility)}
+          >
+            <option value="current">As shown</option>
+            <option value="show">Show</option>
+            <option value="hide">Hide</option>
+          </select>
+        </label>
+        <label className="mt-3 flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={includeComments}
+            onChange={(event) => setIncludeComments(event.target.checked)}
+          />
+          Include comments and replies
+        </label>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="rounded border border-line px-2 py-1"
+            onClick={() => {
+              close()
+              void exportPicture('png', { connections, comments })
+            }}
+          >
+            PNG
+          </button>
+          <button
+            type="button"
+            className="rounded border border-line px-2 py-1"
+            onClick={() => {
+              close()
+              void exportPicture('pdf', { connections, comments })
+            }}
+          >
+            PDF
+          </button>
+          <button
+            type="button"
+            className="rounded border border-line px-2 py-1"
+            onClick={() => {
+              close()
+              void exportPackage(includeComments)
+            }}
+          >
+            Board package
+          </button>
+          <button
+            type="button"
+            className="rounded border border-line px-2 py-1"
+            onClick={() => {
+              close()
+              void importPackage()
+            }}
+          >
+            Import package
+          </button>
+          <button type="button" className="px-2 py-1 text-muted" onClick={close}>
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+function UrlDropDialog() {
+  const drop = useCanvasStore((s) => s.urlDrop)
+  const board = useWorkspaceStore((s) => s.board)
+  if (!drop) return null
+  const target = board?.objects.find((object) => object.id === drop.targetId)
+  const close = () => useCanvasStore.getState().setUrlDrop(null)
+  return (
+    <div className="absolute top-16 left-1/2 z-30 w-80 -translate-x-1/2 rounded-xl border border-line bg-surface p-3 text-sm shadow-lg">
+      <p className="font-medium">This link was dropped on a card</p>
+      <p className="mt-1 truncate text-xs text-muted">{drop.href}</p>
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          className="rounded border border-line px-2 py-1"
+          disabled={!target}
+          onClick={() => {
+            if (target) void attachObjectLink(target, { kind: 'url', href: drop.href })
+            close()
+          }}
+        >
+          Attach
+        </button>
+        <button
+          type="button"
+          className="rounded border border-line px-2 py-1"
+          onClick={() => {
+            void createLink(drop.at, { kind: 'url', href: drop.href }, '')
+            close()
+          }}
+        >
+          Create card
+        </button>
+        <button type="button" className="px-2 py-1 text-muted" onClick={close}>
+          Cancel
+        </button>
+      </div>
     </div>
   )
 }

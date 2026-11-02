@@ -134,6 +134,13 @@ export function commands(): AppCommand[] {
       run: () => useCanvasStore.getState().setShowProperties(true)
     },
     {
+      id: 'export-board',
+      title: 'Export this board',
+      group: 'Canvas',
+      when: () => workspace.surface === 'canvas',
+      run: () => useCanvasStore.getState().setShareDialog(true)
+    },
+    {
       id: 'integrity',
       title: 'Project integrity',
       group: 'Canvas',

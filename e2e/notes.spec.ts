@@ -329,7 +329,8 @@ test('mixed text and paragraph formatting, safe links, drawn on the canvas', asy
   // "bold": select the word, Ctrl+B.
   await textArea().getByText('Some bold words').click()
   await moveCursor(['End', ...times(' words'.length, 'ArrowLeft'), ...times(4, 'Shift+ArrowLeft')])
-  await page.keyboard.press('ControlOrMeta+b')
+  // The toolbar, not Cmd/Ctrl+B: on macOS the key can be taken by the window menu.
+  await toolbar.getByRole('button', { name: 'Bold' }).click()
   // "words": highlight, bigger, coloured.
   await moveCursor(['End', ...times('words'.length, 'Shift+ArrowLeft')])
   await toolbar.getByRole('button', { name: 'Highlight' }).click()

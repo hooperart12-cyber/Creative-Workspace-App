@@ -342,10 +342,20 @@ export interface IpcRequests {
   }
   'relations:repair': {
     args: [id: string, action: 'keep' | 'reattach' | 'clear']
-    result: { type: string; revision: number; before: Record<string, unknown> }
+    result: {
+      type: string
+      revision: number
+      before: Record<string, unknown>
+      previousLink: string | null
+    }
   }
   'relations:restore': {
-    args: [id: string, baseRevision: number, data: Record<string, unknown>]
+    args: [
+      id: string,
+      baseRevision: number,
+      data: Record<string, unknown>,
+      linkedBoardId?: string | null
+    ]
     result: { revision: number }
   }
   'relations:fetchPreview': {
@@ -366,8 +376,23 @@ export interface IpcRequests {
   'backup:saveSettings': { args: [patch: Partial<BackupSettings>]; result: BackupSettings }
   'project:exportZip': { args: [destination: string]; result: void }
   'project:importZip': { args: [zipPath: string, parentDir: string, name: string]; result: string }
+  'board:exportPackage': {
+    args: [boardId: string, destination: string, includeComments: boolean]
+    result: void
+  }
+  'board:importPackage': {
+    args: [zipPath: string, parentBoardId: string]
+    result: { boardId: string }
+  }
+  'board:writePicture': {
+    args: [pngBase64: string, destination: string, format: 'png' | 'pdf']
+    result: void
+  }
   'dialog:pickSaveZip': { args: []; result: string | null }
   'dialog:pickZip': { args: []; result: string | null }
+  'dialog:pickSavePicture': { args: [format: 'png' | 'pdf']; result: string | null }
+  'dialog:pickSaveBoardPackage': { args: []; result: string | null }
+  'dialog:pickBoardPackage': { args: []; result: string | null }
   'search:query': { args: [request: SearchRequest]; result: SearchPage }
   'search:appearances': { args: [assetId: string]; result: BoardAppearance[] }
   'search:rebuild': { args: []; result: void }
@@ -582,8 +607,14 @@ export const IPC_CHANNELS = [
   'backup:saveSettings',
   'project:exportZip',
   'project:importZip',
+  'board:exportPackage',
+  'board:importPackage',
+  'board:writePicture',
   'dialog:pickSaveZip',
   'dialog:pickZip',
+  'dialog:pickSavePicture',
+  'dialog:pickSaveBoardPackage',
+  'dialog:pickBoardPackage',
   'search:query',
   'search:appearances',
   'search:rebuild',

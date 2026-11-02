@@ -13,8 +13,8 @@ Object-attached navigation is `data.navLink`. Note links use a `cw:` destination
 
 1. Shared geometry, destinations, anchors, and identity remapping, with unit tests. Landed.
 2. Migration `0007`, repositories, search, copy/move/delete repair, revision checks. Landed.
-3. Canvas tools, connection editing, link cards, comments, panels, and navigation. Create, attach on release, endpoint drag (Alt pin, Shift group), curve and elbow handles, labels, bridge and gap drawing, style copy, comments, destination picker, object links, note links, slide-comment transfer, and the integrity panel.
-4. Export/import, integrity, performance limits, Playwright, docs, and the stacked PR. Not started, except the docs that describe the current gap.
+3. Canvas tools, connection editing, link cards, comments, panels, and navigation. Landed. Create, attach on release, endpoint drag (Alt pin, Shift group), curve and elbow handles, labels, bridge and gap drawing, style copy, comments, destination picker, object links, note links, slide-comment transfer, and the integrity panel.
+4. Picture export (PNG and PDF), one-board package with comments off unless asked, integrity repair, and the stacked PR. Playwright covers connection ends, bends, labels, and overlapping lines. It does not drive the save dialog. A hand install of the Windows installer is still not done.
 
 ## Boundaries kept
 

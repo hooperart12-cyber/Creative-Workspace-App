@@ -608,4 +608,6 @@ MyProject.cwproj/
 **Consequences.**
 
 - M8 is stacked on `feat/m7-image-stacks`. M6 and M7 stay unmerged.
+- A picture export draws the current board through the canvas layer, without selection handles. PNG is that bitmap. PDF is one page of the same bitmap, shaped to the artwork. Hidden connections and comments stay hidden unless the export dialog asks to show them.
+- A board package is one board, its objects, the files those objects use, and its tags. Comments and replies are included only when that box is checked. A destination outside the board keeps its id and title. Import creates a new board and new object ids. It reuses a stored file only when the checksum matches. It does not match a missing target by name.
 - Older test databases that stop before tags must also stop before `0007`, because Drizzle skips a migration whose timestamp is older than the newest one already applied.

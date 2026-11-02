@@ -102,8 +102,13 @@ export class BoardRepository {
       const object = toCanvasObject(objectRow)
       if (object.type === 'board') {
         const linked = object.linkedBoardId ? this.find(object.linkedBoardId) : undefined
-        if (!linked) continue // card whose board is gone; never shown
-        object.board = { title: linked.title, childBoardCount: this.childCount(linked.id) }
+        if (linked) {
+          object.board = { title: linked.title, childBoardCount: this.childCount(linked.id) }
+        } else if (object.data.unavailableBoardId) {
+          object.board = { title: 'Missing board', childBoardCount: 0 }
+        } else {
+          continue
+        }
       }
       if (object.assetId) {
         const asset = assetsById.get(object.assetId)

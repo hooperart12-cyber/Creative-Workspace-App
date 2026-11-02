@@ -409,4 +409,53 @@ describe('connection geometry', () => {
     expect(released.attachment?.id).toBe('group-1')
     expect(released.x).toBe(3)
   })
+
+  it('finds one crossing among many separated lines', () => {
+    const items = Array.from({ length: 60 }, (_, index) => ({
+      id: `line-${index}`,
+      zIndex: index,
+      points: [
+        { x: index * 30, y: 0 },
+        { x: index * 30 + 10, y: 0 }
+      ]
+    }))
+    items.push(
+      {
+        id: 'low',
+        zIndex: 1,
+        points: [
+          { x: 0, y: 400 },
+          { x: 40, y: 400 }
+        ]
+      },
+      {
+        id: 'high',
+        zIndex: 2,
+        points: [
+          { x: 20, y: 380 },
+          { x: 20, y: 420 }
+        ]
+      }
+    )
+    const hits = findCrossings(items)
+    expect(hits).toHaveLength(1)
+    expect(hits[0].above).toBe('high')
+    const started = performance.now()
+    const crowd = Array.from({ length: 1000 }, (_, index) => ({
+      id: `c-${index}`,
+      zIndex: index,
+      points: [
+        { x: (index % 40) * 50, y: Math.floor(index / 40) * 40 },
+        { x: (index % 40) * 50 + 20, y: Math.floor(index / 40) * 40 }
+      ]
+    }))
+    findCrossings(crowd)
+    const crossingsMs = performance.now() - started
+    const hitStarted = performance.now()
+    const picked = hitsAt({ x: 10, y: 0 }, crowd, 8)
+    const hitMs = performance.now() - hitStarted
+    expect(picked[0]?.id).toBe('c-0')
+    expect(crossingsMs).toBeLessThan(500)
+    expect(hitMs).toBeLessThan(100)
+  })
 })

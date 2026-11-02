@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { ExportCapture } from '@shared/boardExport'
 import type { ConnectionData } from '@shared/connections'
 import type { Point, Viewport } from '@shared/types'
 import type { Guide } from '../canvas/arrange'
@@ -94,6 +95,11 @@ interface CanvasState {
   connectionDraft: { id: string; data: ConnectionData } | null
   labelEdit: string | null
   lineChoices: { ids: string[]; x: number; y: number } | null
+  /** Set while a picture is being drawn, so chrome and culling stay out of the file. */
+  exportCapture: ExportCapture | null
+  shareDialog: boolean
+  /** A public URL dropped on the canvas. targetId is the card under the pointer. */
+  urlDrop: { href: string; at: Point; targetId: string | null } | null
 
   setViewport: (viewport: Viewport) => void
   setViewSize: (size: Size) => void
@@ -130,6 +136,9 @@ interface CanvasState {
   setConnectionDraft: (draft: CanvasState['connectionDraft']) => void
   setLabelEdit: (id: string | null) => void
   setLineChoices: (choices: CanvasState['lineChoices']) => void
+  setExportCapture: (capture: ExportCapture | null) => void
+  setShareDialog: (open: boolean) => void
+  setUrlDrop: (drop: CanvasState['urlDrop']) => void
 }
 
 const PREFS_KEY = 'cw.canvasPrefs'
@@ -190,6 +199,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   connectionDraft: null,
   labelEdit: null,
   lineChoices: null,
+  exportCapture: null,
+  shareDialog: false,
+  urlDrop: null,
 
   setViewport: (viewport) => set({ viewport }),
   setViewSize: (viewSize) => set({ viewSize }),
@@ -243,5 +255,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   setLinkTarget: (linkTarget) => set({ linkTarget, destinationPicker: linkTarget != null }),
   setConnectionDraft: (connectionDraft) => set({ connectionDraft }),
   setLabelEdit: (labelEdit) => set({ labelEdit }),
-  setLineChoices: (lineChoices) => set({ lineChoices })
+  setLineChoices: (lineChoices) => set({ lineChoices }),
+  setExportCapture: (exportCapture) => set({ exportCapture }),
+  setShareDialog: (shareDialog) => set({ shareDialog }),
+  setUrlDrop: (urlDrop) => set({ urlDrop })
 }))

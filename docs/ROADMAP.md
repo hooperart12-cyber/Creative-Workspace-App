@@ -129,7 +129,7 @@ M3 is built in three parts, each with its own branch and PR.
 ---
 
 ## M8 — Connections, links, and comments (§4, §5, §9, §12) 🚧
-Started on `feat/m8-connections-links-comments` (ADR-020). M6 and M7 stay unmerged. Boxes below are unchecked until that part is usable end to end.
+On `feat/m8-connections-links-comments` ([PR #13](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/13) → `feat/m7-image-stacks`, ADR-020). M6 and M7 stay unmerged. Boxes below stay unchecked until a hand pass of `docs/TESTING.md` confirms that part. Picture export, one-board packages, and Project integrity are in the branch. The Windows installer has not been installed by hand.
 
 - [ ] Connections: attach, pin, path styles, markers, labels, routing, crossings, and zoom display
 - [ ] Internal links to a board, object, PDF page, stack, exact slide, or saved view

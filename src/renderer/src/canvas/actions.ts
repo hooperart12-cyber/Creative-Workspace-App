@@ -490,12 +490,15 @@ async function importThenPlace(
     reportError(error)
     return false
   }
-  if (result && result.imported.length > 0) {
-    const imported = result
-    await run(() => placeImported(imported, boardId, center, avoidOverlap))
-    return true
+  if (!result) return false
+  // A file the tool refused (a PDF on the image tool, a remote link) still needs the notice.
+  // There is nothing to put on the board, so this is not an undo step.
+  if (result.imported.length === 0) {
+    reportSkipped(result)
+    return false
   }
-  return false
+  await run(() => placeImported(result, boardId, center, avoidOverlap))
+  return true
 }
 
 /** Imports in progress; "Importing…" stays up until the last one finishes. */

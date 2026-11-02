@@ -414,7 +414,8 @@ export function repairIssue(id: string, action: 'keep' | 'reattach' | 'clear'): 
           'relations:restore',
           id,
           current?.revision ?? saved.revision,
-          saved.before
+          saved.before,
+          saved.type === 'board' ? saved.previousLink : undefined
         )
       },
       redo: async () => {

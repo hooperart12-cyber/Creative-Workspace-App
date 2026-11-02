@@ -1,10 +1,12 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { defaultComment } from '@shared/comments'
 import { defaultConnection } from '@shared/connections'
 import { parseConnection } from '@shared/connections'
+import { boardObjects } from '../db/schema'
 import { Project } from './project'
 import { RELATION_CONFLICT } from './relations'
 
@@ -155,5 +157,27 @@ describe('relations', () => {
     expect(project.boards.get(other).objects.some((object) => object.id === connection.id)).toBe(
       false
     )
+  })
+
+  it('leaves an unreadable connection in place and keeps the other objects', () => {
+    const board = project.mainBoardId
+    const note = project.notes.create({ boardId: board, at: { x: 12, y: 12 } })
+    const created = project.relations.createConnection(board, { x: 0, y: 0 }, { x: 40, y: 40 })
+    const broken = { version: 9, kept: 'original' }
+    project.db
+      .update(boardObjects)
+      .set({ data: broken })
+      .where(eq(boardObjects.id, created.id))
+      .run()
+    const objects = project.boards.get(board).objects
+    expect(objects.some((object) => object.id === note.id)).toBe(true)
+    expect(objects.find((object) => object.id === created.id)?.data).toEqual(broken)
+    expect(project.relations.integrity().some((issue) => issue.id === created.id)).toBe(false)
+    expect(() => project.relations.repair(created.id, 'clear')).toThrow(
+      'That connection could not be read.'
+    )
+    expect(
+      project.db.select().from(boardObjects).where(eq(boardObjects.id, created.id)).get()?.data
+    ).toEqual(broken)
   })
 })

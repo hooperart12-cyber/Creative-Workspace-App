@@ -73,6 +73,14 @@ export type ImageState =
   | { status: 'failed' }
   | { status: 'ready'; image: HTMLImageElement }
 
+/** Resolves when every image currently on screen has finished decoding. */
+export function waitForShownImages(): Promise<void> {
+  const pending = [...cache.values()]
+    .filter((entry) => entry.users > 0 && entry.status === 'loading')
+    .map((entry) => entry.ready)
+  return Promise.all(pending).then(() => undefined)
+}
+
 /** Loads and decodes an image for drawing on the canvas; shared between everything showing it. */
 export function useImage(url: string | undefined): ImageState {
   const [, rerender] = useReducer((n: number) => n + 1, 0)

@@ -350,6 +350,21 @@ export class RelationRepository {
         .all()
         .map((row) => row.id)
     )
+    const boardIds = new Set(
+      this.db
+        .select({ id: boards.id })
+        .from(boards)
+        .where(isNull(boards.deletedAt))
+        .all()
+        .map((row) => row.id)
+    )
+    const slideIds = new Set(
+      this.db
+        .select({ id: stackSlides.id })
+        .from(stackSlides)
+        .all()
+        .map((row) => row.id)
+    )
     const issues: { kind: string; id: string; boardId: string; detail: string }[] = []
     for (const row of rows) {
       const data = row.data ?? {}
@@ -377,14 +392,25 @@ export class RelationRepository {
       }
       if (row.type === 'link' && data.referenceHeld !== true) {
         const destination = parseDestination(data.destination)
-        const objectId = destination && 'objectId' in destination ? destination.objectId : null
-        if (objectId && !ids.has(objectId))
+        if (destination && destinationMissing(destination, ids, boardIds, slideIds))
           issues.push({
             kind: 'link',
             id: row.id,
             boardId: row.boardId,
             detail: 'Destination missing.'
           })
+      }
+      if (
+        row.type === 'board' &&
+        typeof data.unavailableBoardId === 'string' &&
+        data.boardReferenceHeld !== true
+      ) {
+        issues.push({
+          kind: 'board',
+          id: row.id,
+          boardId: row.boardId,
+          detail: 'Linked board is not in this project.'
+        })
       }
     }
     return issues
@@ -393,9 +419,19 @@ export class RelationRepository {
   repair(
     id: string,
     action: 'keep' | 'reattach' | 'clear'
-  ): { type: string; revision: number; before: Record<string, unknown> } {
+  ): {
+    type: string
+    revision: number
+    before: Record<string, unknown>
+    previousLink: string | null
+  } {
     const row = this.requireRow(id)
-    if (row.type !== 'connection' && row.type !== 'comment' && row.type !== 'link') {
+    if (
+      row.type !== 'connection' &&
+      row.type !== 'comment' &&
+      row.type !== 'link' &&
+      row.type !== 'board'
+    ) {
       throw new Error('That item has no reference to repair.')
     }
     const before = { ...(row.data ?? {}) }
@@ -415,17 +451,45 @@ export class RelationRepository {
         .all()
         .map((slide) => slide.id)
     )
-    const next = repairedData(before, row.type, action, live, slides, groups)
-    const saved = this.writeRow(id, row.revision, next)
-    return { type: row.type, revision: saved.revision, before }
+    const liveBoards = new Set(
+      this.db
+        .select({ id: boards.id })
+        .from(boards)
+        .where(isNull(boards.deletedAt))
+        .all()
+        .map((board) => board.id)
+    )
+    const next = repairedData(before, row.type, action, live, slides, groups, liveBoards)
+    let linkedBoardId: string | null | undefined
+    if (typeof next.linkedWait === 'string') {
+      linkedBoardId = next.linkedWait
+      delete next.linkedWait
+    }
+    const saved = this.writeRow(id, row.revision, next, linkedBoardId)
+    return {
+      type: row.type,
+      revision: saved.revision,
+      before,
+      previousLink: row.linkedBoardId
+    }
   }
 
-  restore(id: string, baseRevision: number, data: Record<string, unknown>): { revision: number } {
+  restore(
+    id: string,
+    baseRevision: number,
+    data: Record<string, unknown>,
+    linkedBoardId?: string | null
+  ): { revision: number } {
     const row = this.requireRow(id)
-    if (row.type !== 'connection' && row.type !== 'comment' && row.type !== 'link') {
+    if (
+      row.type !== 'connection' &&
+      row.type !== 'comment' &&
+      row.type !== 'link' &&
+      row.type !== 'board'
+    ) {
       throw new Error('That item has no reference to repair.')
     }
-    return this.writeRow(id, baseRevision, data)
+    return this.writeRow(id, baseRevision, data, linkedBoardId)
   }
 
   private saveData(
@@ -442,12 +506,18 @@ export class RelationRepository {
   private writeRow(
     id: string,
     baseRevision: number,
-    data: Record<string, unknown>
+    data: Record<string, unknown>,
+    linkedBoardId?: string | null
   ): { revision: number } {
     const revision = baseRevision + 1
     const result = this.db
       .update(boardObjects)
-      .set({ data, revision, updatedAt: now() })
+      .set({
+        data,
+        revision,
+        updatedAt: now(),
+        ...(linkedBoardId !== undefined ? { linkedBoardId } : {})
+      })
       .where(
         and(
           eq(boardObjects.id, id),
@@ -471,13 +541,28 @@ export class RelationRepository {
   }
 }
 
+function destinationMissing(
+  destination: Destination,
+  liveObjects: Set<string>,
+  liveBoards: Set<string>,
+  liveSlides: Set<string>
+): boolean {
+  if (destination.kind === 'url') return false
+  if (destination.kind === 'board' || destination.kind === 'camera')
+    return !liveBoards.has(destination.boardId)
+  if (destination.kind === 'slide')
+    return !liveSlides.has(destination.slideId) || !liveObjects.has(destination.objectId)
+  return !liveObjects.has(destination.objectId)
+}
+
 function repairedData(
   raw: Record<string, unknown>,
   type: string,
   action: 'keep' | 'reattach' | 'clear',
   liveObjects: Set<string>,
   liveSlides: Set<string>,
-  liveGroups: Set<string>
+  liveGroups: Set<string>,
+  liveBoards: Set<string>
 ): Record<string, unknown> {
   if (type === 'connection') {
     const connection = parseConnection(raw)
@@ -528,12 +613,33 @@ function repairedData(
     if (!targetOk || !slideOk) throw new Error('That item is still missing.')
     return { ...comment, anchor: { ...comment.anchor, detached: 'none' } }
   }
-  const destination = parseDestination(raw.destination)
-  const objectId = destination && 'objectId' in destination ? destination.objectId : null
-  if (!objectId || liveObjects.has(objectId) || raw.referenceHeld === true) {
-    if (action !== 'reattach' || raw.referenceHeld !== true)
-      throw new Error('Nothing there needs repair.')
+  if (type === 'board') {
+    const missingId = typeof raw.unavailableBoardId === 'string' ? raw.unavailableBoardId : null
+    const held = raw.boardReferenceHeld === true
+    const missing = !!missingId && !liveBoards.has(missingId)
+    if (!missing && !held) throw new Error('Nothing there needs repair.')
+    if (held && action !== 'reattach') throw new Error('Nothing there needs repair.')
+    if (!missing && action !== 'reattach') throw new Error('Nothing there needs repair.')
+    if (action === 'keep') return { ...raw, boardReferenceHeld: true }
+    if (action === 'clear') {
+      const next = { ...raw }
+      delete next.unavailableBoardId
+      delete next.boardReferenceHeld
+      return next
+    }
+    if (missing || !missingId) throw new Error('That item is still missing.')
+    const next: Record<string, unknown> = { ...raw, linkedWait: missingId }
+    delete next.unavailableBoardId
+    delete next.boardReferenceHeld
+    return next
   }
+  const destination = parseDestination(raw.destination)
+  const missing =
+    !!destination && destinationMissing(destination, liveObjects, liveBoards, liveSlides)
+  const held = raw.referenceHeld === true
+  if (!missing && !held) throw new Error('Nothing there needs repair.')
+  if (held && action !== 'reattach') throw new Error('Nothing there needs repair.')
+  if (!missing && action !== 'reattach') throw new Error('Nothing there needs repair.')
   if (action === 'keep') return { ...raw, referenceHeld: true }
   if (action === 'clear') {
     const next = { ...raw }
@@ -541,7 +647,7 @@ function repairedData(
     delete next.referenceHeld
     return next
   }
-  if (objectId && !liveObjects.has(objectId)) throw new Error('That item is still missing.')
+  if (missing) throw new Error('That item is still missing.')
   const next = { ...raw }
   delete next.referenceHeld
   return next

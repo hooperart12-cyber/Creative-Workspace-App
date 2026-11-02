@@ -165,6 +165,10 @@ function MenuItems() {
         <Item shortcut="Ctrl+'" onSelect={toggleGrid}>
           {showGrid ? 'Hide grid' : 'Show grid'}
         </Item>
+        <Separator />
+        <Item onSelect={() => useCanvasStore.getState().setShareDialog(true)}>
+          Export this board…
+        </Item>
       </>
     )
   }
@@ -556,6 +560,10 @@ function MenuItems() {
         onSelect={() => void actions.deleteObjects(unlocked.map((o) => o.id))}
       >
         Move to trash
+      </Item>
+      <Separator />
+      <Item onSelect={() => useCanvasStore.getState().setShareDialog(true)}>
+        Export this board…
       </Item>
     </>
   )

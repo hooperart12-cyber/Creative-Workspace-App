@@ -654,7 +654,8 @@ export function hitsAt(
   items: { id: string; points: Point[]; zIndex: number }[],
   threshold: number
 ): PathHit[] {
-  return items
+  const candidates = items.length < 80 ? items : itemsNear(point, items, threshold)
+  return candidates
     .map((item) => ({
       id: item.id,
       zIndex: item.zIndex,
@@ -662,6 +663,24 @@ export function hitsAt(
     }))
     .filter((hit) => hit.distance <= threshold)
     .sort((a, b) => a.distance - b.distance || b.zIndex - a.zIndex)
+}
+
+function itemsNear(
+  point: Point,
+  items: { id: string; points: Point[]; zIndex: number }[],
+  threshold: number
+): { id: string; points: Point[]; zIndex: number }[] {
+  const grid = new SpatialGrid(256)
+  for (const item of items) grid.insert(item.id, boundsOfPoints(item.points, threshold))
+  const near = new Set(
+    grid.query({
+      x: point.x - threshold,
+      y: point.y - threshold,
+      width: threshold * 2,
+      height: threshold * 2
+    })
+  )
+  return items.filter((item) => near.has(item.id))
 }
 
 function segmentCross(
@@ -700,6 +719,21 @@ export interface Crossing {
 export function findCrossings(
   items: { id: string; points: Point[]; zIndex: number }[]
 ): Crossing[] {
+  if (items.length < 40) return crossingsBetween(items)
+  const grid = new SpatialGrid(256)
+  items.forEach((item, index) => grid.insert(String(index), boundsOfPoints(item.points, 1)))
+  const found: Crossing[] = []
+  for (let i = 0; i < items.length; i += 1) {
+    const near = new Set(grid.query(boundsOfPoints(items[i].points, 1)))
+    for (let j = i + 1; j < items.length; j += 1) {
+      if (!near.has(String(j))) continue
+      found.push(...crossingsBetween([items[i], items[j]]))
+    }
+  }
+  return found
+}
+
+function crossingsBetween(items: { id: string; points: Point[]; zIndex: number }[]): Crossing[] {
   const found: Crossing[] = []
   for (let i = 0; i < items.length; i += 1) {
     for (let j = i + 1; j < items.length; j += 1) {
