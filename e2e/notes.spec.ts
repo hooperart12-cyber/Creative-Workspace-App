@@ -175,6 +175,34 @@ async function synced(page: Page = t.page) {
     .toBe(true)
 }
 
+/** Selects a word in the open note. End and Home do not move the caret on macOS. */
+async function selectText(text: string, page: Page = t.page) {
+  await textArea(page).click()
+  const found = await page.evaluate((wanted) => {
+    const view = (window as never as Cw).__cw.noteEditor()?.view
+    if (!view) return false
+    const walker = document.createTreeWalker(view.dom, NodeFilter.SHOW_TEXT)
+    let node = walker.nextNode()
+    while (node) {
+      const value = node.textContent ?? ''
+      const index = value.indexOf(wanted)
+      if (index >= 0) {
+        const range = document.createRange()
+        range.setStart(node, index)
+        range.setEnd(node, index + wanted.length)
+        const selection = window.getSelection()
+        selection?.removeAllRanges()
+        selection?.addRange(range)
+        return true
+      }
+      node = walker.nextNode()
+    }
+    return false
+  }, text)
+  expect(found).toBe(true)
+  await synced(page)
+}
+
 /** Presses cursor keys in the editor, then waits for the editor to follow. */
 async function moveCursor(keys: string[], page: Page = t.page) {
   for (const key of keys) await page.keyboard.press(key)
@@ -326,13 +354,11 @@ test('mixed text and paragraph formatting, safe links, drawn on the canvas', asy
   await textArea().getByText('Title').click()
   await synced()
   await toolbar.getByLabel('Text style').selectOption('h1')
-  // "bold": select the word, Ctrl+B.
-  await textArea().getByText('Some bold words').click()
-  await moveCursor(['End', ...times(' words'.length, 'ArrowLeft'), ...times(4, 'Shift+ArrowLeft')])
-  // The toolbar, not Cmd/Ctrl+B: on macOS the key can be taken by the window menu.
+  // "bold": select the word, then the toolbar. End/Home do not move the caret on macOS.
+  await selectText('bold')
   await toolbar.getByRole('button', { name: 'Bold' }).click()
   // "words": highlight, bigger, coloured.
-  await moveCursor(['End', ...times('words'.length, 'Shift+ArrowLeft')])
+  await selectText('words')
   await toolbar.getByRole('button', { name: 'Highlight' }).click()
   await toolbar.getByRole('button', { name: 'More formatting' }).click()
   const panel = page.getByTestId('note-format-panel')
@@ -342,7 +368,7 @@ test('mixed text and paragraph formatting, safe links, drawn on the canvas', asy
   await panel.getByLabel('Line spacing').selectOption('2')
 
   // A link on "Some" (Ctrl+K). Unsafe addresses are refused.
-  await moveCursor(['Home', ...times('Some'.length, 'Shift+ArrowRight')])
+  await selectText('Some')
   await page.keyboard.press('ControlOrMeta+k')
   const address = page.getByLabel('Link address')
   await address.fill('javascript:alert(1)')
