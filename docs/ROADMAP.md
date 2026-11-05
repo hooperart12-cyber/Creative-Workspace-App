@@ -138,8 +138,18 @@ On `feat/m8-connections-links-comments` ([PR #13](https://github.com/hooperart12
 - [ ] Copy, move, delete, and restore keep or remap those relationships
 - [ ] Search and direct tags, without copying a tag across a connection or a comment
 
+## M9 — Page collections, planner, and reader (§10) 🚧
+On `feat/m9-page-collections`, stacked on `feat/m8-connections-links-comments` (ADR-021). M6, M7, and M8 stay unmerged. Phase 1 stores collections, pages, spreads, versions, flat contents, and trash. The sidebar, Planner, Reader, Review, import, and export are not built. Boxes stay unchecked.
+
+- [ ] Collections sidebar, nested folders, templates, and canvas cards
+- [ ] Planner grid and spread layout, page properties, and placeholders
+- [ ] Artwork versions, staged import, and Artwork Review
+- [ ] Reader, flat contents, and bookmarks
+- [ ] PDF, image sequence, and portable package
+- [ ] Trash, restore, duplicate, and multi-window conflicts in the app
+
 ## Later (post-MVP), in suggested order
-4. Page collections, planner, reader mode (§10)
+4. Page collections, planner, reader mode (§10) — started as M9; not finished
 5. Linked TOC, named anchors, pinned panel (§13, §14)
 6. Annotations and revisions (§11)
 7. Board snapshots (§20)

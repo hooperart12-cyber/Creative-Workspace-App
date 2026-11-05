@@ -506,7 +506,7 @@ export interface SearchPage {
   nextCursor: string | null
 }
 
-export type TagTargetType = 'asset' | 'entry' | 'object' | 'board' | 'slide'
+export type TagTargetType = 'asset' | 'entry' | 'object' | 'board' | 'slide' | 'page'
 export type TagVisibility = 'hidden' | 'hover' | 'always'
 
 export interface TagRecord {

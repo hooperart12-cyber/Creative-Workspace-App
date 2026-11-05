@@ -23,6 +23,7 @@ Statuses: ✅ Accepted · 🟡 Tentative (will be confirmed when the feature is 
 | [015](#adr-015--pdfs-and-generic-file-cards) | PDFs and generic file cards | ✅ |
 | [018](#adr-018--scoped-tags-and-tag-search) | Scoped tags and tag search | ✅ |
 | [019](#adr-019--image-stacks-and-appearance-crops) | Image stacks and appearance crops | ✅ |
+| [021](#adr-021--page-collections-are-not-canvas-cards) | Page collections are not canvas cards | ✅ |
 
 ---
 
@@ -611,3 +612,24 @@ MyProject.cwproj/
 - A picture export draws the current board through the canvas layer, without selection handles. PNG is that bitmap. PDF is one page of the same bitmap, shaped to the artwork. Hidden connections and comments stay hidden unless the export dialog asks to show them.
 - A board package is one board, its objects, the files those objects use, and its tags. Comments and replies are included only when that box is checked. A destination outside the board keeps its id and title. Import creates a new board and new object ids. It reuses a stored file only when the checksum matches. It does not match a missing target by name.
 - Older test databases that stop before tags must also stop before `0007`, because Drizzle skips a migration whose timestamp is older than the newest one already applied.
+
+## ADR-021 — Page collections are not canvas cards
+
+**Date:** 2026-11-05 · **Status:** ✅ Accepted · **Requirements:** §10 · **Extends:** ADR-005 (originals stay untouched), ADR-009 (pre-migration recovery), ADR-018 (a page is a tag target), ADR-020 (a destination can name a collection or a page)
+
+**Decision.**
+
+- A collection is its own row. It is not a board and not a canvas card. A canvas appearance is a `board_objects` row of type `collection` whose data stores the collection id. Deleting that card deletes only the card.
+- A page id is a UUID. The visible number is derived from position, role, and `number_start`. Cover, title, end, and blank are unnumbered unless `unnumbered` is explicitly false. A wide page has span 2 and is not sliced. A locked pair shares `spread_id` and must stay adjacent.
+- Migration `0008_page_collections` adds the collection tables and rebuilds `tags` and `taggings` so a page can be tagged. Existing tag rows are copied. A row that cannot be represented aborts the migration and deletes nothing. The existing pre-migration recovery point still runs first.
+- A template is copied onto the collection when it is created. Editing the template does not rewrite collections that already exist.
+- Reader resume (page id, layout, zoom, pan, and the time it was used) is written only when a Reader session records that the person used it. Closing a window does not write it.
+- Page links and page comments are their own tables. Canvas connections stay canvas objects. A destination may name a collection or a page. There is no nested contents tree and no saved camera on a bookmark.
+- Move keeps page ids. Copy assigns new page ids, remaps a link whose target page was copied, and leaves every other target on the original. Comments are copied only when that is requested. Stage rows remap by stage name. A stage that does not match is kept and reported, not deleted. Trash is a soft delete, and a locked partner is included so the pair is not split. A full duplicate copies artwork references and stage progress. A structure-only duplicate keeps the slots, order, and notes, and leaves artwork and production progress behind. Neither duplicate copies comments. Removing a version does not delete the asset file. Showing a version does not mark a stage done.
+
+**Not in this slice.** The Collections sidebar, Planner, Reader, Artwork Review, import, export, and portable packages. No hierarchical contents, camera bookmarks, page templates, reference panel, per-collection Reader theme, saved filter views, project-wide M9 search, extra recovery scanner, remappable Planner shortcuts, smart folders, inferred Next Chapter, or a chapter check before Reader opens.
+
+**Consequences.**
+
+- M9 is stacked on `feat/m8-connections-links-comments`. M6, M7, and M8 stay unmerged.
+- A test journal that stops before a later migration must also omit `0008_page_collections`. Drizzle applies every later journal entry, and `0008` rebuilds the tag tables created by `0005` and `0006`.
