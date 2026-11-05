@@ -139,7 +139,7 @@ On `feat/m8-connections-links-comments` ([PR #13](https://github.com/hooperart12
 - [ ] Search and direct tags, without copying a tag across a connection or a comment
 
 ## M9 — Page collections, planner, and reader (§10) 🚧
-On `feat/m9-page-collections`, stacked on `feat/m8-connections-links-comments` (ADR-021). M6, M7, and M8 stay unmerged. Phase 1 stores collections, pages, spreads, versions, flat contents, and trash. The sidebar, Planner, Reader, Review, import, and export are not built. Boxes stay unchecked.
+On `feat/m9-page-collections` ([PR #14](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/14) → `feat/m8-connections-links-comments`, ADR-021). M6, M7, and M8 stay unmerged. Phase 1 stores collections, pages, spreads, versions, flat contents, and trash. The sidebar, Planner, Reader, Review, import, and export are not built. Boxes stay unchecked.
 
 - [ ] Collections sidebar, nested folders, templates, and canvas cards
 - [ ] Planner grid and spread layout, page properties, and placeholders

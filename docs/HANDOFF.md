@@ -55,7 +55,7 @@ RULES:
 > Outgoing agent: replace this section each session. Keep it short and factual.
 
 **Last updated:** 2026-11-05
-**Branches:** M0–M5 are on `main` (PR #10 merge `169a7b5`). M6 is `feat/m6-tags-search` ([PR #11](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/11) → `main`). M7 is `feat/m7-image-stacks` ([PR #12](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/12)). M8 is `feat/m8-connections-links-comments` ([PR #13](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/13)). M9 is `feat/m9-page-collections`, stacked on M8. Do not merge, retarget, or rebase #11, #12, or #13.
+**Branches:** M0–M5 are on `main` (PR #10 merge `169a7b5`). M6 is `feat/m6-tags-search` ([PR #11](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/11) → `main`). M7 is `feat/m7-image-stacks` ([PR #12](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/12)). M8 is `feat/m8-connections-links-comments` ([PR #13](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/13)). M9 is `feat/m9-page-collections` ([PR #14](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/14) → M8). Do not merge, retarget, or rebase #11, #12, #13, or #14.
 **Phase:** M9 Phase 1 persistence is in (ADR-021). Planner, Reader, Review, import, and export are not. M8 hand checks 8.14–8.21 and the Windows installer are still undone. Board covers stay Later.
 **Stack integration:** `feat/m3a-images` commits `62fec97` and `73993d4` (network-link paste safety, imports outside the edit queue, and the `file:////server` check) were merged into `feat/m3b-text-notes` and then into M3C, M4, and M5. The original commits are unchanged. Image and file pickers use `importThenPlace`.
 
@@ -121,14 +121,14 @@ RULES:
 - Playwright covers the connection end, bend, label, and overlap checks. It does not open the save dialog. The Windows installer has not been installed by hand.
 
 **In progress (M9, ADR-021)**
-- Branch `feat/m9-page-collections`, from M8 `5563b9d`. Not merged. No pull request yet.
+- Branch `feat/m9-page-collections`, from M8 `5563b9d`. [PR #14](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/14) targets `feat/m8-connections-links-comments`. Not merged.
 - Migration `0008_page_collections`. Collections, folders, templates, pages, versions, stage state, flat contents, page links, and page comments are their own tables. A page can be tagged. The tag tables are rebuilt and existing rows are copied.
 - `CollectionRepository` (`src/main/project/collections.ts`) and `src/shared/collections.ts`. Status of D01–D42 is in `docs/M9_IMPLEMENTATION_TRACKER.md`. There is no sidebar, Planner, Reader, or Review UI.
 
 **Next steps**
 1. Phase 2: Collections sidebar, creation, canvas cards, and the base Planner. Do not start a second canvas.
 2. Hand-check TESTING 8.14–8.21, then the Windows installer (5.13–5.14 and 7.17).
-3. Leave M6, M7, M8, and M9 unmerged. Do not retarget PR #11, #12, or #13.
+3. Leave M6, M7, M8, and M9 unmerged. Do not retarget PR #11, #12, #13, or #14.
 
 **Known issues / open questions**
 - Undo history is per window and not saved across restarts (by design for now).
