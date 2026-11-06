@@ -29,15 +29,13 @@ describe('collection sequence', () => {
   })
 
   it('keeps a locked pair and a wide page on their own spreads', () => {
-    const spreads = layoutSpreads(
-      [
-        { id: 'open', span: 1, spreadId: null },
-        { id: 'left', span: 1, spreadId: 'pair' },
-        { id: 'right', span: 1, spreadId: 'pair' },
-        { id: 'wide', span: 2, spreadId: null },
-        { id: 'tail', span: 1, spreadId: null }
-      ]
-    )
+    const spreads = layoutSpreads([
+      { id: 'open', span: 1, spreadId: null },
+      { id: 'left', span: 1, spreadId: 'pair' },
+      { id: 'right', span: 1, spreadId: 'pair' },
+      { id: 'wide', span: 2, spreadId: null },
+      { id: 'tail', span: 1, spreadId: null }
+    ])
     expect(spreads.map((spread) => spread.pageIds)).toEqual([
       ['open'],
       ['left', 'right'],

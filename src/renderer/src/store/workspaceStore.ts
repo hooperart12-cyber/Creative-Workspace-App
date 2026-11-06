@@ -28,14 +28,7 @@ export type WorkspaceDialog =
   { kind: 'move'; target: ItemRef } | { kind: 'delete'; target: ItemRef } | { kind: 'import' }
 
 export type WorkspaceSurface =
-  | 'canvas'
-  | 'library'
-  | 'trash'
-  | 'search'
-  | 'planner'
-  | 'reader'
-  | 'review'
-  | 'overview'
+  'canvas' | 'library' | 'trash' | 'search' | 'planner' | 'reader' | 'review' | 'overview'
 
 interface WorkspaceState {
   tree: ProjectTree | null

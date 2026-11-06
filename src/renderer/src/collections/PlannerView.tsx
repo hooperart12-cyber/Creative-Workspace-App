@@ -792,13 +792,7 @@ function storedInspector(collectionId: string): unknown {
   }
 }
 
-function InspectorPane({
-  collectionId,
-  children
-}: {
-  collectionId: string
-  children: ReactNode
-}) {
+function InspectorPane({ collectionId, children }: { collectionId: string; children: ReactNode }) {
   const [layout, setLayout] = useState(() => inspectorLayout(storedInspector(collectionId)))
   const save = (next: { collapsed: boolean; width: number }) => {
     const clamped = inspectorLayout(next)
