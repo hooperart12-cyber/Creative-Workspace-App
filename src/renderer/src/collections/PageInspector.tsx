@@ -76,7 +76,7 @@ export function PageInspector({
   })()
 
   return (
-    <aside className="flex w-72 shrink-0 flex-col gap-3 overflow-y-auto border-l border-line bg-surface p-3 text-sm">
+    <aside className="flex h-full w-full flex-col gap-3 overflow-y-auto border-l border-line bg-surface p-3 text-sm">
       <div>
         <h2 className="font-medium">Page properties</h2>
         {selectedCount > 1 && (

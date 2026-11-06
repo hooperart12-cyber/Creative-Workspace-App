@@ -172,6 +172,29 @@ export function spreadSides(
   ]
 }
 
+/** Done rows per production stage. The total is the page count, not the number of notes. */
+export function stageProgress(
+  stages: readonly { id: string; name: string }[],
+  states: readonly { stageId: string; state: string }[],
+  pageCount: number
+): { name: string; done: number; total: number }[] {
+  return stages.map((stage) => ({
+    name: stage.name,
+    done: states.filter((item) => item.stageId === stage.id && item.state === 'done').length,
+    total: pageCount
+  }))
+}
+
+/** Inspector width is this window's layout. Reader camera fields are ignored. */
+export function inspectorLayout(stored: unknown): { collapsed: boolean; width: number } {
+  const row = stored && typeof stored === 'object' ? (stored as Record<string, unknown>) : {}
+  const width = typeof row.width === 'number' && Number.isFinite(row.width) ? row.width : 288
+  return {
+    collapsed: row.collapsed === true,
+    width: Math.min(480, Math.max(220, Math.round(width)))
+  }
+}
+
 /** Page entries, reading slots, and artwork files are different counts. */
 export function collectionCounts(pages: { span: 1 | 2; hasArtwork: boolean }[]): {
   entries: number
@@ -232,6 +255,8 @@ export interface CollectionPageView {
   revision: number
   artwork: ArtworkState
   displayedName: string
+  /** Hash of the displayed image, only while that file can be shown. */
+  sha256: string | null
 }
 
 export interface PagePatch {
@@ -288,6 +313,8 @@ export interface CollectionDetail {
   gridSize: number
   spreadZoom: number
   plannerPageId: string | null
+  description: string
+  updatedAt: number
   pages: CollectionPageView[]
   stages: { id: string; name: string; position: number }[]
   stageStates: { pageId: string; stageId: string; state: string; note: string }[]

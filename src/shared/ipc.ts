@@ -514,6 +514,10 @@ export interface IpcRequests {
   }
   'collections:renameFolder': { args: [id: string, name: string]; result: void }
   'collections:moveFolder': { args: [id: string, parentId: string | null]; result: void }
+  'collections:trashFolder': { args: [id: string]; result: void }
+  'collections:restoreFolder': { args: [id: string]; result: void }
+  'collections:trashedFolders': { args: []; result: { id: string; name: string }[] }
+  'collections:trashedCollections': { args: []; result: { id: string; title: string }[] }
   'collections:saveTemplate': {
     args: [name: string, collectionId: string]
     result: { id: string }
@@ -925,6 +929,10 @@ export const IPC_CHANNELS = [
   'collections:createFolder',
   'collections:renameFolder',
   'collections:moveFolder',
+  'collections:trashFolder',
+  'collections:restoreFolder',
+  'collections:trashedFolders',
+  'collections:trashedCollections',
   'collections:saveTemplate',
   'collections:renameTemplate',
   'collections:updateTemplate',

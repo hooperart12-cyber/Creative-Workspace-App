@@ -137,6 +137,8 @@ const SAVE_CHANNELS = new Set<string>([
   'collections:createFolder',
   'collections:renameFolder',
   'collections:moveFolder',
+  'collections:trashFolder',
+  'collections:restoreFolder',
   'collections:saveTemplate',
   'collections:renameTemplate',
   'collections:updateTemplate',
@@ -1306,6 +1308,22 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
     const project = requireProject(event)
     project.collections.moveFolder(id, parentId)
     broadcastContent(project)
+  })
+  handle('collections:trashFolder', (event, id) => {
+    const project = requireProject(event)
+    project.collections.trashFolder(id)
+    broadcastContent(project)
+  })
+  handle('collections:restoreFolder', (event, id) => {
+    const project = requireProject(event)
+    project.collections.restoreFolder(id)
+    broadcastContent(project)
+  })
+  handle('collections:trashedFolders', (event) => {
+    return requireProject(event).collections.trashedFolders()
+  })
+  handle('collections:trashedCollections', (event) => {
+    return requireProject(event).collections.trashedCollections()
   })
   handle('collections:saveTemplate', (event, name, collectionId) => {
     const project = requireProject(event)

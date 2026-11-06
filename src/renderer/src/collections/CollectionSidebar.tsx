@@ -48,17 +48,23 @@ export function CollectionSidebar() {
     null
   )
   const [menu, setMenu] = useState<string | null>(null)
+  const [trashedFolders, setTrashedFolders] = useState<{ id: string; name: string }[]>([])
+  const [trashedCollections, setTrashedCollections] = useState<{ id: string; title: string }[]>([])
 
   useEffect(() => {
     let cancel = false
     void Promise.all([
       window.api.invoke('collections:outline'),
-      window.api.invoke('collections:templates')
+      window.api.invoke('collections:templates'),
+      window.api.invoke('collections:trashedFolders'),
+      window.api.invoke('collections:trashedCollections')
     ])
-      .then(([nextOutline, nextTemplates]) => {
+      .then(([nextOutline, nextTemplates, nextFolders, nextCollections]) => {
         if (cancel) return
         setOutline(nextOutline)
         setTemplates(nextTemplates)
+        setTrashedFolders(nextFolders)
+        setTrashedCollections(nextCollections)
       })
       .catch((error) => reportError(error))
     return () => {
@@ -69,7 +75,10 @@ export function CollectionSidebar() {
   const folders = orderCollectionItems(outline.folders.map(asOrdered.folder), order)
   const collections = orderCollectionItems(outline.collections.map(asOrdered.collection), order)
   const roots = folders.filter((folder) => folder.parentId == null)
-  const rootCollections = collections.filter((collection) => collection.folderId == null)
+  const liveFolderIds = new Set(folders.map((folder) => folder.id))
+  const rootCollections = collections.filter(
+    (collection) => collection.folderId == null || !liveFolderIds.has(collection.folderId)
+  )
 
   const createFolder = async (parentId: string | null) => {
     try {
@@ -159,6 +168,39 @@ export function CollectionSidebar() {
             onMenu={() => setMenu(menu === collection.id ? null : collection.id)}
           />
         ))}
+        {(trashedFolders.length > 0 || trashedCollections.length > 0) && (
+          <li className="px-3 py-2">
+            <p className="text-xs text-muted">Trashed</p>
+            {trashedFolders.map((folder) => (
+              <button
+                key={folder.id}
+                type="button"
+                className="block w-full py-1 text-left text-xs hover:underline"
+                onClick={() => {
+                  void window.api
+                    .invoke('collections:restoreFolder', folder.id)
+                    .catch((error) => reportError(error))
+                }}
+              >
+                Restore folder {folder.name}
+              </button>
+            ))}
+            {trashedCollections.map((collection) => (
+              <button
+                key={collection.id}
+                type="button"
+                className="block w-full py-1 text-left text-xs hover:underline"
+                onClick={() => {
+                  void window.api
+                    .invoke('collections:restore', collection.id)
+                    .catch((error) => reportError(error))
+                }}
+              >
+                Restore {collection.title}
+              </button>
+            ))}
+          </li>
+        )}
         {roots.length === 0 && rootCollections.length === 0 && (
           <p className="px-4 py-1 text-xs text-muted">
             Collections live here. A canvas card is only one way to open one.
@@ -371,6 +413,18 @@ function FolderBranch({
           >
             New collection here
           </button>
+          <button
+            type="button"
+            className="px-2 py-1 text-left text-red-700 hover:bg-canvas"
+            onClick={() => {
+              if (!window.confirm(`Trash “${folder.name}”? Collections inside it stay.`)) return
+              void window.api
+                .invoke('collections:trashFolder', folder.id)
+                .catch((error) => reportError(error))
+            }}
+          >
+            Trash folder
+          </button>
         </div>
       )}
       {expanded && (
@@ -525,6 +579,13 @@ function CollectionRow({
         <div className="ml-8 flex flex-col py-1 text-xs" role="menu">
           <button type="button" className="px-2 py-1 text-left hover:bg-canvas" onClick={onRename}>
             Rename
+          </button>
+          <button
+            type="button"
+            className="px-2 py-1 text-left hover:bg-canvas"
+            onClick={() => useWorkspaceStore.getState().openOverview(collection.id)}
+          >
+            Overview
           </button>
           <button
             type="button"

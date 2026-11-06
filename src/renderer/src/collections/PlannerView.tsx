@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState, type DragEvent, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type DragEvent, type MouseEvent, type ReactNode } from 'react'
+import { assetUrl } from '@shared/assets'
 import {
+  inspectorLayout,
   layoutSpreads,
   spreadSides,
   type CollectionDetail,
@@ -13,7 +15,7 @@ import {
   hiddenSelectionCount,
   visiblePageRange
 } from '@shared/collectionSearch'
-import { reportError, showNotice } from '../store/projectStore'
+import { reportError, showNotice, useProjectStore } from '../store/projectStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { BulkEditDialog } from './BulkEditDialog'
 import { ExportDialog } from './ExportDialog'
@@ -55,6 +57,8 @@ export function PlannerView() {
   const [reloadToken, setReloadToken] = useState(0)
   const initialized = useRef<string | null>(null)
   const [addCount, setAddCount] = useState(1)
+  const [addTitle, setAddTitle] = useState('')
+  const [addNotes, setAddNotes] = useState('')
   const [undo, setUndo] = useState<Undo>(null)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -300,6 +304,13 @@ export function PlannerView() {
           <button
             type="button"
             className={button}
+            onClick={() => useWorkspaceStore.getState().openOverview(detail.id)}
+          >
+            Overview
+          </button>
+          <button
+            type="button"
+            className={button}
             onClick={() => useWorkspaceStore.getState().openReader(detail.id, focusId)}
           >
             Read
@@ -424,6 +435,20 @@ export function PlannerView() {
               className="ml-1 w-14 rounded border border-line bg-canvas px-1 py-1"
             />
           </label>
+          <input
+            value={addTitle}
+            aria-label="Placeholder title"
+            placeholder="Title"
+            onChange={(event) => setAddTitle(event.target.value)}
+            className="w-28 rounded border border-line bg-canvas px-1 py-1 text-xs"
+          />
+          <input
+            value={addNotes}
+            aria-label="Placeholder notes"
+            placeholder="Notes"
+            onChange={(event) => setAddNotes(event.target.value)}
+            className="w-36 rounded border border-line bg-canvas px-1 py-1 text-xs"
+          />
           <button
             type="button"
             className={button}
@@ -432,7 +457,9 @@ export function PlannerView() {
                 .invoke('collections:insertPages', {
                   collectionId: detail.id,
                   count: addCount,
-                  beforeId: focusId
+                  beforeId: focusId,
+                  title: addTitle,
+                  notes: addNotes
                 })
                 .then((inserted) => {
                   setUndo({ kind: 'insert', pageIds: inserted.pageIds })
@@ -448,7 +475,12 @@ export function PlannerView() {
             className={button}
             onClick={() => {
               void window.api
-                .invoke('collections:insertPages', { collectionId: detail.id, count: addCount })
+                .invoke('collections:insertPages', {
+                  collectionId: detail.id,
+                  count: addCount,
+                  title: addTitle,
+                  notes: addNotes
+                })
                 .then((inserted) => {
                   setUndo({ kind: 'insert', pageIds: inserted.pageIds })
                   setReloadToken((token) => token + 1)
@@ -694,13 +726,15 @@ export function PlannerView() {
         </div>
       </div>
       {focus && (
-        <PageInspector
-          key={`${focus.id}:${focus.revision}`}
-          detail={detail}
-          page={focus}
-          selectedCount={selected.length}
-          onChanged={() => setReloadToken((token) => token + 1)}
-        />
+        <InspectorPane key={detail.id} collectionId={detail.id}>
+          <PageInspector
+            key={`${focus.id}:${focus.revision}`}
+            detail={detail}
+            page={focus}
+            selectedCount={selected.length}
+            onChanged={() => setReloadToken((token) => token + 1)}
+          />
+        </InspectorPane>
       )}
       {showBulk && (
         <BulkEditDialog
@@ -745,6 +779,74 @@ function shownIds(detail: CollectionDetail, query: string, matchIds: string[] | 
   return detail.pages.filter((page) => allowed.has(page.id)).map((page) => page.id)
 }
 
+const INSPECTOR_KEY = 'cw.plannerInspector'
+
+function storedInspector(collectionId: string): unknown {
+  try {
+    const raw = localStorage.getItem(INSPECTOR_KEY)
+    const parsed: unknown = raw ? JSON.parse(raw) : null
+    if (!parsed || typeof parsed !== 'object') return null
+    return (parsed as Record<string, unknown>)[collectionId] ?? null
+  } catch {
+    return null
+  }
+}
+
+function InspectorPane({
+  collectionId,
+  children
+}: {
+  collectionId: string
+  children: ReactNode
+}) {
+  const [layout, setLayout] = useState(() => inspectorLayout(storedInspector(collectionId)))
+  const save = (next: { collapsed: boolean; width: number }) => {
+    const clamped = inspectorLayout(next)
+    setLayout(clamped)
+    try {
+      const raw = localStorage.getItem(INSPECTOR_KEY)
+      const parsed: unknown = raw ? JSON.parse(raw) : {}
+      const all = parsed && typeof parsed === 'object' ? { ...(parsed as object) } : {}
+      localStorage.setItem(INSPECTOR_KEY, JSON.stringify({ ...all, [collectionId]: clamped }))
+    } catch {
+      // The inspector still works for this visit if storage is unavailable.
+    }
+  }
+  if (layout.collapsed) {
+    return (
+      <button
+        type="button"
+        className="w-8 shrink-0 border-l border-line text-xs"
+        onClick={() => save({ ...layout, collapsed: false })}
+      >
+        Properties
+      </button>
+    )
+  }
+  return (
+    <div className="flex shrink-0 flex-col" style={{ width: layout.width }}>
+      <div className="flex items-center gap-2 border-b border-l border-line px-2 py-1">
+        <button
+          type="button"
+          className="text-xs text-muted"
+          onClick={() => save({ ...layout, collapsed: true })}
+        >
+          Hide
+        </button>
+        <input
+          type="range"
+          min={220}
+          max={480}
+          value={layout.width}
+          aria-label="Inspector width"
+          onChange={(event) => save({ ...layout, width: Number(event.target.value) })}
+        />
+      </div>
+      <div className="min-h-0 flex-1">{children}</div>
+    </div>
+  )
+}
+
 function PageCard({
   page,
   density,
@@ -766,6 +868,7 @@ function PageCard({
   onDragOver: (event: DragEvent<HTMLButtonElement>) => void
   onDrop: () => void
 }) {
+  const projectId = useProjectStore((s) => s.project?.id ?? null)
   const marker =
     page.artwork === 'missing'
       ? 'Missing'
@@ -800,6 +903,14 @@ function PageCard({
         marked === 'after' ? 'border-b-4 border-b-accent' : ''
       }`}
     >
+      {projectId && page.sha256 && (
+        <img
+          src={assetUrl(projectId, page.sha256, 256)}
+          alt=""
+          loading="lazy"
+          className="mb-1 max-h-24 w-full object-contain"
+        />
+      )}
       <span className="text-xs text-muted">{caption(page)}</span>
       {density !== 'compact' && (
         <span className="mt-1 line-clamp-3 text-sm">{page.title || 'Untitled'}</span>

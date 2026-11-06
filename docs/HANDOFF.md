@@ -56,7 +56,7 @@ RULES:
 
 **Last updated:** 2026-11-05
 **Branches:** M0–M5 are on `main` (PR #10 merge `169a7b5`). M6 is `feat/m6-tags-search` ([PR #11](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/11) → `main`). M7 is `feat/m7-image-stacks` ([PR #12](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/12)). M8 is `feat/m8-connections-links-comments` ([PR #13](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/13)). M9 is `feat/m9-page-collections` ([PR #14](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/14) → M8). Do not merge, retarget, or rebase #11, #12, #13, or #14.
-**Phase:** M9 Phase 1 is committed (ADR-021). Planner, import, Reader, Review, export, and the conflict and scale tests are in the working tree. They are not committed or hand-tested. `npm run build` passed. The Windows installer was not built. M8 hand checks 8.14–8.21 are still undone. Board covers stay Later.
+**Phase:** M9 Phases 1 through 6 are on `feat/m9-page-collections`. Phase 1 is `f535887` and `5f3ac9a`. Phases 2 through 6 are `9d2b66e`. The optional overview, planner thumbnails, inspector width, folder restore, and a Playwright pass over Planner, Reader, and Review are in the latest M9 commit. `npm test` is 280 tests. The Windows installer was not built. M8 hand checks 8.14–8.21 are still undone. Board covers stay Later.
 **Stack integration:** `feat/m3a-images` commits `62fec97` and `73993d4` (network-link paste safety, imports outside the edit queue, and the `file:////server` check) were merged into `feat/m3b-text-notes` and then into M3C, M4, and M5. The original commits are unchanged. Image and file pickers use `importThenPlace`.
 
 **Done**
@@ -124,10 +124,11 @@ RULES:
 - Branch `feat/m9-page-collections`, from M8 `5563b9d`. [PR #14](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/14) targets `feat/m8-connections-links-comments`. Not merged.
 - Migration `0008_page_collections`. Collections, folders, templates, pages, versions, stage state, flat contents, page links, and page comments are their own tables. A page can be tagged. The tag tables are rebuilt and existing rows are copied.
 - `CollectionRepository` (`src/main/project/collections.ts`) and `src/shared/collections.ts`. Status of D01–D42 is in `docs/M9_IMPLEMENTATION_TRACKER.md`.
-- Phases 2 through 6 are in the working tree and are not committed. The Planner can search one collection, preview a bulk edit, stage files or a CBZ, drag pages in the grid, and store a crop on a version. The Reader, Artwork Review, PDF export, numbered image export, and collection package import are in the working tree. A stale same-field edit is refused, a different field can still save, and a 1,000-page grid uses a window. None of these screens were opened in Electron.
+- Phases 2 through 6 are commit `9d2b66e`. The Planner can search one collection, preview a bulk edit, stage files or a CBZ, drag pages in the grid, and store a numeric crop on a version. The Reader, Artwork Review, PDF export, numbered image export, and collection package import are on the branch. A stale same-field edit is refused, a different field can still save, and a 1,000-page grid uses a window. Playwright opens the Planner, both layouts, the optional overview, the Reader, and Artwork Review. It does not import, export, or open a second window.
+- The overview is optional. A new collection and a sidebar click still open the Planner. Folder trash keeps the collection. Restore is in the sidebar Trashed list. Inspector width is stored in `localStorage`, not in the project.
 
 **Next steps**
-1. Hand-check the Planner, Reader, Artwork Review, and export on Windows, including two windows if a second window is opened by hand.
+1. Hand-check import, export, Reader camera restore, and two windows on Windows. See TESTING.md section M9.
 2. Hand-check TESTING 8.14–8.21, then the Windows installer (5.13–5.14 and 7.17).
 3. Leave M6, M7, M8, and M9 unmerged. Do not retarget PR #11, #12, #13, or #14.
 

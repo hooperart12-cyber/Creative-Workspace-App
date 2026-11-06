@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   collectionCounts,
   derivedNumbers,
+  inspectorLayout,
   layoutSpreads,
   naturalCompare,
-  spreadSides
+  spreadSides,
+  stageProgress
 } from './collections'
 
 describe('collection sequence', () => {
@@ -58,6 +60,27 @@ describe('collection sequence', () => {
         { span: 1, hasArtwork: false }
       ])
     ).toEqual({ entries: 3, readingPositions: 4, withArtwork: 2, placeholders: 1 })
+  })
+
+  it('counts finished stages without treating notes as progress', () => {
+    expect(
+      stageProgress(
+        [{ id: 'inks', name: 'Inks' }],
+        [
+          { stageId: 'inks', state: 'done' },
+          { stageId: 'inks', state: 'started' }
+        ],
+        2
+      )
+    ).toEqual([{ name: 'Inks', done: 1, total: 2 }])
+  })
+
+  it('keeps inspector width in range and ignores reader camera fields', () => {
+    expect(inspectorLayout({ width: 900, collapsed: true, readerZoom: 4 })).toEqual({
+      collapsed: true,
+      width: 480
+    })
+    expect(inspectorLayout(null)).toEqual({ collapsed: false, width: 288 })
   })
 
   it('sorts page 2 before page 10', () => {

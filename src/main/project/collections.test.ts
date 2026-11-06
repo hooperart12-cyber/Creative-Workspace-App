@@ -34,6 +34,26 @@ afterEach(() => {
 })
 
 describe('page collections', () => {
+  it('trashes a folder without deleting the collection inside it', () => {
+    const folder = project.collections.createFolder(null, 'Volume')
+    const child = project.collections.createFolder(folder.id, 'Nested')
+    const created = project.collections.create({
+      title: 'Chapter',
+      folderId: folder.id,
+      placeholderCount: 1
+    })
+    expect(() => project.collections.trashFolder(folder.id)).toThrow(/inside/)
+    project.collections.trashFolder(child.id)
+    project.collections.trashFolder(folder.id)
+    const hidden = project.collections.outline()
+    expect(hidden.folders.map((item) => item.id)).not.toContain(folder.id)
+    expect(project.collections.trashedFolders().map((item) => item.id)).toContain(folder.id)
+    expect(hidden.collections[0]).toMatchObject({ id: created.id, folderId: folder.id })
+    expect(project.collections.detail(created.id).pages).toHaveLength(1)
+    project.collections.restoreFolder(folder.id)
+    expect(project.collections.outline().folders.map((item) => item.id)).toContain(folder.id)
+  })
+
   it('keeps the collection when one of two canvas cards is deleted', () => {
     const parent = project.collections.createFolder(null, 'Chapters')
     const nested = project.collections.createFolder(parent.id, 'Volume 1')

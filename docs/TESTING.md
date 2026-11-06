@@ -50,6 +50,27 @@ To test a specific pull request instead of `main`: `git fetch origin && git chec
 
 Work through each step, and tick the box if the **Expected** result happens. If it doesn't, write down the step number and report it (Part 3). Keyboard shortcuts say **Ctrl** for Windows; on macOS use **Cmd** where Ctrl is listed, and **Option** for Alt.
 
+### M9 — Page collections, planner, and reader (in progress)
+
+Use `npm run dev` on `feat/m9-page-collections`. Have two PNG files and a small CBZ whose pages are JPG or PNG. M9 is not finished. A failed step here is a bug. Anything in **Not ready yet** is unfinished work, not a regression.
+
+Playwright already opens a new collection, switches Thumbnail grid and Spread layout, opens the optional overview, and opens the Reader and Artwork Review. It does not import, export, or open a second window. The Windows installer has not been installed from this branch.
+
+| # | Do this | Expected | A failure looks like |
+|---|---|---|---|
+| 9.1 | In Collections, make a folder, a folder inside it, and a collection in the inner folder. Open the collection from the sidebar. | The Planner opens. The collection is still listed after you delete a canvas card of it. | The sidebar opens an overview first, or deleting the card deletes the collection. |
+| 9.2 | Add two placeholders with a title and notes. Switch Thumbnail grid and Spread layout. Select a page, move it earlier, trash it, and undo. | The title and notes are on both new pages. The layouts show the same pages. Undo puts the trashed page back. | The notes are missing, or undo deletes a different page. |
+| 9.3 | Lock two pages as a spread. Try to drop another page between them. | The pair stays together. The drop is refused. | The pair splits, or the other pages jump before you release. |
+| 9.4 | Import the two PNG files. Then import the CBZ. | The images become pages in filename order. Page 2 comes before Page 10. The original files are unchanged. | A PDF inside the archive becomes an image, or a path with `..` is imported. |
+| 9.5 | Open Page properties. Change the title. Hide the inspector, reopen the collection, and show it again. | The title is saved. The hide choice is still there on this computer. Reader zoom is unchanged. | The title is lost, or hiding the inspector changes the Reader camera. |
+| 9.6 | Open Read. Turn a page, zoom in, and pan. Close the Reader by going back to the Planner, then open Read from the canvas card with no specific page. | The Reader returns to the same page, layout, zoom, and pan. Closing without a turn does not replace a newer Reader in another window. | It opens the first page, or a window you did not use overwrites the page. |
+| 9.7 | Open Review. Switch Single, Side-by-Side, and A/B. Pick another version, then Set as displayed. | Picking a version does not change the page until Set as displayed. There is no drawing tool. | The displayed image changes as soon as you pick a version. |
+| 9.8 | Export a PDF, a PNG sequence, and a package. Import the package into the same project. | You get new files. The project images are unchanged. The import is a new collection. | The import replaces the original collection, or the PDF is a picture of the window. |
+| 9.9 | Trash the inner folder from its menu. Restore it from Trashed. | The collection stays. After restore it is in that folder again. | The collection is deleted with the folder, or restore cannot find the folder. |
+| 9.10 | Open the same project in a second window. Edit a page title in one window and a different field in the other. | Both edits can remain. Editing the same field in both windows keeps the saved value and tells you the other change was not saved. | One window silently replaces the other window's title. |
+
+**Not ready yet.** A visual crop editor, import from the Asset Library, the canvas, the clipboard, or an M7 slide, bulk tag edits, and relinking a missing file from a folder. Do not expect those. A reference panel and a chapter check before the Reader are excluded on purpose.
+
 ### M8 — Connections, links, and comments (in progress)
 
 Use a project that already has two image cards on one board, plus a second board. M8 is not finished. A failed step in this table is a bug. Anything in **Not ready yet** is unfinished work, not a regression.

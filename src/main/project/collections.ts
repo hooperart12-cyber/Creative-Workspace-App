@@ -151,6 +151,51 @@ export class CollectionRepository {
       .run()
   }
 
+  /** Hides the folder. Collections inside it stay, with the same folder id. */
+  trashFolder(id: string): void {
+    this.requireFolder(id)
+    const child = this.db
+      .select()
+      .from(collectionFolders)
+      .where(and(eq(collectionFolders.parentId, id), isNull(collectionFolders.deletedAt)))
+      .get()
+    if (child) throw new Error('Move the folders inside it first.')
+    const now = deletionTime()
+    this.db
+      .update(collectionFolders)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(eq(collectionFolders.id, id))
+      .run()
+  }
+
+  trashedFolders(): { id: string; name: string }[] {
+    return this.db
+      .select()
+      .from(collectionFolders)
+      .where(isNotNull(collectionFolders.deletedAt))
+      .all()
+      .map((folder) => ({ id: folder.id, name: folder.name }))
+  }
+
+  trashedCollections(): { id: string; title: string }[] {
+    return this.db
+      .select()
+      .from(collections)
+      .where(isNotNull(collections.deletedAt))
+      .all()
+      .map((row) => ({ id: row.id, title: row.title }))
+  }
+
+  restoreFolder(id: string): void {
+    const row = this.db.select().from(collectionFolders).where(eq(collectionFolders.id, id)).get()
+    if (!row?.deletedAt) return
+    this.db
+      .update(collectionFolders)
+      .set({ deletedAt: null, updatedAt: new Date() })
+      .where(eq(collectionFolders.id, id))
+      .run()
+  }
+
   moveFolder(id: string, parentId: string | null): void {
     this.requireFolder(id)
     if (parentId) {
@@ -297,7 +342,8 @@ export class CollectionRepository {
       displayedVersionId: row.displayedVersionId,
       revision: row.revision,
       artwork: artwork.get(row.id)?.state ?? 'blank',
-      displayedName: artwork.get(row.id)?.name ?? ''
+      displayedName: artwork.get(row.id)?.name ?? '',
+      sha256: artwork.get(row.id)?.sha256 ?? null
     }))
   }
 
@@ -940,6 +986,8 @@ export class CollectionRepository {
       gridSize: row.gridSize,
       spreadZoom: row.spreadZoom,
       plannerPageId: row.plannerPageId,
+      description: row.description,
+      updatedAt: row.updatedAt.getTime(),
       pages,
       stages: this.stages(id),
       stageStates
@@ -1818,8 +1866,8 @@ export class CollectionRepository {
 
   private displayedArtwork(
     rows: { id: string; displayedVersionId: string | null }[]
-  ): Map<string, { state: ArtworkState; name: string }> {
-    const result = new Map<string, { state: ArtworkState; name: string }>()
+  ): Map<string, { state: ArtworkState; name: string; sha256: string | null }> {
+    const result = new Map<string, { state: ArtworkState; name: string; sha256: string | null }>()
     const versionIds = rows.flatMap((row) =>
       row.displayedVersionId ? [row.displayedVersionId] : []
     )
@@ -1834,17 +1882,21 @@ export class CollectionRepository {
     const byAsset = new Map(files.map((file) => [file.id, file]))
     for (const row of rows) {
       if (!row.displayedVersionId) {
-        result.set(row.id, { state: 'blank', name: '' })
+        result.set(row.id, { state: 'blank', name: '', sha256: null })
         continue
       }
       const version = byVersion.get(row.displayedVersionId)
       const file = version ? byAsset.get(version.assetId) : undefined
       if (!version || !file || file.deletedAt) {
-        result.set(row.id, { state: 'missing', name: version?.name ?? '' })
+        result.set(row.id, { state: 'missing', name: version?.name ?? '', sha256: null })
         continue
       }
-      const state = file.mime.startsWith('image/') ? 'ready' : 'unsupported'
-      result.set(row.id, { state, name: version.name || file.originalName })
+      const ready = file.mime.startsWith('image/')
+      result.set(row.id, {
+        state: ready ? 'ready' : 'unsupported',
+        name: version.name || file.originalName,
+        sha256: ready ? file.sha256 : null
+      })
     }
     return result
   }

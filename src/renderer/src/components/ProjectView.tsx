@@ -15,6 +15,7 @@ import { saveNoteNow } from '../notes/session'
 import { PlannerView } from '../collections/PlannerView'
 import { ReaderView } from '../collections/ReaderView'
 import { ReviewView } from '../collections/ReviewView'
+import { OverviewView } from '../collections/OverviewView'
 import { LibraryView } from '../library/LibraryView'
 import { TrashView } from '../library/TrashView'
 import { BackupDialog } from '../backup/BackupDialog'
@@ -216,6 +217,7 @@ export function ProjectView({ project }: { project: ProjectSummary }) {
             {surface === 'planner' && <PlannerView />}
             {surface === 'reader' && <ReaderView />}
             {surface === 'review' && <ReviewView />}
+            {surface === 'overview' && <OverviewView />}
           </div>
         </main>
       </div>

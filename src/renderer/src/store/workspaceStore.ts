@@ -28,7 +28,14 @@ export type WorkspaceDialog =
   { kind: 'move'; target: ItemRef } | { kind: 'delete'; target: ItemRef } | { kind: 'import' }
 
 export type WorkspaceSurface =
-  'canvas' | 'library' | 'trash' | 'search' | 'planner' | 'reader' | 'review'
+  | 'canvas'
+  | 'library'
+  | 'trash'
+  | 'search'
+  | 'planner'
+  | 'reader'
+  | 'review'
+  | 'overview'
 
 interface WorkspaceState {
   tree: ProjectTree | null
@@ -50,6 +57,7 @@ interface WorkspaceState {
   readerFocusId: string | null
   reviewCollectionId: string | null
   reviewPageId: string | null
+  overviewCollectionId: string | null
   /** Bumped when library rows should be read again (this window or another). */
   sidebarEpoch: number
   sidebarFilter: string
@@ -97,6 +105,7 @@ interface WorkspaceState {
   openPlanner: (collectionId: string, pageId?: string | null) => void
   openReader: (collectionId: string, pageId?: string | null) => void
   openReview: (collectionId: string, pageId: string) => void
+  openOverview: (collectionId: string) => void
   reloadLibrary: (append?: boolean) => Promise<void>
   reloadStorage: () => Promise<void>
   reloadTrash: () => Promise<void>
@@ -196,6 +205,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
     readerFocusId: null,
     reviewCollectionId: null,
     reviewPageId: null,
+    overviewCollectionId: null,
     sidebarEpoch: 0,
     sidebarFilter: '',
     libraryFolderId: null,
@@ -383,6 +393,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
       set({ surface: 'reader', readerCollectionId: collectionId, readerFocusId: pageId }),
     openReview: (collectionId, pageId) =>
       set({ surface: 'review', reviewCollectionId: collectionId, reviewPageId: pageId }),
+    openOverview: (collectionId) =>
+      set({ surface: 'overview', overviewCollectionId: collectionId }),
     openSearch: () => set({ surface: 'search' }),
     reloadLibrary: async (append = false) => {
       const request = ++libraryRequest
