@@ -139,7 +139,7 @@ On `feat/m8-connections-links-comments` ([PR #13](https://github.com/hooperart12
 - [ ] Search and direct tags, without copying a tag across a connection or a comment
 
 ## M9 — Page collections, planner, and reader (§10) 🚧
-On `feat/m9-page-collections` ([PR #14](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/14) → `feat/m8-connections-links-comments`, ADR-021). M6, M7, and M8 stay unmerged. Phase 1 stores collections, pages, spreads, versions, flat contents, and trash. The sidebar, Planner, Reader, Review, import, and export are not built. Boxes stay unchecked.
+On `feat/m9-page-collections` ([PR #14](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/14) → `feat/m8-connections-links-comments`, ADR-021). M6, M7, and M8 stay unmerged. Phase 1 stores collections, pages, spreads, versions, flat contents, and trash. Phase 2 adds the sidebar, creation dialog, compact and cover cards, and the base Planner. Phase 3 adds collection search, bulk preview, staged import, grid drag, and version crops. Phase 4 adds the Reader and Artwork Review. Phase 5 adds PDF export, numbered image export, and portable collection packages. Phase 6 adds conflict checks, rolled-back spread moves, and a tested 1,000-page window. All of that after Phase 1 is in the working tree, is not committed, and was not opened in Electron. The app build passed. The installer was not built. Boxes stay unchecked.
 
 - [ ] Collections sidebar, nested folders, templates, and canvas cards
 - [ ] Planner grid and spread layout, page properties, and placeholders

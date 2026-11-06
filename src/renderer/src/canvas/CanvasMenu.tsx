@@ -27,6 +27,7 @@ import {
   pasteConnectionStyle,
   saveComment
 } from '../relations/relationActions'
+import { collectionCard } from '@shared/collections'
 import { navigateTo } from '../relations/navigate'
 
 const noteMode = (o: CanvasObject) => {
@@ -417,6 +418,73 @@ function MenuItems() {
             onSelect={() => setRenaming({ type: 'board', id: boardId, source: 'board' })}
           >
             Rename
+          </Item>
+          <Separator />
+        </>
+      )}
+      {single?.type === 'collection' && (
+        <>
+          <Item
+            shortcut="Enter"
+            onSelect={() => {
+              const card = collectionCard(single.data)
+              if (!card) return
+              void window.api
+                .invoke('collections:setAppearance', single.id, { lastOpened: 'planner' })
+                .catch(() => {})
+              useWorkspaceStore.getState().openPlanner(card.collectionId, null)
+            }}
+          >
+            Open in Planner
+          </Item>
+          <Item
+            onSelect={() => {
+              const card = collectionCard(single.data)
+              if (!card) return
+              void window.api
+                .invoke('collections:setAppearance', single.id, { lastOpened: 'reader' })
+                .catch(() => {})
+              useWorkspaceStore.getState().openReader(card.collectionId, null)
+            }}
+          >
+            Open in Reader
+          </Item>
+          <Item
+            onSelect={() =>
+              void window.api.invoke('collections:setAppearance', single.id, { display: 'compact' })
+            }
+          >
+            Compact
+          </Item>
+          <Item
+            onSelect={() =>
+              void window.api.invoke('collections:setAppearance', single.id, { display: 'cover' })
+            }
+          >
+            Cover preview
+          </Item>
+          <Item
+            onSelect={() =>
+              void window.api.invoke('collections:setAppearance', single.id, {
+                openWith: 'planner'
+              })
+            }
+          >
+            Open with Planner
+          </Item>
+          <Item
+            onSelect={() =>
+              void window.api.invoke('collections:setAppearance', single.id, { openWith: 'reader' })
+            }
+          >
+            Open with Reader
+          </Item>
+          <Item
+            onSelect={() =>
+              void window.api.invoke('collections:setAppearance', single.id, { openWith: 'last' })
+            }
+          >
+            Open with last used
           </Item>
           <Separator />
         </>

@@ -27,7 +27,8 @@ export type RenameTarget = ItemRef & { source: ItemSource }
 export type WorkspaceDialog =
   { kind: 'move'; target: ItemRef } | { kind: 'delete'; target: ItemRef } | { kind: 'import' }
 
-export type WorkspaceSurface = 'canvas' | 'library' | 'trash' | 'search'
+export type WorkspaceSurface =
+  'canvas' | 'library' | 'trash' | 'search' | 'planner' | 'reader' | 'review'
 
 interface WorkspaceState {
   tree: ProjectTree | null
@@ -41,6 +42,14 @@ interface WorkspaceState {
   dialog: WorkspaceDialog | null
   sidebarCollapsed: boolean
   surface: WorkspaceSurface
+  plannerCollectionId: string | null
+  /** Page to select when the planner opens. Null uses the collection's saved page. */
+  plannerFocusId: string | null
+  readerCollectionId: string | null
+  /** Page to open in the Reader. Null resumes the saved page. */
+  readerFocusId: string | null
+  reviewCollectionId: string | null
+  reviewPageId: string | null
   /** Bumped when library rows should be read again (this window or another). */
   sidebarEpoch: number
   sidebarFilter: string
@@ -85,6 +94,9 @@ interface WorkspaceState {
   openTrash: () => void
   openSearch: () => void
   showCanvas: () => void
+  openPlanner: (collectionId: string, pageId?: string | null) => void
+  openReader: (collectionId: string, pageId?: string | null) => void
+  openReview: (collectionId: string, pageId: string) => void
   reloadLibrary: (append?: boolean) => Promise<void>
   reloadStorage: () => Promise<void>
   reloadTrash: () => Promise<void>
@@ -178,6 +190,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
     dialog: null,
     sidebarCollapsed: readSidebarCollapsed(),
     surface: 'canvas',
+    plannerCollectionId: null,
+    plannerFocusId: null,
+    readerCollectionId: null,
+    readerFocusId: null,
+    reviewCollectionId: null,
+    reviewPageId: null,
     sidebarEpoch: 0,
     sidebarFilter: '',
     libraryFolderId: null,
@@ -359,6 +377,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
       void get().reloadTrash()
     },
     showCanvas: () => set({ surface: 'canvas' }),
+    openPlanner: (collectionId, pageId = null) =>
+      set({ surface: 'planner', plannerCollectionId: collectionId, plannerFocusId: pageId }),
+    openReader: (collectionId, pageId = null) =>
+      set({ surface: 'reader', readerCollectionId: collectionId, readerFocusId: pageId }),
+    openReview: (collectionId, pageId) =>
+      set({ surface: 'review', reviewCollectionId: collectionId, reviewPageId: pageId }),
     openSearch: () => set({ surface: 'search' }),
     reloadLibrary: async (append = false) => {
       const request = ++libraryRequest

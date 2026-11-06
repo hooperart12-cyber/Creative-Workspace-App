@@ -4,21 +4,36 @@
  */
 import { randomUUID } from 'node:crypto'
 import { and, asc, eq, inArray, isNotNull, isNull, max } from 'drizzle-orm'
+import { bulkDecision, type BulkOperation } from '@shared/collectionBulk'
+import { type CommittedAction } from '@shared/collectionImport'
+import { placeBefore } from '@shared/collectionOrder'
 import {
   BLANK_TEMPLATE,
   BUILTIN_TEMPLATES,
   COMIC_TEMPLATE,
   derivedNumbers,
   MANGA_TEMPLATE,
+  type ArtworkState,
+  type CollectionDetail,
+  type CollectionOutline,
+  type CollectionPageView,
+  type PagePatch,
   type PageRole,
   type PageStatus,
   type ReadingDirection,
   type PageSide,
   type TemplateData
 } from '@shared/collections'
+import {
+  collectionQueryActive,
+  filterCollectionPages,
+  type CollectionSearchPage
+} from '@shared/collectionSearch'
+import type { ReaderDocument, ReaderLayout } from '@shared/reader'
 import { parseDestination, remapDestination, type Destination } from '@shared/destinations'
 import type { ProjectDb } from '../db/client'
 import {
+  assets,
   boardObjects,
   collectionFolders,
   collectionNav,
@@ -30,7 +45,9 @@ import {
   pageComments,
   pageLinks,
   pageStageStates,
-  pageVersions
+  pageVersions,
+  taggings,
+  tags
 } from '../db/schema'
 import { deletionTime } from './boards'
 
@@ -41,24 +58,6 @@ const BUILTINS: { id: string; name: string; data: TemplateData }[] = [
   { id: BUILTIN_TEMPLATES.manga, name: 'Manga', data: MANGA_TEMPLATE },
   { id: BUILTIN_TEMPLATES.comic, name: 'Comic', data: COMIC_TEMPLATE }
 ]
-
-export interface CollectionPageView {
-  id: string
-  collectionId: string
-  position: number
-  title: string
-  label: string
-  role: PageRole | null
-  unnumbered: boolean | null
-  notes: string
-  overallStatus: string
-  /** Derived story number. Null when the page is unnumbered. */
-  number: number | null
-  span: 1 | 2
-  spreadId: string | null
-  displayedVersionId: string | null
-  revision: number
-}
 
 export interface UnmappedStage {
   pageId: string
@@ -281,6 +280,7 @@ export class CollectionRepository {
       })),
       collection.numberStart
     )
+    const artwork = this.displayedArtwork(rows)
     return rows.map((row) => ({
       id: row.id,
       collectionId: row.collectionId,
@@ -295,7 +295,9 @@ export class CollectionRepository {
       span: row.span === 2 ? 2 : 1,
       spreadId: row.spreadId,
       displayedVersionId: row.displayedVersionId,
-      revision: row.revision
+      revision: row.revision,
+      artwork: artwork.get(row.id)?.state ?? 'blank',
+      displayedName: artwork.get(row.id)?.name ?? ''
     }))
   }
 
@@ -314,15 +316,18 @@ export class CollectionRepository {
   updatePage(
     id: string,
     revision: number,
-    patch: { title?: string; notes?: string; label?: string; overallStatus?: PageStatus }
+    patch: PagePatch,
+    base?: PagePatch
   ): { revision: number } {
     const page = this.requirePage(id)
-    if (page.revision !== revision) throw new Error(COLLECTION_CONFLICT)
-    const next = revision + 1
+    if (page.revision !== revision && !sameFields(page, patch, base)) {
+      throw new Error(COLLECTION_CONFLICT)
+    }
+    const next = page.revision + 1
     const result = this.db
       .update(collectionPages)
       .set({ ...patch, revision: next, updatedAt: new Date() })
-      .where(and(eq(collectionPages.id, id), eq(collectionPages.revision, revision)))
+      .where(and(eq(collectionPages.id, id), eq(collectionPages.revision, page.revision)))
       .run()
     if (result.changes !== 1) throw new Error(COLLECTION_CONFLICT)
     return { revision: next }
@@ -404,6 +409,19 @@ export class CollectionRepository {
       .where(inArray(collectionPages.id, [pageId, partnerId]))
       .run()
     return { spreadId }
+  }
+
+  /** Restores a previous sequence. The ids must be the live pages, in the restored order. */
+  orderPages(collectionId: string, pageIds: string[]): void {
+    this.requireCollection(collectionId)
+    this.db.transaction((tx) => {
+      const live = this.livePages(collectionId, tx).map((page) => page.id)
+      if (live.length !== pageIds.length || live.some((id) => !pageIds.includes(id))) {
+        throw new Error('That sequence is out of date.')
+      }
+      this.rewritePositions(tx, pageIds)
+      this.assertPartnersAdjacent(tx, collectionId)
+    })
   }
 
   reorder(collectionId: string, pageIds: string[], beforeId: string | null): void {
@@ -578,20 +596,98 @@ export class CollectionRepository {
     )
   }
 
+  /**
+   * What the Reader shows. Reading this does not record a resume.
+   * Next chapter is only the stored id, and only while that collection exists.
+   */
+  reader(collectionId: string): ReaderDocument {
+    const row = this.requireCollection(collectionId)
+    const pages = this.pages(collectionId)
+    const versionIds = pages.flatMap((page) =>
+      page.displayedVersionId ? [page.displayedVersionId] : []
+    )
+    const versionRows = versionIds.length
+      ? this.db.select().from(pageVersions).where(inArray(pageVersions.id, versionIds)).all()
+      : []
+    const byVersion = new Map(versionRows.map((version) => [version.id, version]))
+    const assetIds = versionRows.map((version) => version.assetId)
+    const files = assetIds.length
+      ? this.db.select().from(assets).where(inArray(assets.id, assetIds)).all()
+      : []
+    const byAsset = new Map(files.map((file) => [file.id, file]))
+    const next = row.nextCollectionId
+      ? this.db
+          .select({ title: collections.title })
+          .from(collections)
+          .where(and(eq(collections.id, row.nextCollectionId), isNull(collections.deletedAt)))
+          .get()
+      : undefined
+    const layout: ReaderLayout =
+      row.readerLayout === 'spread' || row.readerLayout === 'continuous'
+        ? row.readerLayout
+        : 'single'
+    return {
+      id: row.id,
+      title: row.title,
+      direction: row.direction === 'rtl' ? 'rtl' : 'ltr',
+      firstPageSide: row.firstPageSide === 'left' ? 'left' : 'right',
+      nextCollectionId: next ? row.nextCollectionId : null,
+      nextTitle: next?.title ?? null,
+      resume: {
+        pageId: row.readerPageId,
+        layout,
+        zoom: row.readerZoom,
+        x: row.readerX,
+        y: row.readerY
+      },
+      pages: pages.map((page) => {
+        const version = page.displayedVersionId ? byVersion.get(page.displayedVersionId) : undefined
+        const file = version ? byAsset.get(version.assetId) : undefined
+        const crop =
+          version &&
+          version.cropX != null &&
+          version.cropY != null &&
+          version.cropW != null &&
+          version.cropH != null
+            ? { x: version.cropX, y: version.cropY, w: version.cropW, h: version.cropH }
+            : null
+        return {
+          id: page.id,
+          title: page.title,
+          label: page.label,
+          number: page.number,
+          role: page.role,
+          span: page.span,
+          spreadId: page.spreadId,
+          artwork: page.artwork,
+          sha256: file && !file.deletedAt ? file.sha256 : null,
+          width: file?.width ?? null,
+          height: file?.height ?? null,
+          crop
+        }
+      })
+    }
+  }
+
   /** Records the Reader that the person just used. A window that only closes does not call this. */
   touchReader(
     collectionId: string,
     state: { pageId: string; layout: string; zoom: number; x: number; y: number }
   ): void {
     this.requireCollection(collectionId)
+    const page = this.requirePage(state.pageId)
+    if (page.collectionId !== collectionId) throw new Error('That page is not in this collection.')
+    const layout: ReaderLayout =
+      state.layout === 'spread' || state.layout === 'continuous' ? state.layout : 'single'
+    const zoom = Number.isFinite(state.zoom) ? Math.min(8, Math.max(0.25, state.zoom)) : 1
     this.db
       .update(collections)
       .set({
         readerPageId: state.pageId,
-        readerLayout: state.layout,
-        readerZoom: state.zoom,
-        readerX: state.x,
-        readerY: state.y,
+        readerLayout: layout,
+        readerZoom: zoom,
+        readerX: Number.isFinite(state.x) ? state.x : 0,
+        readerY: Number.isFinite(state.y) ? state.y : 0,
         readerInteractedAt: new Date(),
         updatedAt: new Date()
       })
@@ -771,6 +867,357 @@ export class CollectionRepository {
       .set({ deletedAt: null, updatedAt: new Date() })
       .where(eq(collections.id, id))
       .run()
+  }
+
+  outline(): CollectionOutline {
+    const folders = this.db
+      .select()
+      .from(collectionFolders)
+      .where(isNull(collectionFolders.deletedAt))
+      .all()
+    const rows = this.db.select().from(collections).where(isNull(collections.deletedAt)).all()
+    const pages = this.db
+      .select({ collectionId: collectionPages.collectionId })
+      .from(collectionPages)
+      .where(isNull(collectionPages.deletedAt))
+      .all()
+    const counts = new Map<string, number>()
+    for (const page of pages) {
+      counts.set(page.collectionId, (counts.get(page.collectionId) ?? 0) + 1)
+    }
+    return {
+      folders: folders.map((folder) => ({
+        id: folder.id,
+        parentId: folder.parentId,
+        name: folder.name,
+        sortOrder: folder.sortOrder,
+        createdAt: folder.createdAt.getTime(),
+        updatedAt: folder.updatedAt.getTime()
+      })),
+      collections: rows.map((row) => ({
+        id: row.id,
+        folderId: row.folderId,
+        title: row.title,
+        sortOrder: row.sortOrder,
+        createdAt: row.createdAt.getTime(),
+        updatedAt: row.updatedAt.getTime(),
+        direction: row.direction === 'rtl' ? 'rtl' : 'ltr',
+        pageCount: counts.get(row.id) ?? 0
+      }))
+    }
+  }
+
+  detail(id: string): CollectionDetail {
+    const row = this.requireCollection(id)
+    const pages = this.pages(id)
+    const pageIds = pages.map((page) => page.id)
+    const stageStates =
+      pageIds.length === 0
+        ? []
+        : this.db
+            .select()
+            .from(pageStageStates)
+            .where(inArray(pageStageStates.pageId, pageIds))
+            .all()
+            .map((state) => ({
+              pageId: state.pageId,
+              stageId: state.stageId,
+              state: state.state,
+              note: state.note
+            }))
+    return {
+      id: row.id,
+      title: row.title,
+      folderId: row.folderId,
+      direction: row.direction === 'rtl' ? 'rtl' : 'ltr',
+      firstPageSide: row.firstPageSide === 'left' ? 'left' : 'right',
+      numberStart: row.numberStart,
+      plannerView: row.plannerView === 'spread' ? 'spread' : 'grid',
+      gridDensity:
+        row.gridDensity === 'compact' || row.gridDensity === 'detailed'
+          ? row.gridDensity
+          : 'balanced',
+      gridSize: row.gridSize,
+      spreadZoom: row.spreadZoom,
+      plannerPageId: row.plannerPageId,
+      pages,
+      stages: this.stages(id),
+      stageStates
+    }
+  }
+
+  rename(id: string, title: string): void {
+    this.requireCollection(id)
+    this.db
+      .update(collections)
+      .set({ title: title.trim() || 'Untitled collection', updatedAt: new Date() })
+      .where(eq(collections.id, id))
+      .run()
+  }
+
+  move(id: string, folderId: string | null): void {
+    this.requireCollection(id)
+    if (folderId) this.requireFolder(folderId)
+    this.db
+      .update(collections)
+      .set({
+        folderId,
+        sortOrder: this.nextCollectionOrder(folderId),
+        updatedAt: new Date()
+      })
+      .where(eq(collections.id, id))
+      .run()
+  }
+
+  /** Manual order among items that already share a parent. This does not change ids. */
+  reorderSibling(kind: 'folder' | 'collection', id: string, beforeId: string | null): void {
+    const now = new Date()
+    if (kind === 'folder') {
+      const row = this.db
+        .select()
+        .from(collectionFolders)
+        .where(and(eq(collectionFolders.id, id), isNull(collectionFolders.deletedAt)))
+        .get()
+      if (!row) throw new Error('That folder is not in this project.')
+      const siblings = this.db
+        .select()
+        .from(collectionFolders)
+        .where(isNull(collectionFolders.deletedAt))
+        .all()
+        .filter((folder) => folder.parentId === row.parentId)
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+      const ordered = placeBefore(
+        siblings.map((folder) => folder.id),
+        id,
+        beforeId
+      )
+      this.db.transaction((tx) => {
+        ordered.forEach((itemId, index) => {
+          tx.update(collectionFolders)
+            .set({ sortOrder: index, updatedAt: now })
+            .where(eq(collectionFolders.id, itemId))
+            .run()
+        })
+      })
+      return
+    }
+    const row = this.requireCollection(id)
+    const siblings = this.db
+      .select()
+      .from(collections)
+      .where(isNull(collections.deletedAt))
+      .all()
+      .filter((collection) => collection.folderId === row.folderId)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+    const ordered = placeBefore(
+      siblings.map((collection) => collection.id),
+      id,
+      beforeId
+    )
+    this.db.transaction((tx) => {
+      ordered.forEach((itemId, index) => {
+        tx.update(collections)
+          .set({ sortOrder: index, updatedAt: now })
+          .where(eq(collections.id, itemId))
+          .run()
+      })
+    })
+  }
+
+  /**
+   * Saves this collection's direction, opening side, and current stage names as a new template.
+   * The collection itself is not changed, and older collections are not rewritten.
+   */
+  saveTemplate(name: string, collectionId: string): { id: string } {
+    const source = this.requireCollection(collectionId)
+    const id = randomUUID()
+    const now = new Date()
+    const data: TemplateData = {
+      direction: source.direction === 'rtl' ? 'rtl' : 'ltr',
+      firstPageSide: source.firstPageSide === 'left' ? 'left' : 'right',
+      stages: this.stages(collectionId).map((stage) => ({ name: stage.name }))
+    }
+    this.db
+      .insert(collectionTemplates)
+      .values({
+        id,
+        name: name.trim() || 'Untitled template',
+        builtin: false,
+        data: data as unknown as Record<string, unknown>,
+        createdAt: now,
+        updatedAt: now
+      })
+      .run()
+    return { id }
+  }
+
+  renameTemplate(id: string, name: string): void {
+    const row = this.db
+      .select()
+      .from(collectionTemplates)
+      .where(and(eq(collectionTemplates.id, id), isNull(collectionTemplates.deletedAt)))
+      .get()
+    if (!row) throw new Error('That template is not in this project.')
+    if (row.builtin) throw new Error('Built-in template names stay as they are.')
+    this.db
+      .update(collectionTemplates)
+      .set({ name: name.trim() || 'Untitled template', updatedAt: new Date() })
+      .where(eq(collectionTemplates.id, id))
+      .run()
+  }
+
+  /** Planner view and the last selected page. This does not write Reader resume. */
+  rememberPlanner(
+    id: string,
+    patch: {
+      view?: 'grid' | 'spread'
+      density?: 'compact' | 'balanced' | 'detailed'
+      gridSize?: number
+      spreadZoom?: number
+      pageId?: string | null
+    }
+  ): void {
+    this.requireCollection(id)
+    if (patch.pageId) {
+      const page = this.requirePage(patch.pageId)
+      if (page.collectionId !== id) throw new Error('That page is not in this collection.')
+    }
+    const gridSize =
+      patch.gridSize === undefined ? undefined : Math.min(320, Math.max(96, patch.gridSize))
+    const spreadZoom =
+      patch.spreadZoom === undefined ? undefined : Math.min(3, Math.max(0.5, patch.spreadZoom))
+    this.db
+      .update(collections)
+      .set({
+        ...(patch.view !== undefined ? { plannerView: patch.view } : {}),
+        ...(patch.density !== undefined ? { gridDensity: patch.density } : {}),
+        ...(gridSize !== undefined ? { gridSize } : {}),
+        ...(spreadZoom !== undefined ? { spreadZoom } : {}),
+        ...(patch.pageId !== undefined ? { plannerPageId: patch.pageId } : {}),
+        updatedAt: new Date()
+      })
+      .where(eq(collections.id, id))
+      .run()
+  }
+
+  setSpan(pageId: string, span: 1 | 2): void {
+    const page = this.requirePage(pageId)
+    if (span === 2 && page.spreadId) {
+      throw new Error('Unlock the spread before making the page wide.')
+    }
+    this.db
+      .update(collectionPages)
+      .set({
+        span,
+        spreadId: span === 2 ? null : page.spreadId,
+        updatedAt: new Date()
+      })
+      .where(eq(collectionPages.id, pageId))
+      .run()
+  }
+
+  unlockSpread(pageId: string): void {
+    const page = this.requirePage(pageId)
+    if (!page.spreadId) return
+    this.db
+      .update(collectionPages)
+      .set({ spreadId: null, updatedAt: new Date() })
+      .where(
+        and(
+          eq(collectionPages.collectionId, page.collectionId),
+          eq(collectionPages.spreadId, page.spreadId)
+        )
+      )
+      .run()
+  }
+
+  /**
+   * Compact or cover, and what a double-click opens, for this card only.
+   * A custom size is left alone. The preset sizes swap only when the card is still a preset.
+   */
+  setAppearance(
+    objectId: string,
+    patch: {
+      display?: 'compact' | 'cover'
+      openWith?: 'planner' | 'reader' | 'last'
+      lastOpened?: 'planner' | 'reader'
+    }
+  ): void {
+    const row = this.db
+      .select()
+      .from(boardObjects)
+      .where(and(eq(boardObjects.id, objectId), isNull(boardObjects.deletedAt)))
+      .get()
+    if (!row || row.type !== 'collection') throw new Error('That card is not a collection.')
+    const data = { ...row.data }
+    if (patch.display) data.display = patch.display
+    if (patch.openWith) data.openWith = patch.openWith
+    if (patch.lastOpened) data.lastOpened = patch.lastOpened
+    const compact = row.width === 220 && row.height === 148
+    const cover = row.width === 260 && row.height === 320
+    const size =
+      patch.display === 'cover' && compact
+        ? { width: 260, height: 320 }
+        : patch.display === 'compact' && cover
+          ? { width: 220, height: 148 }
+          : {}
+    this.db
+      .update(boardObjects)
+      .set({ data, ...size, updatedAt: new Date() })
+      .where(eq(boardObjects.id, objectId))
+      .run()
+  }
+
+  /** Fills collection cards with the collection's title so the canvas does not look it up itself. */
+  attach<T extends { type: string; data: Record<string, unknown> }>(
+    objects: T[]
+  ): (T & {
+    collection?: {
+      id: string
+      title: string
+      pageCount: number
+      direction: 'ltr' | 'rtl'
+      missing: boolean
+    }
+  })[] {
+    const ids = [
+      ...new Set(
+        objects.flatMap((object) =>
+          object.type === 'collection' && typeof object.data.collectionId === 'string'
+            ? [object.data.collectionId]
+            : []
+        )
+      )
+    ]
+    if (ids.length === 0) return objects
+    const rows = this.db.select().from(collections).where(inArray(collections.id, ids)).all()
+    const byId = new Map(rows.map((row) => [row.id, row]))
+    const pages = this.db
+      .select({ collectionId: collectionPages.collectionId })
+      .from(collectionPages)
+      .where(and(inArray(collectionPages.collectionId, ids), isNull(collectionPages.deletedAt)))
+      .all()
+    const counts = new Map<string, number>()
+    for (const page of pages) {
+      counts.set(page.collectionId, (counts.get(page.collectionId) ?? 0) + 1)
+    }
+    return objects.map((object) => {
+      if (object.type !== 'collection' || typeof object.data.collectionId !== 'string') {
+        return object
+      }
+      const row = byId.get(object.data.collectionId)
+      const missing = !row || row.deletedAt != null
+      return {
+        ...object,
+        collection: {
+          id: object.data.collectionId,
+          title: missing ? 'Missing collection' : row.title,
+          pageCount: counts.get(object.data.collectionId) ?? 0,
+          direction: row?.direction === 'rtl' ? 'rtl' : 'ltr',
+          missing
+        }
+      }
+    })
   }
 
   list(): { id: string; folderId: string | null; title: string; sortOrder: number }[] {
@@ -991,6 +1438,308 @@ export class CollectionRepository {
     return { id }
   }
 
+  /** Ids in sequence order. An empty query matches every page and is not stored. */
+  search(collectionId: string, query: string): { ids: string[] } {
+    const pages = this.pages(collectionId)
+    if (!collectionQueryActive(query)) return { ids: pages.map((page) => page.id) }
+    const searchable = this.searchRows(pages)
+    return { ids: filterCollectionPages(searchable, query).map((page) => page.id) }
+  }
+
+  /**
+   * Writes only the fields named by the operation. Replace notes does nothing
+   * until `confirmReplace` is true. One undo restores those fields.
+   */
+  applyBulk(
+    ids: string[],
+    operation: BulkOperation,
+    confirmReplace: boolean
+  ): {
+    changed: string[]
+    alreadyMatching: string[]
+    incompatible: { id: string; reason: string }[]
+    undo: { id: string; revision: number; previous: PagePatch }[]
+  } {
+    if (operation.kind === 'replace-notes' && !confirmReplace) {
+      throw new Error('Replace notes only after you confirm the preview.')
+    }
+    const unique = [...new Set(ids)]
+    const rows = unique.length
+      ? this.db.select().from(collectionPages).where(inArray(collectionPages.id, unique)).all()
+      : []
+    const byId = new Map(rows.map((row) => [row.id, row]))
+    const undo: { id: string; revision: number; previous: PagePatch }[] = []
+    const changed: string[] = []
+    const alreadyMatching: string[] = []
+    const incompatible: { id: string; reason: string }[] = []
+    this.db.transaction((tx) => {
+      for (const id of unique) {
+        const page = byId.get(id)
+        if (!page || page.deletedAt) {
+          incompatible.push({ id, reason: 'That page is not in this collection.' })
+          continue
+        }
+        const decision = bulkDecision(
+          {
+            id,
+            notes: page.notes,
+            overallStatus: page.overallStatus,
+            role: page.role
+          },
+          operation
+        )
+        if (decision.kind === 'same') {
+          alreadyMatching.push(id)
+          continue
+        }
+        if (decision.kind === 'incompatible') {
+          incompatible.push({ id, reason: decision.reason })
+          continue
+        }
+        const next = page.revision + 1
+        const result = tx
+          .update(collectionPages)
+          .set({ ...decision.patch, revision: next, updatedAt: new Date() })
+          .where(and(eq(collectionPages.id, id), eq(collectionPages.revision, page.revision)))
+          .run()
+        if (result.changes !== 1) throw new Error(COLLECTION_CONFLICT)
+        changed.push(id)
+        undo.push({ id, revision: next, previous: decision.previous })
+      }
+    })
+    return { changed, alreadyMatching, incompatible, undo }
+  }
+
+  undoBulk(entries: { id: string; revision: number; previous: PagePatch }[]): void {
+    this.db.transaction((tx) => {
+      for (const entry of entries) {
+        const result = tx
+          .update(collectionPages)
+          .set({ ...entry.previous, revision: entry.revision + 1, updatedAt: new Date() })
+          .where(
+            and(eq(collectionPages.id, entry.id), eq(collectionPages.revision, entry.revision))
+          )
+          .run()
+        if (result.changes !== 1) throw new Error(COLLECTION_CONFLICT)
+      }
+    })
+  }
+
+  /**
+   * Creates pages or fills blank ones from an approved plan. The first asset is
+   * displayed. Later assets in the same action stay as versions. Status is not changed.
+   */
+  commitImport(
+    collectionId: string,
+    beforeId: string | null,
+    actions: CommittedAction[]
+  ): {
+    created: string[]
+    filled: {
+      pageId: string
+      versionIds: string[]
+      previousDisplayed: string | null
+      revision: number
+    }[]
+  } {
+    this.requireCollection(collectionId)
+    const created: string[] = []
+    const filled: {
+      pageId: string
+      versionIds: string[]
+      previousDisplayed: string | null
+      revision: number
+    }[] = []
+    this.db.transaction((tx) => {
+      for (const action of actions) {
+        if (action.assets.length === 0) throw new Error('Choose an image for each page.')
+        if (action.kind === 'page') {
+          const id = randomUUID()
+          const ordered = this.livePages(collectionId, tx)
+          const at = this.insertIndex(ordered, beforeId)
+          const now = new Date()
+          tx.insert(collectionPages)
+            .values({
+              id,
+              collectionId,
+              position: at,
+              title: stem(action.assets[0]!.name),
+              role: 'story',
+              overallStatus: 'not_started',
+              createdAt: now,
+              updatedAt: now
+            })
+            .run()
+          const next = [
+            ...ordered.slice(0, at).map((page) => page.id),
+            id,
+            ...ordered.slice(at).map((page) => page.id)
+          ]
+          this.rewritePositions(tx, next)
+          const versionIds = this.insertVersions(tx, id, action.assets)
+          tx.update(collectionPages)
+            .set({ displayedVersionId: versionIds[0], revision: 1, updatedAt: now })
+            .where(eq(collectionPages.id, id))
+            .run()
+          created.push(id)
+        } else {
+          const page = tx
+            .select()
+            .from(collectionPages)
+            .where(
+              and(
+                eq(collectionPages.id, action.pageId),
+                eq(collectionPages.collectionId, collectionId),
+                isNull(collectionPages.deletedAt)
+              )
+            )
+            .get()
+          if (!page) throw new Error('That page is not in this collection.')
+          if (page.displayedVersionId) throw new Error('That page already has artwork.')
+          const notes = page.notes
+          const status = page.overallStatus
+          const versionIds = this.insertVersions(tx, page.id, action.assets)
+          const next = page.revision + 1
+          const now = new Date()
+          const result = tx
+            .update(collectionPages)
+            .set({ displayedVersionId: versionIds[0], revision: next, updatedAt: now })
+            .where(
+              and(eq(collectionPages.id, page.id), eq(collectionPages.revision, page.revision))
+            )
+            .run()
+          if (result.changes !== 1) throw new Error(COLLECTION_CONFLICT)
+          const saved = tx
+            .select({ notes: collectionPages.notes, overallStatus: collectionPages.overallStatus })
+            .from(collectionPages)
+            .where(eq(collectionPages.id, page.id))
+            .get()
+          if (saved?.notes !== notes || saved.overallStatus !== status) {
+            throw new Error('Importing artwork must not change notes or status.')
+          }
+          filled.push({
+            pageId: page.id,
+            versionIds,
+            previousDisplayed: null,
+            revision: next
+          })
+        }
+      }
+    })
+    return { created, filled }
+  }
+
+  undoImport(record: {
+    created: string[]
+    filled: {
+      pageId: string
+      versionIds: string[]
+      previousDisplayed: string | null
+      revision: number
+    }[]
+  }): void {
+    this.db.transaction((tx) => {
+      if (record.created.length > 0) {
+        const now = deletionTime()
+        tx.update(collectionPages)
+          .set({ deletedAt: now, updatedAt: now })
+          .where(inArray(collectionPages.id, record.created))
+          .run()
+      }
+      for (const fill of record.filled) {
+        const result = tx
+          .update(collectionPages)
+          .set({
+            displayedVersionId: fill.previousDisplayed,
+            revision: fill.revision + 1,
+            updatedAt: new Date()
+          })
+          .where(
+            and(eq(collectionPages.id, fill.pageId), eq(collectionPages.revision, fill.revision))
+          )
+          .run()
+        if (result.changes !== 1) throw new Error(COLLECTION_CONFLICT)
+        if (fill.versionIds.length > 0) {
+          tx.delete(pageVersions).where(inArray(pageVersions.id, fill.versionIds)).run()
+        }
+      }
+    })
+  }
+
+  versions(pageId: string): {
+    id: string
+    name: string
+    assetId: string
+    fileName: string
+    sha256: string | null
+    width: number | null
+    height: number | null
+    missing: boolean
+    crop: { x: number; y: number; w: number; h: number } | null
+  }[] {
+    this.requirePage(pageId)
+    const rows = this.db
+      .select()
+      .from(pageVersions)
+      .where(eq(pageVersions.pageId, pageId))
+      .orderBy(asc(pageVersions.position))
+      .all()
+    const assetIds = rows.map((row) => row.assetId)
+    const files = assetIds.length
+      ? this.db.select().from(assets).where(inArray(assets.id, assetIds)).all()
+      : []
+    const byAsset = new Map(files.map((file) => [file.id, file]))
+    return rows.map((row) => {
+      const file = byAsset.get(row.assetId)
+      const crop =
+        row.cropX != null && row.cropY != null && row.cropW != null && row.cropH != null
+          ? { x: row.cropX, y: row.cropY, w: row.cropW, h: row.cropH }
+          : null
+      return {
+        id: row.id,
+        name: row.name,
+        assetId: row.assetId,
+        fileName: file?.originalName ?? '',
+        sha256: file && !file.deletedAt ? file.sha256 : null,
+        width: file?.width ?? null,
+        height: file?.height ?? null,
+        missing: !file || file.deletedAt != null,
+        crop
+      }
+    })
+  }
+
+  /** Stores a crop on the version. The asset file is not opened or rewritten. */
+  setCrop(versionId: string, crop: { x: number; y: number; w: number; h: number } | null): void {
+    const version = this.db
+      .select({ id: pageVersions.id })
+      .from(pageVersions)
+      .where(eq(pageVersions.id, versionId))
+      .get()
+    if (!version) throw new Error('That version is not on this page.')
+    if (crop) {
+      const values = [crop.x, crop.y, crop.w, crop.h]
+      if (
+        values.some((value) => !Number.isInteger(value) || value < 0) ||
+        crop.w < 1 ||
+        crop.h < 1
+      ) {
+        throw new Error('Crop uses whole pixels, with a width and height.')
+      }
+    }
+    this.db
+      .update(pageVersions)
+      .set({
+        cropX: crop?.x ?? null,
+        cropY: crop?.y ?? null,
+        cropW: crop?.w ?? null,
+        cropH: crop?.h ?? null,
+        updatedAt: new Date()
+      })
+      .where(eq(pageVersions.id, versionId))
+      .run()
+  }
+
   private requireCollection(id: string) {
     const row = this.db
       .select()
@@ -1065,6 +1814,116 @@ export class CollectionRepository {
     return (
       siblings.reduce((maxOrder, collection) => Math.max(maxOrder, collection.sortOrder), -1) + 1
     )
+  }
+
+  private displayedArtwork(
+    rows: { id: string; displayedVersionId: string | null }[]
+  ): Map<string, { state: ArtworkState; name: string }> {
+    const result = new Map<string, { state: ArtworkState; name: string }>()
+    const versionIds = rows.flatMap((row) =>
+      row.displayedVersionId ? [row.displayedVersionId] : []
+    )
+    const versions = versionIds.length
+      ? this.db.select().from(pageVersions).where(inArray(pageVersions.id, versionIds)).all()
+      : []
+    const byVersion = new Map(versions.map((version) => [version.id, version]))
+    const assetIds = versions.map((version) => version.assetId)
+    const files = assetIds.length
+      ? this.db.select().from(assets).where(inArray(assets.id, assetIds)).all()
+      : []
+    const byAsset = new Map(files.map((file) => [file.id, file]))
+    for (const row of rows) {
+      if (!row.displayedVersionId) {
+        result.set(row.id, { state: 'blank', name: '' })
+        continue
+      }
+      const version = byVersion.get(row.displayedVersionId)
+      const file = version ? byAsset.get(version.assetId) : undefined
+      if (!version || !file || file.deletedAt) {
+        result.set(row.id, { state: 'missing', name: version?.name ?? '' })
+        continue
+      }
+      const state = file.mime.startsWith('image/') ? 'ready' : 'unsupported'
+      result.set(row.id, { state, name: version.name || file.originalName })
+    }
+    return result
+  }
+
+  private searchRows(pages: CollectionPageView[]): CollectionSearchPage[] {
+    const ids = pages.map((page) => page.id)
+    if (ids.length === 0) return []
+    const versionRows = this.db
+      .select()
+      .from(pageVersions)
+      .where(inArray(pageVersions.pageId, ids))
+      .all()
+    const assetIds = versionRows.map((row) => row.assetId)
+    const files = assetIds.length
+      ? this.db.select().from(assets).where(inArray(assets.id, assetIds)).all()
+      : []
+    const fileName = new Map(files.map((file) => [file.id, file.originalName]))
+    const tagRows = this.db
+      .select({ name: tags.name, targetId: taggings.targetId })
+      .from(taggings)
+      .innerJoin(tags, eq(tags.id, taggings.tagId))
+      .where(and(eq(taggings.targetType, 'page'), inArray(taggings.targetId, ids)))
+      .all()
+    const commentRows = this.db
+      .select({ pageId: pageComments.pageId, body: pageCommentMessages.body })
+      .from(pageComments)
+      .innerJoin(pageCommentMessages, eq(pageCommentMessages.commentId, pageComments.id))
+      .where(and(inArray(pageComments.pageId, ids), isNull(pageComments.deletedAt)))
+      .all()
+    const stageRows = this.db
+      .select()
+      .from(pageStageStates)
+      .where(inArray(pageStageStates.pageId, ids))
+      .all()
+    return pages.map((page) => ({
+      id: page.id,
+      title: page.title,
+      label: page.label,
+      notes: page.notes,
+      number: page.number,
+      overallStatus: page.overallStatus,
+      role: page.role,
+      spreadId: page.spreadId,
+      span: page.span,
+      versionNames: versionRows.filter((row) => row.pageId === page.id).map((row) => row.name),
+      fileNames: versionRows
+        .filter((row) => row.pageId === page.id)
+        .map((row) => fileName.get(row.assetId) ?? ''),
+      tags: tagRows.filter((row) => row.targetId === page.id).map((row) => row.name),
+      comments: commentRows.filter((row) => row.pageId === page.id).map((row) => row.body),
+      stageNotes: stageRows
+        .filter((row) => row.pageId === page.id)
+        .map((row) => row.note)
+        .filter(Boolean),
+      blank: page.artwork === 'blank'
+    }))
+  }
+
+  private insertVersions(
+    tx: ProjectDb,
+    pageId: string,
+    items: { assetId: string; name: string }[]
+  ): string[] {
+    const now = new Date()
+    return items.map((item, index) => {
+      const id = randomUUID()
+      tx.insert(pageVersions)
+        .values({
+          id,
+          pageId,
+          assetId: item.assetId,
+          name: stem(item.name),
+          position: index,
+          createdAt: now,
+          updatedAt: now
+        })
+        .run()
+      return id
+    })
   }
 
   private livePages(collectionId: string, tx: ProjectDb = this.db) {
@@ -1303,4 +2162,33 @@ export class CollectionRepository {
       }
     }
   }
+}
+
+const PAGE_FIELDS = ['title', 'notes', 'label', 'overallStatus', 'role', 'unnumbered'] as const
+
+/** The edited fields still have the values this window started from. Other fields may have changed. */
+function sameFields(
+  page: {
+    title: string
+    notes: string
+    label: string
+    overallStatus: string
+    role: string | null
+    unnumbered: boolean | null
+  },
+  patch: PagePatch,
+  base: PagePatch | undefined
+): boolean {
+  if (!base) return false
+  return PAGE_FIELDS.every((key) => {
+    if (patch[key] === undefined) return true
+    const current = page[key] ?? null
+    const expected = base[key] ?? null
+    return current === expected
+  })
+}
+
+function stem(name: string): string {
+  const base = name.replace(/\\/g, '/').split('/').pop() ?? name
+  return base.replace(/\.[^.]+$/, '') || base
 }

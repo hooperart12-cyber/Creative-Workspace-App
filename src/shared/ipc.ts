@@ -1,3 +1,17 @@
+import type { BulkOperation } from './collectionBulk'
+import type { ExportFormat, ExportSpread, ExportWarning } from './collectionExport'
+import type { ReaderDocument } from './reader'
+import type { ImportAction, StagedSource } from './collectionImport'
+import type {
+  CollectionDetail,
+  CollectionOutline,
+  CollectionTemplateInfo,
+  PagePatch,
+  PageRole,
+  PageStatus,
+  TemplateData
+} from './collections'
+import type { Destination } from './destinations'
 import type { ImageCrop } from './crop'
 import type { StackSettings } from './stacks'
 import type {
@@ -471,6 +485,256 @@ export interface IpcRequests {
   }
   'recovery:clearDraft': { args: [objectId: string]; result: void }
   'recovery:list': { args: []; result: NoteDraftInfo[] }
+  'collections:outline': { args: []; result: CollectionOutline }
+  'collections:templates': { args: []; result: CollectionTemplateInfo[] }
+  'collections:create': {
+    args: [
+      input: {
+        title: string
+        folderId?: string | null
+        templateId?: string | null
+        direction?: 'ltr' | 'rtl'
+        placeholderCount?: number
+      }
+    ]
+    result: { id: string; pageIds: string[] }
+  }
+  'collections:detail': { args: [id: string]; result: CollectionDetail }
+  'collections:rename': { args: [id: string, title: string]; result: void }
+  'collections:move': { args: [id: string, folderId: string | null]; result: void }
+  'collections:trash': { args: [id: string]; result: void }
+  'collections:restore': { args: [id: string]; result: void }
+  'collections:reorder': {
+    args: [kind: 'folder' | 'collection', id: string, beforeId: string | null]
+    result: void
+  }
+  'collections:createFolder': {
+    args: [parentId: string | null, name: string]
+    result: { id: string }
+  }
+  'collections:renameFolder': { args: [id: string, name: string]; result: void }
+  'collections:moveFolder': { args: [id: string, parentId: string | null]; result: void }
+  'collections:saveTemplate': {
+    args: [name: string, collectionId: string]
+    result: { id: string }
+  }
+  'collections:renameTemplate': { args: [id: string, name: string]; result: void }
+  'collections:updateTemplate': { args: [id: string, data: TemplateData]; result: void }
+  'collections:insertPages': {
+    args: [
+      input: {
+        collectionId: string
+        count: number
+        beforeId?: string | null
+        title?: string
+        notes?: string
+        role?: PageRole | null
+        status?: PageStatus
+      }
+    ]
+    result: { pageIds: string[] }
+  }
+  'collections:undoPages': { args: [pageIds: string[]]; result: void }
+  'collections:reorderPages': {
+    args: [collectionId: string, pageIds: string[], beforeId: string | null]
+    result: void
+  }
+  'collections:orderPages': {
+    args: [collectionId: string, pageIds: string[]]
+    result: void
+  }
+  'collections:trashPages': { args: [pageIds: string[]]; result: { pageIds: string[] } }
+  'collections:restorePages': { args: [pageIds: string[]]; result: { pageIds: string[] } }
+  'collections:updatePage': {
+    args: [id: string, revision: number, patch: PagePatch, base?: PagePatch]
+    result: { revision: number }
+  }
+  'collections:setStage': {
+    args: [pageId: string, stageId: string, state: PageStatus, note?: string]
+    result: void
+  }
+  'collections:lockSpread': {
+    args: [pageId: string, partnerId: string]
+    result: { spreadId: string }
+  }
+  'collections:unlockSpread': { args: [pageId: string]; result: void }
+  'collections:setSpan': { args: [pageId: string, span: 1 | 2]; result: void }
+  'collections:updateSettings': {
+    args: [
+      id: string,
+      patch: {
+        title?: string
+        description?: string
+        direction?: 'ltr' | 'rtl'
+        firstPageSide?: 'left' | 'right'
+        numberStart?: number
+        nextCollectionId?: string | null
+      }
+    ]
+    result: void
+  }
+  'collections:rememberPlanner': {
+    args: [
+      id: string,
+      patch: {
+        view?: 'grid' | 'spread'
+        density?: 'compact' | 'balanced' | 'detailed'
+        gridSize?: number
+        spreadZoom?: number
+        pageId?: string | null
+      }
+    ]
+    result: void
+  }
+  'collections:placeCard': {
+    args: [boardId: string, collectionId: string]
+    result: { id: string }
+  }
+  'collections:setAppearance': {
+    args: [
+      objectId: string,
+      patch: {
+        display?: 'compact' | 'cover'
+        openWith?: 'planner' | 'reader' | 'last'
+        lastOpened?: 'planner' | 'reader'
+      }
+    ]
+    result: void
+  }
+  'collections:comments': { args: [pageId: string]; result: { id: string; body: string }[] }
+  'collections:addComment': { args: [pageId: string, body: string]; result: { id: string } }
+  'collections:links': {
+    args: [pageId: string]
+    result: { id: string; destination: Destination | null }[]
+  }
+  'collections:addLink': {
+    args: [pageId: string, destination: Destination]
+    result: { id: string }
+  }
+  'collections:search': {
+    args: [collectionId: string, query: string]
+    result: { ids: string[] }
+  }
+  'collections:applyBulk': {
+    args: [ids: string[], operation: BulkOperation, confirmReplace: boolean]
+    result: {
+      changed: string[]
+      alreadyMatching: string[]
+      incompatible: { id: string; reason: string }[]
+      undo: { id: string; revision: number; previous: PagePatch }[]
+    }
+  }
+  'collections:undoBulk': {
+    args: [entries: { id: string; revision: number; previous: PagePatch }[]]
+    result: void
+  }
+  'collections:stagePaths': {
+    args: [paths: string[]]
+    result: { files: StagedSource[]; error: string | null }
+  }
+  'collections:commitImport': {
+    args: [
+      collectionId: string,
+      beforeId: string | null,
+      files: StagedSource[],
+      actions: ImportAction[]
+    ]
+    result: {
+      created: string[]
+      filled: {
+        pageId: string
+        versionIds: string[]
+        previousDisplayed: string | null
+        revision: number
+      }[]
+    }
+  }
+  'collections:undoImport': {
+    args: [
+      record: {
+        created: string[]
+        filled: {
+          pageId: string
+          versionIds: string[]
+          previousDisplayed: string | null
+          revision: number
+        }[]
+      }
+    ]
+    result: void
+  }
+  'collections:versions': {
+    args: [pageId: string]
+    result: {
+      id: string
+      name: string
+      assetId: string
+      fileName: string
+      sha256: string | null
+      width: number | null
+      height: number | null
+      missing: boolean
+      crop: { x: number; y: number; w: number; h: number } | null
+    }[]
+  }
+  'collections:reader': { args: [collectionId: string]; result: ReaderDocument }
+  'collections:touchReader': {
+    args: [
+      collectionId: string,
+      state: { pageId: string; layout: string; zoom: number; x: number; y: number }
+    ]
+    result: void
+  }
+  'collections:nav': {
+    args: [collectionId: string]
+    result: { id: string; pageId: string; kind: string; title: string; available: boolean }[]
+  }
+  'collections:addNav': {
+    args: [collectionId: string, pageId: string, kind: 'toc' | 'bookmark', title: string]
+    result: { id: string }
+  }
+  'collections:renameNav': { args: [id: string, title: string]; result: void }
+  'collections:removeNav': { args: [id: string]; result: void }
+  'collections:exportSequence': {
+    args: [
+      collectionId: string,
+      destination: string,
+      format: ExportFormat,
+      spread: ExportSpread,
+      omitUnavailable: boolean
+    ]
+    result: { files: string[]; warnings: ExportWarning[] }
+  }
+  'collections:exportPackage': {
+    args: [collectionId: string, destination: string, includeComments: boolean]
+    result: void
+  }
+  'collections:importPackage': {
+    args: [zipPath: string]
+    result: { collectionId: string; unresolved: string[] }
+  }
+  'dialog:pickSaveCollection': { args: [kind: 'pdf' | 'zip']; result: string | null }
+  'dialog:pickCollectionPackage': { args: []; result: string | null }
+  'collections:setDisplayed': {
+    args: [pageId: string, versionId: string | null, revision: number]
+    result: { revision: number }
+  }
+  'collections:setCrop': {
+    args: [versionId: string, crop: { x: number; y: number; w: number; h: number } | null]
+    result: void
+  }
+  'collections:placePageLink': {
+    args: [boardId: string, collectionId: string, pageId: string]
+    result: { id: string }
+  }
+  'collections:movePages': {
+    args: [pageIds: string[], toCollectionId: string, beforeId: string | null]
+    result: { unmapped: { pageId: string; stageName: string; note: string }[] }
+  }
+  'collections:copyPages': {
+    args: [pageIds: string[], toCollectionId: string, beforeId: string | null]
+    result: { pageIds: string[] }
+  }
 }
 
 /** Events pushed from the main process to renderer windows. */
@@ -648,7 +912,64 @@ export const IPC_CHANNELS = [
   'assets:get',
   'recovery:writeDraft',
   'recovery:clearDraft',
-  'recovery:list'
+  'recovery:list',
+  'collections:outline',
+  'collections:templates',
+  'collections:create',
+  'collections:detail',
+  'collections:rename',
+  'collections:move',
+  'collections:trash',
+  'collections:restore',
+  'collections:reorder',
+  'collections:createFolder',
+  'collections:renameFolder',
+  'collections:moveFolder',
+  'collections:saveTemplate',
+  'collections:renameTemplate',
+  'collections:updateTemplate',
+  'collections:insertPages',
+  'collections:undoPages',
+  'collections:reorderPages',
+  'collections:orderPages',
+  'collections:trashPages',
+  'collections:restorePages',
+  'collections:updatePage',
+  'collections:setStage',
+  'collections:lockSpread',
+  'collections:unlockSpread',
+  'collections:setSpan',
+  'collections:updateSettings',
+  'collections:rememberPlanner',
+  'collections:placeCard',
+  'collections:setAppearance',
+  'collections:comments',
+  'collections:addComment',
+  'collections:links',
+  'collections:addLink',
+  'collections:search',
+  'collections:applyBulk',
+  'collections:undoBulk',
+  'collections:stagePaths',
+  'collections:commitImport',
+  'collections:undoImport',
+  'collections:versions',
+  'collections:setDisplayed',
+  'collections:setCrop',
+  'collections:placePageLink',
+  'collections:movePages',
+  'collections:copyPages',
+  'collections:reader',
+  'collections:touchReader',
+  'collections:nav',
+  'collections:addNav',
+  'collections:renameNav',
+  'collections:removeNav',
+  'collections:exportSequence',
+  'collections:exportPackage',
+  'collections:importPackage',
+  'dialog:pickSaveCollection',
+  'dialog:pickCollectionPackage'
 ] as const satisfies readonly IpcChannel[]
 
 /** The API exposed to the renderer as `window.api`. */

@@ -10,55 +10,57 @@ A row is Tested only when a unit test asserts that behavior. In Progress means t
 
 | Decision | State | What is in the branch |
 |---|---|---|
-| D01 Hybrid collections | In Progress | A collection survives when one of two canvas cards is deleted. Tested. No sidebar. |
-| D02 Page entries | In Progress | Stable page ids, notes, status, and optional artwork. Showing a version leaves status `not_started`. Tested. No Planner or Reader UI. |
-| D03 Sequence and spreads | In Progress | Derived numbers, wide span, locked pairs, and RTL side placement. Tested in `src/shared/collections.test.ts` and the repository reorder/lock tests. |
-| D04 Dual-view Planner | Not Started | `planner_view` is stored. No grid or spread layout. |
-| D05 Artwork versions | In Progress | Add a version, show it on purpose, clear it, and remove the version row without deleting the asset. Crop columns exist. No crop editor and no M7 slide import. |
-| D06 Production stages | In Progress | Stages are copied from the template at creation. A later template edit does not rewrite them. `setStage` does not change overall status. Tested. No bulk edit. |
-| D07 Reader | Not Started | No Reader window. |
-| D08 Reader resume | In Progress | `touchReader` is the only writer. Tested. A passive close cannot call it because there is no Reader yet. Two windows are not tested. |
-| D09 Folders and templates | In Progress | Nested folders, rename, move, built-in templates, and collection trash/restore. Tested. No sidebar. |
-| D10 Canvas cards | In Progress | `type: 'collection'` cards can be created and one can be deleted. Tested. No compact/cover drawing. |
-| D11 Staged import | Not Started | `naturalCompare` is tested. Nothing imports into a collection. |
-| D12 Move, copy, recovery | In Progress | Move keeps ids. Copy, full duplicate, and structure-only duplicate are tested. Locked partners are trashed and restored together. Stale page writes throw. No app undo stack for these operations. |
-| D13 Page links and comments | In Progress | Page links and comments are their own tables. A copied internal link follows the new page. Comments stay behind unless requested. Tested. Canvas navigation to a collection or page does nothing yet. |
-| D14 Artwork Review | Not Started | No comparison workspace. |
-| D15 Collection search | Not Started | No collection-local search. No saved views and no new project search. |
-| D16 Export and packages | Not Started | |
-| D17 Collection settings | In Progress | Direction, opening side, numbering start, and an explicit next collection can be saved without changing page ids. Direction and numbering were tested. No impact preview. |
-| D18 Multi-window conflicts | In Progress | One stale note write is refused and the saved note remains. Tested. No second window. |
-| D19 Scale and recovery | Not Started | Migration still uses the existing pre-migration recovery point. No new scanner. Virtualization is not built. |
-| D20 Flat contents and bookmarks | In Progress | A contents entry keeps its page id after a reorder and is marked unavailable after trash. Tested. Bookmarks use the same table. No hierarchical contents and no camera. |
-| D21 Overview | Not Started | `collectionCounts` is tested. No overview screen. |
-| D22 Reader appearance | Not Started | No per-collection theme. |
-| D23 Reader controls | Not Started | |
-| D24 Artwork errors | Not Started | |
-| D25 Bulk editor | Not Started | |
-| D26 Planner thumbnails | Not Started | |
-| D27 Page inspector | Not Started | |
-| D28 Placeholders | In Progress | 40 placeholders keep their ids, title, and notes, and one undo soft-deletes them. Tested. Tags are not applied at insert. No page templates. |
+| D01 Hybrid collections | In Progress | A collection survives when one of two canvas cards is deleted. Tested. The sidebar lists the collection separately from its cards. |
+| D02 Page entries | In Progress | Stable page ids, notes, status, and optional artwork. Showing a version leaves status `not_started`. Tested. The Planner and Reader use those page ids. |
+| D03 Sequence and spreads | In Progress | Derived numbers, wide span, locked pairs, and RTL side placement. Tested in `src/shared/collections.test.ts` and the repository reorder/lock tests. The Planner can step a locked pair and set span. |
+| D04 Dual-view Planner | In Progress | Thumbnail grid and Spread layout are in the Planner. The chosen view, size, zoom, and focused page id are stored by `rememberPlanner`. Density is stored. A 1,000-page grid window is tested in D19. No component test. |
+| D05 Artwork versions | In Progress | Add a version, show it on purpose, clear it, and remove the version row without deleting the asset. A numeric crop is stored on the version and does not change the asset bytes. Tested. No visual crop editor and no M7 slide import. |
+| D06 Production stages | In Progress | Stages are copied from the template at creation. A later template edit does not rewrite them. `setStage` does not change overall status. Tested. The sidebar can edit a template. No bulk edit. |
+| D07 Reader | In Progress | Single, spread, and continuous layouts, fit or zoom, pan, a page strip, click zones, and an end card are in `ReaderView`. `readerStep`, click zones, and zoom are tested in `src/shared/reader.test.ts`. The window has no component test and was not opened in Electron. |
+| D08 Reader resume | In Progress | `touchReader` is the only writer. Reading a collection does not write. Closing or refreshing does not write, and remembering the Planner page does not change the Reader resume. A later Reader interaction replaces it. Tested. Two application windows were not opened. |
+| D09 Folders and templates | In Progress | Nested folders, rename, move, built-in templates, and collection trash/restore are tested. The sidebar can nest folders, save a template, and edit one. Editing a template does not rewrite an existing collection. Tested in the repository. No folder trash. |
+| D10 Canvas cards | In Progress | `type: 'collection'` cards can be created and one can be deleted. Tested. Compact and Cover preview are separate stored appearances, and the repository test keeps them apart. Cover preview is a layout, not a loaded cover image. |
+| D11 Staged import | In Progress | File names are staged in natural order. Unsafe paths, PDFs, other files, and duplicate names stay out. Version grouping is off until it is chosen. Fill uses blank pages and leaves extras out. Commit keeps page notes and status. Tested. No clipboard, library drag, canvas drop, or slide import. |
+| D12 Move, copy, recovery | In Progress | Move keeps ids. Copy, full duplicate, and structure-only duplicate are tested. Locked partners are trashed and restored together. A reorder or move that would split a locked spread rolls back, and the notes and stage note stay. Tested. No app undo stack for these operations. |
+| D13 Page links and comments | In Progress | Page links and comments are their own tables. A copied internal link follows the new page. Comments stay behind unless requested. Tested. A collection or page destination opens the Planner. The inspector can add a comment and a same-collection page link. That screen is not unit-tested. |
+| D14 Artwork Review | In Progress | Single, side-by-side, and A/B are in `ReviewView`. Picking a version does not write the Reader resume or change the displayed artwork until Set as displayed. No component test and no drawing tools. |
+| D15 Collection search | In Progress | Search stays inside one collection and keeps sequence order. It matches title, notes, comments, tags, and `status:` / `role:` / `tag:`. Tested. The query is not saved. No new project search. |
+| D16 Export and packages | In Progress | PDF and numbered PNG, JPEG, or WebP. One file per page, or one file per spread. A crop is applied to the copy. The asset file is unchanged. Tested. Blank, missing, and unsupported pages are warned and can be omitted on purpose. A package import creates a new collection and does not overwrite. Roles, notes, a locked spread, a tag, a crop, and an inside link survive. An outside link stays unresolved. Comments and Reader resume stay out unless comments are included. Tested. The dialog was not opened in Electron. |
+| D17 Collection settings | In Progress | Direction, opening side, numbering start, and an explicit next collection can be saved without changing page ids. Direction and numbering were tested. The Planner can change direction, opening side, and the first story number. No impact preview. |
+| D18 Multi-window conflicts | In Progress | A stale write to the same field is refused and the saved value remains. A different field is saved when that field is still unchanged. Undo does not replace a newer edit. Tested. Two application windows were not opened. |
+| D19 Scale and recovery | In Progress | One thousand blank pages keep their ids. The Reader does not attach artwork files for them. The grid window stays under 40 entries. Tested. No timing claim. Migration still uses the existing pre-migration recovery point. No new scanner. |
+| D20 Flat contents and bookmarks | In Progress | A contents entry keeps its page id after a reorder and is marked unavailable after trash. A bookmark stores the page id only. Tested. The Reader can add either for the current page. No hierarchy, camera, or reorder control. |
+| D21 Overview | Not Started | `collectionCounts` is tested. The Reader end card can show those counts. There is no overview screen. |
+| D22 Reader appearance | In Progress | Global appearance is `cw.readerPrefs` in localStorage. `parseReaderPrefs` ignores a collection id and a theme. Tested. The Reader can change background, margin, gutter, border, fit, enlargement, and smoothing. No per-collection theme. |
+| D23 Reader controls | In Progress | Western, manga, keyboard, and continuous presets, plus a remap that refuses a colliding key. Manga swaps the next and previous keys and does not change the collection direction. Tested. Planner keys stay fixed. The window keys are not automated. |
+| D24 Artwork errors | In Progress | A page is blank, ready, missing, or unsupported from the stored asset. Missing is tested after the asset is trashed. Export warns for a blank page and for artwork that cannot be read, and the page id stays. Tested. No stored decode-failure state and no folder rematch. |
+| D25 Bulk editor | In Progress | Preview counts targeted, already matching, changed, and incompatible pages. A status edit writes status only. Replace notes is refused until confirmed. One undo restores the field. Tested. No tag add/remove and no mass comment edit. |
+| D26 Planner thumbnails | In Progress | Compact, Balanced, and Detailed are stored with the grid size. Detailed shows status and the version name. A window of rows is calculated for long grids. Tested for the range helper and the saved density. Artwork image thumbnails are not loaded. |
+| D27 Page inspector | In Progress | Page properties edits the focused page: title, label, notes, role, numbering, stage status, span, and a locked pair. Several selected pages are not written together. No component test. |
+| D28 Placeholders | In Progress | 40 placeholders keep their ids, title, and notes, and one undo soft-deletes them. Tested. The Planner can insert 1–20 before the focused page or at the end and undo that insert. Tags are not applied at insert. No page templates and no batch title or notes on create. |
 | D29 Reference panel | Not Started | Excluded. Do not build a reference panel or split view. |
 | D30 Notes and links on move/copy | Tested | Move keeps the page id. Copy remaps an internal page link, leaves an outside collection link, and omits comments. |
-| D31 Planner shortcuts | Not Started | No remappable Planner shortcuts. |
-| D32 Drag preview | Not Started | |
+| D31 Planner shortcuts | In Progress | Fixed Planner keys: arrows, Delete, Ctrl+Z, Ctrl+A on the visible pages, and Escape to cancel a drag. A focused field is left alone. Reorder is disabled while a filter is on. Move, Copy, and a canvas page link are in the Planner. Shortcuts are not remappable. No automated key test. |
+| D32 Drag preview | In Progress | The grid drag keeps the page list still until drop. The ghost counts pages and says when a pair is locked or a page is wide. A drop between a locked pair is refused. Tested. Spread layout still uses Earlier and Later. |
 | D33 Chapter validation | Not Started | Excluded. Do not add a chapter check before Reader opens. |
-| D34 Page roles | In Progress | Cover, blank, and an explicit unnumbered page are left out of the count. Tested. No role picker. |
+| D34 Page roles | In Progress | Cover, blank, and an explicit unnumbered page are left out of the count. Tested. The inspector has a role picker. That picker is not unit-tested. |
 | D35 Mixed dimensions | Not Started | |
-| D36 End screen | Not Started | `next_collection_id` can be stored. No end screen and no inferred next chapter. |
-| D37 Reader handoff | Not Started | |
-| D38 Planner reopen | Not Started | |
-| D39 New-collection dialog | Not Started | `create` accepts a name, folder, template, direction, and placeholder count. No dialog. |
-| D40 CBZ and ZIP | Not Started | |
-| D41 Package import | Not Started | |
-| D42 Sidebar order | Not Started | Folder and collection order are stored. No sidebar and no smart folders. |
+| D36 End screen | In Progress | Past the last page, the Reader offers Restart, Overview counts, Planner, and Next chapter only while `reader()` still finds the stored collection. A trashed next collection is omitted. Tested in the repository. The end card has no component test. Next chapter is not inferred from folder order. |
+| D37 Reader handoff | In Progress | Planner Read and Review, canvas Open in Reader, and Review's Reader button open a page id. A card open with no page id resumes and does not write until a turn, zoom, or pan. Page links still open the Planner. No component test. |
+| D38 Planner reopen | In Progress | `rememberPlanner` stores the view, thumbnail size, spread zoom, and focused page id. It does not write Reader fields. Reopen is not tested, and the inspector width is not stored. |
+| D39 New-collection dialog | In Progress | The dialog asks for a name, folder, template, reading direction, and a starting page count from 0 to 100, then opens the Planner. `create` itself is tested. The dialog is not. |
+| D40 CBZ and ZIP | In Progress | A CBZ or ZIP is listed, not extracted, during staging. An unsafe path rejects the archive and returns no names. Tested. PDF entries are not converted. Commit extracts only the accepted images. |
+| D41 Package import | In Progress | Import creates a new collection, reuses an asset with the same file hash, and remaps links that point inside the package. An unsafe path is rejected and no collection is created. Tested. There is no merge into an existing collection. |
+| D42 Sidebar order | In Progress | Manual, name, created, and modified sorts are in `src/shared/collectionOrder.ts` and tested. The sidebar uses them. Drag reorder runs only in manual order. The sort is per window. No smart folders. |
 
 ## Tests actually run
 
-- `npm test` — 29 files, 244 tests, all passed (2026-11-05).
+- `npm test` — 36 files, 277 tests, all passed (2026-11-06). Includes field conflicts, revision-checked undo, a rolled-back locked-spread move, Reader close not writing resume, and a 1,000-page window.
 - `npm run lint` — passed.
 - `npm run typecheck` — passed.
+- `npm run build` — passed. The Windows installer was not built or installed.
+- The Electron window was not exercised. Reader, Review, the Planner, export, dialogs, drag, and the thumbnail window have no component or Playwright test.
 
 ## Not built
 
-Sidebar, creation dialog, Planner, Reader, Artwork Review, import, export, portable packages, command palette, and IPC. Excluded C features from the spec are not implemented.
+Command palette, an overview screen, artwork image thumbnails in the Planner, clipboard or canvas-drop import, slide import, a visual crop editor, folder rematch, folder trash, and a second application window. A package uses the existing archive limits. The PDF is built in memory from displayed images. Excluded C features from the spec are not implemented. Phases 2 through 6 are in the working tree and are not committed.

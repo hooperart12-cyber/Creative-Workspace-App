@@ -7,6 +7,8 @@ import { GRID_SIZE, useCanvasStore } from '../store/canvasStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import * as actions from './actions'
 import { expandToGroups, findDropTarget, findStackDrop, smartSnap, snapToGrid } from './arrange'
+import { collectionCard } from '@shared/collections'
+import { CollectionNode } from '../collections/CollectionNode'
 import { BoardCardNode, COLORS, TITLE_FONT_SIZE, TITLE_GAP } from './BoardCardNode'
 import {
   boundsOf,
@@ -801,7 +803,22 @@ export function CanvasView() {
       return
     }
     if (object?.type === 'board' && object.linkedBoardId) void openBoard(object.linkedBoardId)
-    else if (object?.type === 'document' && object.asset) {
+    else if (object?.type === 'collection') {
+      const card = collectionCard(object.data)
+      if (!card) return
+      const mode = card.openWith === 'last' ? card.lastOpened : card.openWith
+      if (mode === 'reader') {
+        void window.api
+          .invoke('collections:setAppearance', object.id, { lastOpened: 'reader' })
+          .catch(() => {})
+        useWorkspaceStore.getState().openReader(card.collectionId, null)
+        return
+      }
+      void window.api
+        .invoke('collections:setAppearance', object.id, { lastOpened: 'planner' })
+        .catch(() => {})
+      useWorkspaceStore.getState().openPlanner(card.collectionId, null)
+    } else if (object?.type === 'document' && object.asset) {
       const state = useCanvasStore.getState()
       state.setViewerObjectId(null)
       state.setFileDetailsId(null)
@@ -1129,6 +1146,14 @@ export function CanvasView() {
                   />
                 ) : o.type === 'file' ? (
                   <FileNode
+                    key={o.id}
+                    object={o}
+                    {...positionOf(o)}
+                    faded={cut.has(o.id)}
+                    zoom={viewport.zoom}
+                  />
+                ) : o.type === 'collection' ? (
+                  <CollectionNode
                     key={o.id}
                     object={o}
                     {...positionOf(o)}

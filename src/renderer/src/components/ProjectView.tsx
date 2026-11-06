@@ -12,6 +12,9 @@ import { ExpandedNoteEditor } from '../notes/ExpandedNoteEditor'
 import { useCanvasStore } from '../store/canvasStore'
 import { isEditingNote, useNoteStore } from '../notes/noteStore'
 import { saveNoteNow } from '../notes/session'
+import { PlannerView } from '../collections/PlannerView'
+import { ReaderView } from '../collections/ReaderView'
+import { ReviewView } from '../collections/ReviewView'
 import { LibraryView } from '../library/LibraryView'
 import { TrashView } from '../library/TrashView'
 import { BackupDialog } from '../backup/BackupDialog'
@@ -210,6 +213,9 @@ export function ProjectView({ project }: { project: ProjectSummary }) {
             {surface === 'library' && <LibraryView key={libraryFocusId ?? 'library'} />}
             {surface === 'trash' && <TrashView />}
             {surface === 'search' && <SearchView />}
+            {surface === 'planner' && <PlannerView />}
+            {surface === 'reader' && <ReaderView />}
+            {surface === 'review' && <ReviewView />}
           </div>
         </main>
       </div>

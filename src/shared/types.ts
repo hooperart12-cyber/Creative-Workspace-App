@@ -226,6 +226,14 @@ export interface CanvasObject {
   revision: number
   /** Present for `board` cards: details of the board the card opens. */
   board?: { title: string; childBoardCount: number }
+  /** Present for a collection card: the collection this appearance points at. */
+  collection?: {
+    id: string
+    title: string
+    pageCount: number
+    direction: 'ltr' | 'rtl'
+    missing: boolean
+  }
   /** Present for objects that show a library file (images). */
   asset?: AssetInfo
   /** Effective tags for this appearance: its own tags, plus the original's tags for a file. */

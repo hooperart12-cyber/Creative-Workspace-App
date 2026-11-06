@@ -10,7 +10,14 @@ export async function navigateTo(destination: Destination): Promise<void> {
     await window.api.invoke('links:open', destination.href)
     return
   }
-  if (destination.kind === 'collection' || destination.kind === 'page') return
+  if (destination.kind === 'collection') {
+    useWorkspaceStore.getState().openPlanner(destination.collectionId, null)
+    return
+  }
+  if (destination.kind === 'page') {
+    useWorkspaceStore.getState().openPlanner(destination.collectionId, destination.pageId)
+    return
+  }
   const workspace = useWorkspaceStore.getState()
   if (workspace.board?.id !== destination.boardId) await workspace.openBoard(destination.boardId)
   const board = useWorkspaceStore.getState().board

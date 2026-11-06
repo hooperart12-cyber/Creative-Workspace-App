@@ -9,6 +9,9 @@ export type PageRole = (typeof PAGE_ROLES)[number]
 export const PAGE_STATUSES = ['not_started', 'in_progress', 'done', 'skipped'] as const
 export type PageStatus = (typeof PAGE_STATUSES)[number]
 
+/** What the planner can say about the displayed artwork without opening the file. */
+export type ArtworkState = 'blank' | 'ready' | 'missing' | 'unsupported'
+
 export type ReadingDirection = 'ltr' | 'rtl'
 export type PageSide = 'left' | 'right'
 
@@ -187,4 +190,105 @@ export function collectionCounts(pages: { span: 1 | 2; hasArtwork: boolean }[]):
 /** Natural order: "Page 2" before "Page 10". */
 export function naturalCompare(a: string, b: string): number {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+}
+
+/** How one canvas card draws a collection. Each card chooses for itself. */
+export type CollectionDisplay = 'compact' | 'cover'
+/** What a double-click on that card opens. Reader is stored until Reader exists. */
+export type CollectionOpenWith = 'planner' | 'reader' | 'last'
+
+export interface CollectionCardData {
+  collectionId: string
+  display: CollectionDisplay
+  openWith: CollectionOpenWith
+  lastOpened: 'planner' | 'reader'
+}
+
+export function collectionCard(data: Record<string, unknown>): CollectionCardData | null {
+  const collectionId = data.collectionId
+  if (typeof collectionId !== 'string' || collectionId.length === 0) return null
+  const display = data.display === 'cover' ? 'cover' : 'compact'
+  const openWith =
+    data.openWith === 'reader' || data.openWith === 'last' ? data.openWith : 'planner'
+  const lastOpened = data.lastOpened === 'reader' ? 'reader' : 'planner'
+  return { collectionId, display, openWith, lastOpened }
+}
+
+export interface CollectionPageView {
+  id: string
+  collectionId: string
+  position: number
+  title: string
+  label: string
+  role: PageRole | null
+  unnumbered: boolean | null
+  notes: string
+  overallStatus: string
+  /** Derived story number. Null when the page is unnumbered. */
+  number: number | null
+  span: 1 | 2
+  spreadId: string | null
+  displayedVersionId: string | null
+  revision: number
+  artwork: ArtworkState
+  displayedName: string
+}
+
+export interface PagePatch {
+  title?: string
+  notes?: string
+  label?: string
+  overallStatus?: PageStatus
+  role?: PageRole | null
+  /** True forces no number. False forces a number. Null follows the role. */
+  unnumbered?: boolean | null
+}
+
+export interface CollectionOutlineFolder {
+  id: string
+  parentId: string | null
+  name: string
+  sortOrder: number
+  createdAt: number
+  updatedAt: number
+}
+
+export interface CollectionOutlineItem {
+  id: string
+  folderId: string | null
+  title: string
+  sortOrder: number
+  createdAt: number
+  updatedAt: number
+  direction: ReadingDirection
+  pageCount: number
+}
+
+export interface CollectionOutline {
+  folders: CollectionOutlineFolder[]
+  collections: CollectionOutlineItem[]
+}
+
+export interface CollectionTemplateInfo {
+  id: string
+  name: string
+  builtin: boolean
+  data: TemplateData
+}
+
+export interface CollectionDetail {
+  id: string
+  title: string
+  folderId: string | null
+  direction: ReadingDirection
+  firstPageSide: PageSide
+  numberStart: number
+  plannerView: 'grid' | 'spread'
+  gridDensity: 'compact' | 'balanced' | 'detailed'
+  gridSize: number
+  spreadZoom: number
+  plannerPageId: string | null
+  pages: CollectionPageView[]
+  stages: { id: string; name: string; position: number }[]
+  stageStates: { pageId: string; stageId: string; state: string; note: string }[]
 }
