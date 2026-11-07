@@ -4,8 +4,9 @@
  */
 import { randomUUID } from 'node:crypto'
 import { and, asc, eq, inArray, isNotNull, isNull, max } from 'drizzle-orm'
-import { bulkDecision, type BulkOperation } from '@shared/collectionBulk'
-import { type CommittedAction } from '@shared/collectionImport'
+import { classifyArtwork, planFolderMatch } from '@shared/artwork'
+import { bulkDecision, type BulkOperation, type BulkUndoEntry } from '@shared/collectionBulk'
+import { stageKnownAssets, type CommittedAction } from '@shared/collectionImport'
 import { placeBefore } from '@shared/collectionOrder'
 import {
   BLANK_TEMPLATE,
@@ -46,10 +47,12 @@ import {
   pageLinks,
   pageStageStates,
   pageVersions,
+  stackSlides,
   taggings,
   tags
 } from '../db/schema'
 import { deletionTime } from './boards'
+import { TagRepository } from './tags'
 
 export const COLLECTION_CONFLICT = 'Another window changed this page. The change was not saved.'
 
@@ -272,6 +275,7 @@ export class CollectionRepository {
     notes?: string
     role?: PageRole | null
     status?: PageStatus
+    tagIds?: string[]
   }): { pageIds: string[] } {
     this.requireCollection(input.collectionId)
     const count = Math.floor(input.count)
@@ -300,6 +304,13 @@ export class CollectionRepository {
       for (const page of created) tx.insert(collectionPages).values(page).run()
       this.rewritePositions(tx, next)
     })
+    const tagIds = [...new Set(input.tagIds ?? [])]
+    if (tagIds.length > 0) {
+      const tags = new TagRepository(this.db)
+      for (const pageId of pageIds) {
+        for (const tagId of tagIds) tags.assign(tagId, { type: 'page', id: pageId })
+      }
+    }
     return { pageIds }
   }
 
@@ -343,7 +354,8 @@ export class CollectionRepository {
       revision: row.revision,
       artwork: artwork.get(row.id)?.state ?? 'blank',
       displayedName: artwork.get(row.id)?.name ?? '',
-      sha256: artwork.get(row.id)?.sha256 ?? null
+      sha256: artwork.get(row.id)?.sha256 ?? null,
+      updatedAt: row.updatedAt.getTime()
     }))
   }
 
@@ -1506,7 +1518,7 @@ export class CollectionRepository {
     changed: string[]
     alreadyMatching: string[]
     incompatible: { id: string; reason: string }[]
-    undo: { id: string; revision: number; previous: PagePatch }[]
+    undo: BulkUndoEntry[]
   } {
     if (operation.kind === 'replace-notes' && !confirmReplace) {
       throw new Error('Replace notes only after you confirm the preview.')
@@ -1516,7 +1528,11 @@ export class CollectionRepository {
       ? this.db.select().from(collectionPages).where(inArray(collectionPages.id, unique)).all()
       : []
     const byId = new Map(rows.map((row) => [row.id, row]))
-    const undo: { id: string; revision: number; previous: PagePatch }[] = []
+    const tags = this.pageTags(unique)
+    const stages = unique.length
+      ? this.db.select().from(pageStageStates).where(inArray(pageStageStates.pageId, unique)).all()
+      : []
+    const undo: BulkUndoEntry[] = []
     const changed: string[] = []
     const alreadyMatching: string[] = []
     const incompatible: { id: string; reason: string }[] = []
@@ -1532,7 +1548,11 @@ export class CollectionRepository {
             id,
             notes: page.notes,
             overallStatus: page.overallStatus,
-            role: page.role
+            role: page.role,
+            tagIds: tags.filter((tag) => tag.pageId === id).map((tag) => tag.tagId),
+            stages: stages
+              .filter((stage) => stage.pageId === id)
+              .map((stage) => ({ stageId: stage.stageId, state: stage.state }))
           },
           operation
         )
@@ -1544,6 +1564,61 @@ export class CollectionRepository {
           incompatible.push({ id, reason: decision.reason })
           continue
         }
+        if (decision.kind === 'tag') {
+          const target = and(
+            eq(taggings.tagId, decision.tagId),
+            eq(taggings.targetType, 'page'),
+            eq(taggings.targetId, id)
+          )
+          if (decision.added) {
+            tx.insert(taggings)
+              .values({
+                id: randomUUID(),
+                tagId: decision.tagId,
+                targetType: 'page',
+                targetId: id,
+                createdAt: new Date()
+              })
+              .run()
+          } else {
+            tx.delete(taggings).where(target).run()
+          }
+          changed.push(id)
+          undo.push({ kind: 'tag', id, tagId: decision.tagId, added: decision.added })
+          continue
+        }
+        if (decision.kind === 'stage') {
+          const stage = tx
+            .select()
+            .from(collectionStages)
+            .where(eq(collectionStages.id, decision.stageId))
+            .get()
+          if (!stage || stage.removedAt || stage.collectionId !== page.collectionId) {
+            incompatible.push({ id, reason: 'That stage is not on this collection.' })
+            continue
+          }
+          tx.delete(pageStageStates)
+            .where(
+              and(eq(pageStageStates.pageId, id), eq(pageStageStates.stageId, decision.stageId))
+            )
+            .run()
+          tx.insert(pageStageStates)
+            .values({ pageId: id, stageId: decision.stageId, state: decision.state, note: '' })
+            .run()
+          changed.push(id)
+          const prior = stages.find(
+            (stage) => stage.pageId === id && stage.stageId === decision.stageId
+          )
+          undo.push({
+            kind: 'stage',
+            id,
+            stageId: decision.stageId,
+            previous: decision.previous,
+            previousNote: prior?.note ?? '',
+            applied: decision.state
+          })
+          continue
+        }
         const next = page.revision + 1
         const result = tx
           .update(collectionPages)
@@ -1552,15 +1627,71 @@ export class CollectionRepository {
           .run()
         if (result.changes !== 1) throw new Error(COLLECTION_CONFLICT)
         changed.push(id)
-        undo.push({ id, revision: next, previous: decision.previous })
+        undo.push({ kind: 'page', id, revision: next, previous: decision.previous })
       }
     })
     return { changed, alreadyMatching, incompatible, undo }
   }
 
-  undoBulk(entries: { id: string; revision: number; previous: PagePatch }[]): void {
+  undoBulk(entries: BulkUndoEntry[]): void {
     this.db.transaction((tx) => {
       for (const entry of entries) {
+        if (entry.kind === 'tag') {
+          const existing = tx
+            .select()
+            .from(taggings)
+            .where(
+              and(
+                eq(taggings.tagId, entry.tagId),
+                eq(taggings.targetType, 'page'),
+                eq(taggings.targetId, entry.id)
+              )
+            )
+            .get()
+          if (entry.added) {
+            if (!existing) throw new Error(COLLECTION_CONFLICT)
+            tx.delete(taggings).where(eq(taggings.id, existing.id)).run()
+          } else if (existing) {
+            throw new Error(COLLECTION_CONFLICT)
+          } else {
+            tx.insert(taggings)
+              .values({
+                id: randomUUID(),
+                tagId: entry.tagId,
+                targetType: 'page',
+                targetId: entry.id,
+                createdAt: new Date()
+              })
+              .run()
+          }
+          continue
+        }
+        if (entry.kind === 'stage') {
+          const current = tx
+            .select()
+            .from(pageStageStates)
+            .where(
+              and(eq(pageStageStates.pageId, entry.id), eq(pageStageStates.stageId, entry.stageId))
+            )
+            .get()
+          if ((current?.state ?? null) !== entry.applied) throw new Error(COLLECTION_CONFLICT)
+          tx.delete(pageStageStates)
+            .where(
+              and(eq(pageStageStates.pageId, entry.id), eq(pageStageStates.stageId, entry.stageId))
+            )
+            .run()
+          if (entry.previous) {
+            tx.insert(pageStageStates)
+              .values({
+                pageId: entry.id,
+                stageId: entry.stageId,
+                state: entry.previous,
+                note: entry.previousNote
+              })
+              .run()
+          }
+          continue
+        }
         const result = tx
           .update(collectionPages)
           .set({ ...entry.previous, revision: entry.revision + 1, updatedAt: new Date() })
@@ -1757,6 +1888,96 @@ export class CollectionRepository {
     })
   }
 
+  stageBoardArtwork(
+    objects: readonly { id: string; type: string; assetId: string | null }[]
+  ): ReturnType<typeof stageKnownAssets> {
+    const stackIds = objects.filter((object) => object.type === 'stack').map((object) => object.id)
+    const slideRows = stackIds.length
+      ? this.db.select().from(stackSlides).where(inArray(stackSlides.stackId, stackIds)).all()
+      : []
+    const assetIds = [
+      ...objects.flatMap((object) => (object.assetId ? [object.assetId] : [])),
+      ...slideRows.map((slide) => slide.assetId)
+    ]
+    const files = assetIds.length
+      ? this.db.select().from(assets).where(inArray(assets.id, assetIds)).all()
+      : []
+    const byId = new Map(files.map((file) => [file.id, file]))
+    const items = [
+      ...objects.flatMap((object) => {
+        if (object.type !== 'image' || !object.assetId) return []
+        const file = byId.get(object.assetId)
+        if (!file || file.deletedAt || !file.mime.startsWith('image/')) return []
+        return [{ name: file.originalName, assetId: file.id }]
+      }),
+      ...slideRows.flatMap((slide) => {
+        const file = byId.get(slide.assetId)
+        if (!file || file.deletedAt || !file.mime.startsWith('image/')) return []
+        return [{ name: file.originalName, assetId: file.id, sourceSlideId: slide.id }]
+      })
+    ]
+    return stageKnownAssets(items)
+  }
+
+  pageTags(pageIds: string[]): { pageId: string; tagId: string }[] {
+    if (pageIds.length === 0) return []
+    return this.db
+      .select({ pageId: taggings.targetId, tagId: taggings.tagId })
+      .from(taggings)
+      .where(and(eq(taggings.targetType, 'page'), inArray(taggings.targetId, pageIds)))
+      .all()
+  }
+
+  /**
+   * Points one version at another library asset. The version id stays.
+   * A crop that does not fit the new image is cleared. The old file is not deleted.
+   */
+  relinkVersion(versionId: string, assetId: string): { cropCleared: boolean } {
+    const version = this.db.select().from(pageVersions).where(eq(pageVersions.id, versionId)).get()
+    if (!version) throw new Error('That version is not on this page.')
+    const file = this.db.select().from(assets).where(eq(assets.id, assetId)).get()
+    if (!file || file.deletedAt) throw new Error('That file is not in the library.')
+    const crop =
+      version.cropX != null &&
+      version.cropY != null &&
+      version.cropW != null &&
+      version.cropH != null
+        ? { x: version.cropX, y: version.cropY, w: version.cropW, h: version.cropH }
+        : null
+    const fits =
+      crop &&
+      file.width != null &&
+      file.height != null &&
+      crop.x + crop.w <= file.width &&
+      crop.y + crop.h <= file.height
+    const cropCleared = Boolean(crop && !fits)
+    this.db
+      .update(pageVersions)
+      .set({
+        assetId,
+        ...(cropCleared ? { cropX: null, cropY: null, cropW: null, cropH: null } : {}),
+        updatedAt: new Date()
+      })
+      .where(eq(pageVersions.id, versionId))
+      .run()
+    return { cropCleared }
+  }
+
+  /** Names in a chosen folder that match version file names. This does not import or relink. */
+  previewFolderMatch(
+    collectionId: string,
+    files: readonly { name: string; filePath: string }[]
+  ): { versionId: string; filePath: string; fileName: string }[] {
+    this.requireCollection(collectionId)
+    const versions = this.pages(collectionId).flatMap((page) =>
+      this.versions(page.id).map((version) => ({
+        versionId: version.id,
+        fileName: version.fileName
+      }))
+    )
+    return planFolderMatch(versions, files)
+  }
+
   /** Stores a crop on the version. The asset file is not opened or rewritten. */
   setCrop(versionId: string, crop: { x: number; y: number; w: number; h: number } | null): void {
     const version = this.db
@@ -1881,21 +2102,20 @@ export class CollectionRepository {
       : []
     const byAsset = new Map(files.map((file) => [file.id, file]))
     for (const row of rows) {
-      if (!row.displayedVersionId) {
-        result.set(row.id, { state: 'blank', name: '', sha256: null })
-        continue
-      }
-      const version = byVersion.get(row.displayedVersionId)
+      const version = row.displayedVersionId ? byVersion.get(row.displayedVersionId) : undefined
       const file = version ? byAsset.get(version.assetId) : undefined
-      if (!version || !file || file.deletedAt) {
-        result.set(row.id, { state: 'missing', name: version?.name ?? '', sha256: null })
-        continue
-      }
-      const ready = file.mime.startsWith('image/')
+      const present = Boolean(file && !file.deletedAt)
+      const state = classifyArtwork({
+        hasVersion: Boolean(row.displayedVersionId),
+        assetPresent: present,
+        mime: file?.mime ?? null,
+        width: file?.width ?? null,
+        height: file?.height ?? null
+      })
       result.set(row.id, {
-        state: ready ? 'ready' : 'unsupported',
-        name: version.name || file.originalName,
-        sha256: ready ? file.sha256 : null
+        state,
+        name: version?.name || file?.originalName || '',
+        sha256: state === 'ready' || state === 'damaged' ? (file?.sha256 ?? null) : null
       })
     }
     return result
@@ -1958,7 +2178,7 @@ export class CollectionRepository {
   private insertVersions(
     tx: ProjectDb,
     pageId: string,
-    items: { assetId: string; name: string }[]
+    items: { assetId: string; name: string; sourceSlideId?: string | null }[]
   ): string[] {
     const now = new Date()
     return items.map((item, index) => {
@@ -1969,6 +2189,7 @@ export class CollectionRepository {
           pageId,
           assetId: item.assetId,
           name: stem(item.name),
+          sourceSlideId: item.sourceSlideId ?? null,
           position: index,
           createdAt: now,
           updatedAt: now

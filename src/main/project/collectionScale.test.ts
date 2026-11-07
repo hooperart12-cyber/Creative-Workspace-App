@@ -64,7 +64,9 @@ describe('collection conflicts and scale', () => {
     const created = project.collections.create({ title: 'Undo', placeholderCount: 1 })
     const page = project.collections.pages(created.id)[0]!
     const bulk = project.collections.applyBulk([page.id], { kind: 'status', status: 'done' }, false)
-    project.collections.updatePage(page.id, bulk.undo[0]!.revision, { notes: 'newer' })
+    const undo = bulk.undo[0]
+    if (!undo || undo.kind !== 'page') throw new Error('Expected a page undo.')
+    project.collections.updatePage(page.id, undo.revision, { notes: 'newer' })
     expect(() => project.collections.undoBulk(bulk.undo)).toThrow(COLLECTION_CONFLICT)
     expect(project.collections.pages(created.id)[0]).toMatchObject({
       notes: 'newer',

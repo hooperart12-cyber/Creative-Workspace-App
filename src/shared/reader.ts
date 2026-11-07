@@ -2,7 +2,7 @@
  * Reader and Artwork Review decisions that do not belong to one collection's theme.
  * A saved resume is the page id, layout, zoom, and pan. Appearance is global.
  */
-import { layoutSpreads, type SequencePage } from './collections'
+import { layoutSpreads, type ArtworkState, type SequencePage } from './collections'
 
 export type ReaderLayout = 'single' | 'spread' | 'continuous'
 
@@ -14,7 +14,7 @@ export interface ReaderPageView {
   role: string | null
   span: 1 | 2
   spreadId: string | null
-  artwork: 'blank' | 'ready' | 'missing' | 'unsupported'
+  artwork: ArtworkState
   sha256: string | null
   width: number | null
   height: number | null

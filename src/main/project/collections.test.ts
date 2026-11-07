@@ -1,12 +1,15 @@
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import sharp from 'sharp'
 import { randomUUID } from 'node:crypto'
+import { planStagedImport } from '@shared/collectionImport'
 import { BUILTIN_TEMPLATES, MANGA_TEMPLATE } from '@shared/collections'
 import { COLLECTION_CONFLICT } from './collections'
-import { assets, collections, pageStageStates } from '../db/schema'
+import { assets, collections, pageStageStates, pageVersions } from '../db/schema'
 import { Project } from './project'
 
 const migrations = resolve('drizzle')
@@ -34,6 +37,166 @@ afterEach(() => {
 })
 
 describe('page collections', () => {
+  it('assigns a tag when placeholders are created and can remove it in one undo', () => {
+    const tag = project.tags.createReusable('Inks')
+    const created = project.collections.create({ title: 'Tagged', placeholderCount: 0 })
+    const inserted = project.collections.insertPages({
+      collectionId: created.id,
+      count: 2,
+      title: 'Rough',
+      notes: 'panel',
+      tagIds: [tag.id]
+    })
+    expect(project.collections.pageTags(inserted.pageIds)).toHaveLength(2)
+    expect(project.collections.pages(created.id)[0]).toMatchObject({
+      title: 'Rough',
+      notes: 'panel',
+      overallStatus: 'not_started'
+    })
+    const added = project.collections.applyBulk(
+      inserted.pageIds,
+      { kind: 'remove-tag', tagId: tag.id },
+      false
+    )
+    expect(project.collections.pageTags(inserted.pageIds)).toHaveLength(0)
+    expect(project.collections.pages(created.id)[0]?.notes).toBe('panel')
+    project.collections.undoBulk(added.undo)
+    expect(project.collections.pageTags(inserted.pageIds)).toHaveLength(2)
+  })
+
+  it('updates one stage without changing status, notes, or the asset', () => {
+    const created = project.collections.create({
+      title: 'Stages',
+      templateId: BUILTIN_TEMPLATES.manga,
+      placeholderCount: 1
+    })
+    const pageId = created.pageIds[0]!
+    project.collections.updatePage(pageId, 0, { notes: 'stay' })
+    const stage = project.collections.stages(created.id)[0]!
+    const bulk = project.collections.applyBulk(
+      [pageId],
+      { kind: 'set-stage', stageId: stage.id, state: 'done' },
+      false
+    )
+    const page = project.collections.pages(created.id)[0]!
+    expect(page.notes).toBe('stay')
+    expect(page.overallStatus).toBe('not_started')
+    expect(project.collections.detail(created.id).stageStates[0]).toMatchObject({
+      stageId: stage.id,
+      state: 'done'
+    })
+    project.collections.undoBulk(bulk.undo)
+    expect(project.collections.detail(created.id).stageStates).toHaveLength(0)
+  })
+
+  it('keeps the version id and the first file when artwork is relinked', async () => {
+    const created = project.collections.create({ title: 'Art', placeholderCount: 1 })
+    const pageId = created.pageIds[0]!
+    project.collections.updatePage(pageId, 0, { notes: 'caption' })
+    const wide = join(dir, 'wide.png')
+    const small = join(dir, 'small.png')
+    writeFileSync(
+      wide,
+      await sharp({ create: { width: 8, height: 4, channels: 3, background: 'red' } })
+        .png()
+        .toBuffer()
+    )
+    writeFileSync(
+      small,
+      await sharp({ create: { width: 2, height: 2, channels: 3, background: 'blue' } })
+        .png()
+        .toBuffer()
+    )
+    const first = await project.assets.importFile(wide)
+    const second = await project.assets.importFile(small)
+    const version = project.collections.addVersion(pageId, {
+      assetId: first.id,
+      name: 'wide.png',
+      sourceSlideId: '11111111-1111-4111-8111-111111111111'
+    })
+    const page = project.collections.pages(created.id)[0]!
+    project.collections.setDisplayed(pageId, version.id, page.revision)
+    project.collections.setCrop(version.id, { x: 0, y: 0, w: 6, h: 4 })
+    const before = createHash('sha256')
+      .update(readFileSync(project.assets.originalPath(first.sha256, first.ext)))
+      .digest('hex')
+    const folder = join(dir, 'match')
+    mkdirSync(folder)
+    writeFileSync(join(folder, 'wide.png'), readFileSync(wide))
+    const preview = project.collections.previewFolderMatch(created.id, [
+      { name: 'wide.png', filePath: join(folder, 'wide.png') },
+      { name: 'other.png', filePath: join(folder, 'other.png') }
+    ])
+    expect(preview).toEqual([
+      { versionId: version.id, filePath: join(folder, 'wide.png'), fileName: 'wide.png' }
+    ])
+    expect(project.collections.versions(pageId)[0]?.assetId).toBe(first.id)
+    const relinked = project.collections.relinkVersion(version.id, second.id)
+    expect(relinked.cropCleared).toBe(true)
+    expect(project.collections.versions(pageId)[0]).toMatchObject({
+      id: version.id,
+      assetId: second.id,
+      crop: null
+    })
+    expect(
+      project.db.select().from(pageVersions).where(eq(pageVersions.id, version.id)).get()
+        ?.sourceSlideId
+    ).toBe('11111111-1111-4111-8111-111111111111')
+    expect(project.collections.pages(created.id)[0]?.notes).toBe('caption')
+    expect(
+      createHash('sha256')
+        .update(readFileSync(project.assets.originalPath(first.sha256, first.ext)))
+        .digest('hex')
+    ).toBe(before)
+    project.db.update(assets).set({ width: 0, height: 0 }).where(eq(assets.id, second.id)).run()
+    expect(project.collections.pages(created.id)[0]?.artwork).toBe('damaged')
+  })
+
+  it('imports a slide through the same staging plan and keeps the slide id', async () => {
+    const png = join(dir, 'slide.png')
+    writeFileSync(
+      png,
+      await sharp({ create: { width: 4, height: 4, channels: 3, background: 'green' } })
+        .png()
+        .toBuffer()
+    )
+    const asset = await project.assets.importFile(png)
+    project.stacks.createFromAssets(project.mainBoardId, [asset.id], { x: 10, y: 10 })
+    const board = project.boards.get(project.mainBoardId)
+    const staged = project.collections.stageBoardArtwork(board.objects)
+    expect(staged[0]).toMatchObject({ assetId: asset.id, accepted: true })
+    expect(staged[0]?.sourceSlideId).toBeTruthy()
+    const created = project.collections.create({ title: 'From slide', placeholderCount: 0 })
+    const plan = planStagedImport({
+      entries: staged,
+      placeholders: [],
+      mode: 'append',
+      applyVersionGroups: false
+    })
+    project.collections.commitImport(
+      created.id,
+      null,
+      plan.actions.map((action) => ({
+        kind: 'page' as const,
+        assets: action.names.map((name) => {
+          const source = staged.find((item) => item.name === name)!
+          return {
+            assetId: source.assetId!,
+            name,
+            sourceSlideId: source.sourceSlideId
+          }
+        })
+      }))
+    )
+    const page = project.collections.pages(created.id)[0]!
+    expect(page.artwork).toBe('ready')
+    expect(project.collections.versions(page.id)[0]?.assetId).toBe(asset.id)
+    expect(
+      project.db.select().from(pageVersions).where(eq(pageVersions.pageId, page.id)).get()
+        ?.sourceSlideId
+    ).toBe(staged[0]?.sourceSlideId)
+  })
+
   it('trashes a folder without deleting the collection inside it', () => {
     const folder = project.collections.createFolder(null, 'Volume')
     const child = project.collections.createFolder(folder.id, 'Nested')

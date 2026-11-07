@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { planStagedImport, type StagedSource } from '@shared/collectionImport'
+import { planStagedImport, stageKnownAssets, type StagedSource } from '@shared/collectionImport'
 import type { CollectionPageView } from '@shared/collections'
 import { reportError } from '../store/projectStore'
+import { useWorkspaceStore } from '../store/workspaceStore'
 
 export function ImportPagesDialog({
   collectionId,
@@ -65,7 +66,11 @@ export function ImportPagesDialog({
   }
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 p-6">
-      <div className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-xl bg-surface p-4 shadow-xl">
+      <div
+        role="dialog"
+        aria-label="Import pages"
+        className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-xl bg-surface p-4 shadow-xl"
+      >
         <h2 className="text-sm font-medium">Import pages</h2>
         <p className="mt-1 text-xs text-muted">
           Nothing is added until you import. Version grouping stays off until you turn it on.
@@ -79,6 +84,15 @@ export function ImportPagesDialog({
           </button>
           <button type="button" className={choice} onClick={() => void pick('dialog:pickZip')}>
             CBZ or ZIP
+          </button>
+          <button type="button" className={choice} onClick={() => void fromLibrary()}>
+            Asset library
+          </button>
+          <button type="button" className={choice} onClick={() => void fromBoard()}>
+            This board
+          </button>
+          <button type="button" className={choice} onClick={() => void fromClipboard()}>
+            Clipboard
           </button>
         </div>
         <label className="mt-3 block text-xs text-muted">
@@ -153,6 +167,40 @@ export function ImportPagesDialog({
   async function pickFolder() {
     const path = await window.api.invoke('dialog:pickFolder')
     if (path) await stage([path])
+  }
+
+  async function fromLibrary() {
+    const page = await window.api.invoke('library:list', {
+      folderId: null,
+      scope: 'folder',
+      query: '',
+      type: 'image',
+      sort: 'name',
+      direction: 'asc',
+      offset: 0,
+      limit: 80
+    })
+    const staged = stageKnownAssets(
+      page.entries
+        .filter((entry) => entry.asset.mime.startsWith('image/'))
+        .map((entry) => ({ name: entry.asset.originalName, assetId: entry.assetId }))
+    )
+    setFiles(staged)
+    setError(staged.length === 0 ? 'The library has no images.' : null)
+  }
+
+  async function fromBoard() {
+    const boardId = useWorkspaceStore.getState().board?.id
+    if (!boardId) return
+    const staged = await window.api.invoke('collections:stageBoard', boardId)
+    setFiles(staged)
+    setError(staged.length === 0 ? 'This board has no images or slides.' : null)
+  }
+
+  async function fromClipboard() {
+    const staged = await window.api.invoke('collections:stageClipboard')
+    setFiles(staged.files)
+    setError(staged.error)
   }
 }
 

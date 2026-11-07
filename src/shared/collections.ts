@@ -10,7 +10,8 @@ export const PAGE_STATUSES = ['not_started', 'in_progress', 'done', 'skipped'] a
 export type PageStatus = (typeof PAGE_STATUSES)[number]
 
 /** What the planner can say about the displayed artwork without opening the file. */
-export type ArtworkState = 'blank' | 'ready' | 'missing' | 'unsupported'
+export type ArtworkState =
+  'blank' | 'ready' | 'missing' | 'unsupported' | 'damaged' | 'changed-external' | 'transient'
 
 export type ReadingDirection = 'ltr' | 'rtl'
 export type PageSide = 'left' | 'right'
@@ -257,6 +258,7 @@ export interface CollectionPageView {
   displayedName: string
   /** Hash of the displayed image, only while that file can be shown. */
   sha256: string | null
+  updatedAt: number
 }
 
 export interface PagePatch {

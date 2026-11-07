@@ -5,9 +5,9 @@ import {
   layoutSpreads,
   spreadSides,
   type CollectionDetail,
-  type CollectionPageView,
-  type PagePatch
+  type CollectionPageView
 } from '@shared/collections'
+import { type BulkUndoEntry } from '@shared/collectionBulk'
 import { dragGhost, dropPlan } from '@shared/collectionDrag'
 import { selectPageIds, stepPages } from '@shared/collectionOrder'
 import {
@@ -19,6 +19,7 @@ import { reportError, showNotice, useProjectStore } from '../store/projectStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { BulkEditDialog } from './BulkEditDialog'
 import { ExportDialog } from './ExportDialog'
+import { FolderMatchDialog } from './FolderMatchDialog'
 import { ImportPagesDialog } from './ImportPagesDialog'
 import { PageInspector } from './PageInspector'
 
@@ -34,7 +35,7 @@ type ImportRecord = {
 
 type Undo =
   | { kind: 'insert' | 'trash'; pageIds: string[] }
-  | { kind: 'bulk'; entries: { id: string; revision: number; previous: PagePatch }[] }
+  | { kind: 'bulk'; entries: BulkUndoEntry[] }
   | { kind: 'import'; record: ImportRecord }
   | { kind: 'order'; pageIds: string[] }
   | null
@@ -59,6 +60,11 @@ export function PlannerView() {
   const [addCount, setAddCount] = useState(1)
   const [addTitle, setAddTitle] = useState('')
   const [addNotes, setAddNotes] = useState('')
+  const [addTag, setAddTag] = useState('')
+  const [tags, setTags] = useState<{ id: string; name: string }[]>([])
+  const [folderMatches, setFolderMatches] = useState<
+    { versionId: string; filePath: string; fileName: string }[] | null
+  >(null)
   const [undo, setUndo] = useState<Undo>(null)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -70,6 +76,19 @@ export function PlannerView() {
   const [showExport, setShowExport] = useState(false)
   const [scrollTop, setScrollTop] = useState(0)
   const [frame, setFrame] = useState({ width: 800, height: 640 })
+
+  useEffect(() => {
+    let cancel = false
+    void window.api
+      .invoke('tags:list', {})
+      .then((rows) => {
+        if (!cancel) setTags(rows.map((tag) => ({ id: tag.id, name: tag.name })))
+      })
+      .catch(() => {})
+    return () => {
+      cancel = true
+    }
+  }, [epoch])
 
   useEffect(() => {
     if (!collectionId) return
@@ -311,7 +330,7 @@ export function PlannerView() {
           <button
             type="button"
             className={button}
-            onClick={() => useWorkspaceStore.getState().openReader(detail.id, focusId)}
+            onClick={() => useWorkspaceStore.getState().openReader(detail.id, null)}
           >
             Read
           </button>
@@ -449,6 +468,19 @@ export function PlannerView() {
             onChange={(event) => setAddNotes(event.target.value)}
             className="w-36 rounded border border-line bg-canvas px-1 py-1 text-xs"
           />
+          <select
+            aria-label="Starting tag"
+            value={addTag}
+            onChange={(event) => setAddTag(event.target.value)}
+            className="rounded border border-line bg-canvas px-1 py-1 text-xs"
+          >
+            <option value="">No starting tag</option>
+            {tags.map((tag) => (
+              <option key={tag.id} value={tag.id}>
+                {tag.name}
+              </option>
+            ))}
+          </select>
           <button
             type="button"
             className={button}
@@ -459,7 +491,8 @@ export function PlannerView() {
                   count: addCount,
                   beforeId: focusId,
                   title: addTitle,
-                  notes: addNotes
+                  notes: addNotes,
+                  tagIds: addTag ? [addTag] : []
                 })
                 .then((inserted) => {
                   setUndo({ kind: 'insert', pageIds: inserted.pageIds })
@@ -479,7 +512,8 @@ export function PlannerView() {
                   collectionId: detail.id,
                   count: addCount,
                   title: addTitle,
-                  notes: addNotes
+                  notes: addNotes,
+                  tagIds: addTag ? [addTag] : []
                 })
                 .then((inserted) => {
                   setUndo({ kind: 'insert', pageIds: inserted.pageIds })
@@ -503,6 +537,26 @@ export function PlannerView() {
           </button>
           <button type="button" className={button} onClick={() => setShowImport(true)}>
             Import
+          </button>
+          <button
+            type="button"
+            className={button}
+            onClick={() => {
+              void window.api
+                .invoke('dialog:pickFolder')
+                .then(async (folder) => {
+                  if (!folder) return
+                  const matches = await window.api.invoke(
+                    'collections:previewFolderMatch',
+                    detail.id,
+                    folder
+                  )
+                  setFolderMatches(matches)
+                })
+                .catch((caught) => reportError(caught))
+            }}
+          >
+            Match folder
           </button>
           <button type="button" className={button} onClick={() => setShowExport(true)}>
             Export
@@ -739,6 +793,8 @@ export function PlannerView() {
       {showBulk && (
         <BulkEditDialog
           pages={detail.pages}
+          stages={detail.stages}
+          stageStates={detail.stageStates}
           selected={selected}
           hidden={hidden}
           onClose={() => setShowBulk(false)}
@@ -754,6 +810,16 @@ export function PlannerView() {
           collectionId={detail.id}
           pages={detail.pages}
           onClose={() => setShowExport(false)}
+        />
+      )}
+      {folderMatches && (
+        <FolderMatchDialog
+          matches={folderMatches}
+          onClose={() => setFolderMatches(null)}
+          onApplied={() => {
+            setFolderMatches(null)
+            reload()
+          }}
         />
       )}
       {showImport && (
@@ -781,12 +847,19 @@ function shownIds(detail: CollectionDetail, query: string, matchIds: string[] | 
 
 const INSPECTOR_KEY = 'cw.plannerInspector'
 
+function readInspectorStore(store: Storage, collectionId: string): unknown {
+  const raw = store.getItem(INSPECTOR_KEY)
+  const parsed: unknown = raw ? JSON.parse(raw) : null
+  if (!parsed || typeof parsed !== 'object') return null
+  return (parsed as Record<string, unknown>)[collectionId] ?? null
+}
+
 function storedInspector(collectionId: string): unknown {
   try {
-    const raw = localStorage.getItem(INSPECTOR_KEY)
-    const parsed: unknown = raw ? JSON.parse(raw) : null
-    if (!parsed || typeof parsed !== 'object') return null
-    return (parsed as Record<string, unknown>)[collectionId] ?? null
+    return (
+      readInspectorStore(sessionStorage, collectionId) ??
+      readInspectorStore(localStorage, collectionId)
+    )
   } catch {
     return null
   }
@@ -798,10 +871,12 @@ function InspectorPane({ collectionId, children }: { collectionId: string; child
     const clamped = inspectorLayout(next)
     setLayout(clamped)
     try {
-      const raw = localStorage.getItem(INSPECTOR_KEY)
-      const parsed: unknown = raw ? JSON.parse(raw) : {}
-      const all = parsed && typeof parsed === 'object' ? { ...(parsed as object) } : {}
-      localStorage.setItem(INSPECTOR_KEY, JSON.stringify({ ...all, [collectionId]: clamped }))
+      for (const store of [sessionStorage, localStorage]) {
+        const raw = store.getItem(INSPECTOR_KEY)
+        const parsed: unknown = raw ? JSON.parse(raw) : {}
+        const all = parsed && typeof parsed === 'object' ? { ...(parsed as object) } : {}
+        store.setItem(INSPECTOR_KEY, JSON.stringify({ ...all, [collectionId]: clamped }))
+      }
     } catch {
       // The inspector still works for this visit if storage is unavailable.
     }
@@ -818,7 +893,7 @@ function InspectorPane({ collectionId, children }: { collectionId: string; child
     )
   }
   return (
-    <div className="flex shrink-0 flex-col" style={{ width: layout.width }}>
+    <div className="flex min-h-0 shrink-0 flex-col" style={{ width: layout.width }}>
       <div className="flex items-center gap-2 border-b border-l border-line px-2 py-1">
         <button
           type="button"
@@ -836,7 +911,7 @@ function InspectorPane({ collectionId, children }: { collectionId: string; child
           onChange={(event) => save({ ...layout, width: Number(event.target.value) })}
         />
       </div>
-      <div className="min-h-0 flex-1">{children}</div>
+      <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
     </div>
   )
 }
@@ -874,7 +949,13 @@ function PageCard({
             ? 'Locked'
             : page.artwork === 'blank'
               ? 'Blank'
-              : 'Artwork'
+              : page.artwork === 'damaged'
+                ? 'Damaged'
+                : page.artwork === 'changed-external'
+                  ? 'Changed file'
+                  : page.artwork === 'transient'
+                    ? 'Could not load'
+                    : 'Artwork'
   return (
     <button
       type="button"

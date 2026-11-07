@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import { assetUrl } from '@shared/assets'
+import { cropFromFractions } from '@shared/artwork'
 import {
   PAGE_ROLES,
   PAGE_STATUSES,
@@ -9,7 +11,7 @@ import {
   type PageStatus
 } from '@shared/collections'
 import type { Destination } from '@shared/destinations'
-import { reportError } from '../store/projectStore'
+import { reportError, useProjectStore } from '../store/projectStore'
 
 const field = 'w-full rounded border border-line bg-canvas px-2 py-1 text-sm'
 
@@ -351,10 +353,14 @@ function ArtworkVersions({
       id: string
       name: string
       fileName: string
+      sha256: string | null
+      width: number | null
+      height: number | null
       missing: boolean
       crop: { x: number; y: number; w: number; h: number } | null
     }[]
   >([])
+  const [loaded, setLoaded] = useState(0)
   useEffect(() => {
     let cancel = false
     void window.api.invoke('collections:versions', pageId).then((rows) => {
@@ -363,11 +369,29 @@ function ArtworkVersions({
     return () => {
       cancel = true
     }
-  }, [pageId, displayedVersionId])
-  if (versions.length === 0) return null
+  }, [pageId, displayedVersionId, loaded])
   return (
     <div className="flex flex-col gap-2">
       <h3 className="text-xs font-semibold tracking-wide text-muted uppercase">Artwork</h3>
+      <button
+        type="button"
+        className="rounded border border-line px-2 py-1 text-left text-xs"
+        onClick={() => {
+          void window.api
+            .invoke('dialog:pickFiles')
+            .then(async (paths) => {
+              const file = paths[0]
+              if (!file) return
+              await window.api.invoke('collections:addVersion', pageId, file)
+              setLoaded((value) => value + 1)
+              onChanged()
+            })
+            .catch((error) => reportError(error))
+        }}
+      >
+        Add a version
+      </button>
+      {versions.length === 0 && <p className="text-xs text-muted">No artwork yet.</p>}
       {versions.map((version) => (
         <div key={version.id} className="rounded border border-line p-2 text-xs">
           <p>{version.name || version.fileName || 'Version'}</p>
@@ -392,9 +416,29 @@ function ArtworkVersions({
               Set as displayed
             </button>
           )}
+          <button
+            type="button"
+            className="mt-1 rounded border border-line px-2 py-1"
+            onClick={() => {
+              void window.api
+                .invoke('dialog:pickFiles')
+                .then(async (paths) => {
+                  const file = paths[0]
+                  if (!file) return
+                  await window.api.invoke('collections:relinkFile', version.id, file)
+                  onChanged()
+                })
+                .catch((error) => reportError(error))
+            }}
+          >
+            Relink this version
+          </button>
           <CropFields
             key={`${version.id}:${version.crop?.x ?? 'none'}`}
             crop={version.crop}
+            sha256={version.sha256}
+            width={version.width}
+            height={version.height}
             onSave={(crop) => {
               void window.api
                 .invoke('collections:setCrop', version.id, crop)
@@ -410,11 +454,21 @@ function ArtworkVersions({
 
 function CropFields({
   crop,
+  sha256,
+  width,
+  height,
   onSave
 }: {
   crop: { x: number; y: number; w: number; h: number } | null
+  sha256: string | null
+  width: number | null
+  height: number | null
   onSave: (crop: { x: number; y: number; w: number; h: number } | null) => void
 }) {
+  const projectId = useProjectStore((s) => s.project?.id ?? null)
+  const drag = useRef<{ x: number; y: number } | null>(null)
+  const boxRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null)
+  const [box, setBox] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
   const [x, setX] = useState(String(crop?.x ?? ''))
   const [y, setY] = useState(String(crop?.y ?? ''))
   const [w, setW] = useState(String(crop?.w ?? ''))
@@ -428,26 +482,99 @@ function CropFields({
     if ([next.x, next.y, next.w, next.h].some((value) => !Number.isInteger(value))) return
     onSave(next)
   }
+  const draw = (event: PointerEvent<HTMLDivElement>) => {
+    if (!drag.current || !width || !height) return
+    const rect = event.currentTarget.getBoundingClientRect()
+    const x = (event.clientX - rect.left) / rect.width
+    const y = (event.clientY - rect.top) / rect.height
+    const left = Math.min(drag.current.x, x)
+    const top = Math.min(drag.current.y, y)
+    const next = {
+      x: left,
+      y: top,
+      w: Math.abs(x - drag.current.x),
+      h: Math.abs(y - drag.current.y)
+    }
+    boxRef.current = next
+    setBox(next)
+  }
   return (
-    <div className="mt-2 grid grid-cols-4 gap-1">
-      {(
-        [
-          ['Crop x', x, setX],
-          ['Crop y', y, setY],
-          ['Crop width', w, setW],
-          ['Crop height', h, setH]
-        ] as const
-      ).map(([label, value, setValue]) => (
-        <input
-          key={label}
-          aria-label={label}
-          value={value}
-          inputMode="numeric"
-          className="w-full rounded border border-line bg-canvas px-1 py-1"
-          onChange={(event) => setValue(event.target.value)}
-          onBlur={save}
-        />
-      ))}
+    <div className="mt-2">
+      {projectId && sha256 && width && height && (
+        <div
+          aria-label="Crop the artwork"
+          className="relative mb-2 overflow-hidden rounded border border-line"
+          style={{ height: 112 }}
+          onPointerDown={(event) => {
+            const rect = event.currentTarget.getBoundingClientRect()
+            drag.current = {
+              x: (event.clientX - rect.left) / rect.width,
+              y: (event.clientY - rect.top) / rect.height
+            }
+            try {
+              event.currentTarget.setPointerCapture(event.pointerId)
+            } catch {
+              // A synthetic pointer cannot be captured. Later moves still update the box.
+            }
+          }}
+          onPointerMove={draw}
+          onPointerUp={(event) => {
+            const drawn = boxRef.current
+            if (!drawn || !drag.current || drawn.w < 0.01 || drawn.h < 0.01) {
+              drag.current = null
+              boxRef.current = null
+              setBox(null)
+              return
+            }
+            onSave(cropFromFractions({ width, height }, drawn))
+            drag.current = null
+            boxRef.current = null
+            setBox(null)
+            try {
+              event.currentTarget.releasePointerCapture(event.pointerId)
+            } catch {
+              // The pointer was never captured.
+            }
+          }}
+        >
+          <img
+            src={assetUrl(projectId, sha256, 256)}
+            alt=""
+            className="h-full w-full object-contain"
+          />
+          {box && (
+            <span
+              className="absolute border border-accent bg-accent/20"
+              style={{
+                left: `${box.x * 100}%`,
+                top: `${box.y * 100}%`,
+                width: `${box.w * 100}%`,
+                height: `${box.h * 100}%`
+              }}
+            />
+          )}
+        </div>
+      )}
+      <div className="grid grid-cols-4 gap-1">
+        {(
+          [
+            ['Crop x', x, setX],
+            ['Crop y', y, setY],
+            ['Crop width', w, setW],
+            ['Crop height', h, setH]
+          ] as const
+        ).map(([label, value, setValue]) => (
+          <input
+            key={label}
+            aria-label={label}
+            value={value}
+            inputMode="numeric"
+            className="w-full rounded border border-line bg-canvas px-1 py-1"
+            onChange={(event) => setValue(event.target.value)}
+            onBlur={save}
+          />
+        ))}
+      </div>
     </div>
   )
 }

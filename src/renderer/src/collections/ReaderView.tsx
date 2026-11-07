@@ -559,7 +559,50 @@ function PageFrame({
           ? 'Blank page'
           : page.artwork === 'missing'
             ? 'Missing artwork'
-            : 'Unsupported artwork'}
+            : page.artwork === 'damaged'
+              ? 'Damaged artwork'
+              : page.artwork === 'changed-external'
+                ? 'The linked file changed'
+                : page.artwork === 'transient'
+                  ? 'Could not load'
+                  : 'Unsupported artwork'}
+      </div>
+    )
+  }
+  return (
+    <ReaderImage
+      page={page}
+      projectId={projectId}
+      look={look}
+      camera={camera}
+      fitStyle={fitStyle}
+      clip={clip}
+    />
+  )
+}
+
+function ReaderImage({
+  page,
+  projectId,
+  look,
+  camera,
+  fitStyle,
+  clip
+}: {
+  page: ReaderPageView
+  projectId: string
+  look: ReaderPrefs['appearance']
+  camera: { zoom: number; x: number; y: number }
+  fitStyle: CSSProperties
+  clip: string | null
+}) {
+  const [failed, setFailed] = useState(false)
+  if (failed || !page.sha256) {
+    return (
+      <div className="flex h-[70vh] w-[40%] items-center justify-center rounded border border-white/20 text-sm">
+        <button type="button" onClick={() => setFailed(false)}>
+          Could not load. Try again.
+        </button>
       </div>
     )
   }
@@ -567,6 +610,7 @@ function PageFrame({
     <img
       alt={caption(page)}
       src={assetUrl(projectId, page.sha256, 'original')}
+      onError={() => setFailed(true)}
       draggable={false}
       style={{
         ...fitStyle,

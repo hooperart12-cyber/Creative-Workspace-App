@@ -12,6 +12,10 @@ const VERSION_WORD = /\b(sketch|inks|tones|lettering|pencils|colors|letters|fina
 export interface StagedSource extends StagedEntry {
   filePath: string | null
   archive: { zipPath: string; entry: string } | null
+  /** Set when the file is already in the library or on a canvas. Commit does not copy it again. */
+  assetId?: string | null
+  /** Set when the source is one M7 slide. Later stack edits do not follow this copy. */
+  sourceSlideId?: string | null
 }
 
 export interface StagedEntry {
@@ -34,6 +38,25 @@ export interface ImportPlan {
 export interface CommittedAsset {
   assetId: string
   name: string
+  sourceSlideId?: string | null
+}
+
+/** Library, canvas, and slide picks join the same staging list as files. */
+export function stageKnownAssets(
+  items: readonly { name: string; assetId: string; sourceSlideId?: string | null }[]
+): StagedSource[] {
+  const planned = stageImportNames(items.map((item) => item.name))
+  const byName = new Map(items.map((item) => [item.name.toLowerCase(), item]))
+  return planned.map((entry) => {
+    const known = byName.get(entry.name.toLowerCase())
+    return {
+      ...entry,
+      filePath: null,
+      archive: null,
+      assetId: known?.assetId ?? null,
+      sourceSlideId: known?.sourceSlideId ?? null
+    }
+  })
 }
 
 /** The approved plan, with library asset ids in place of file names. */

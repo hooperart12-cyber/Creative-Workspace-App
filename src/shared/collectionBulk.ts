@@ -15,13 +15,30 @@ export type BulkOperation =
   | { kind: 'append-notes'; text: string }
   | { kind: 'replace-notes'; text: string }
   | { kind: 'role'; role: PageRole | null }
+  | { kind: 'add-tag'; tagId: string }
+  | { kind: 'remove-tag'; tagId: string }
+  | { kind: 'set-stage'; stageId: string; state: PageStatus }
 
 export interface BulkTarget {
   id: string
   notes: string
   overallStatus: string
   role: string | null
+  tagIds?: readonly string[]
+  stages?: readonly { stageId: string; state: string }[]
 }
+
+export type BulkUndoEntry =
+  | { kind: 'page'; id: string; revision: number; previous: PagePatch }
+  | { kind: 'tag'; id: string; tagId: string; added: boolean }
+  | {
+      kind: 'stage'
+      id: string
+      stageId: string
+      previous: string | null
+      previousNote: string
+      applied: string
+    }
 
 export interface BulkPreflight {
   targeted: number
@@ -38,12 +55,17 @@ export type BulkDecision =
   | { kind: 'same' }
   | { kind: 'incompatible'; reason: string }
   | { kind: 'change'; patch: PagePatch; previous: PagePatch }
+  | { kind: 'tag'; tagId: string; added: boolean }
+  | { kind: 'stage'; stageId: string; state: PageStatus; previous: string | null }
 
 const FIELDS: Record<BulkOperation['kind'], string[]> = {
   status: ['overallStatus'],
   'append-notes': ['notes'],
   'replace-notes': ['notes'],
-  role: ['role']
+  role: ['role'],
+  'add-tag': ['tag'],
+  'remove-tag': ['tag'],
+  'set-stage': ['stage']
 }
 
 export function preflightBulk(
@@ -100,6 +122,27 @@ export function bulkDecision(page: BulkTarget, operation: BulkOperation): BulkDe
     if (!text) return { kind: 'incompatible', reason: 'Enter the note to append.' }
     const notes = page.notes ? `${page.notes}\n${text}` : text
     return { kind: 'change', patch: { notes }, previous: { notes: page.notes } }
+  }
+  if (operation.kind === 'add-tag' || operation.kind === 'remove-tag') {
+    if (!operation.tagId) return { kind: 'incompatible', reason: 'Choose a tag.' }
+    const has = page.tagIds?.includes(operation.tagId) ?? false
+    if (operation.kind === 'add-tag') {
+      if (has) return { kind: 'same' }
+      return { kind: 'tag', tagId: operation.tagId, added: true }
+    }
+    if (!has) return { kind: 'same' }
+    return { kind: 'tag', tagId: operation.tagId, added: false }
+  }
+  if (operation.kind === 'set-stage') {
+    if (!operation.stageId) return { kind: 'incompatible', reason: 'Choose a stage.' }
+    const current = page.stages?.find((stage) => stage.stageId === operation.stageId)
+    if (current?.state === operation.state) return { kind: 'same' }
+    return {
+      kind: 'stage',
+      stageId: operation.stageId,
+      state: operation.state,
+      previous: current?.state ?? null
+    }
   }
   if (page.notes === operation.text) return { kind: 'same' }
   return {

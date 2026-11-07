@@ -1,39 +1,78 @@
-import { useState } from 'react'
-import { preflightBulk, type BulkOperation } from '@shared/collectionBulk'
+import { useEffect, useState } from 'react'
+import { preflightBulk, type BulkOperation, type BulkUndoEntry } from '@shared/collectionBulk'
 import {
   PAGE_ROLES,
   PAGE_STATUSES,
+  type CollectionDetail,
   type CollectionPageView,
-  type PagePatch
+  type PageStatus
 } from '@shared/collections'
 import { reportError } from '../store/projectStore'
 
 export function BulkEditDialog({
   pages,
+  stages,
+  stageStates,
   selected,
   hidden,
   onClose,
   onApplied
 }: {
   pages: CollectionPageView[]
+  stages: CollectionDetail['stages']
+  stageStates: CollectionDetail['stageStates']
   selected: string[]
   hidden: number
   onClose: () => void
-  onApplied: (undo: { id: string; revision: number; previous: PagePatch }[]) => void
+  onApplied: (undo: BulkUndoEntry[]) => void
 }) {
   const [kind, setKind] = useState<BulkOperation['kind']>('status')
   const [status, setStatus] = useState<(typeof PAGE_STATUSES)[number]>('done')
   const [role, setRole] = useState<(typeof PAGE_ROLES)[number]>('story')
   const [text, setText] = useState('')
   const [confirmed, setConfirmed] = useState(false)
+  const [tagId, setTagId] = useState('')
+  const [tagChoices, setTagChoices] = useState<{ id: string; name: string }[]>([])
+  const [ownedTags, setOwnedTags] = useState<{ pageId: string; tagId: string }[]>([])
+  const [stageId, setStageId] = useState(stages[0]?.id ?? '')
+  const [stageState, setStageState] = useState<PageStatus>('done')
+  useEffect(() => {
+    let cancel = false
+    void Promise.all([
+      window.api.invoke('tags:list'),
+      window.api.invoke('collections:pageTags', selected)
+    ])
+      .then(([library, assigned]) => {
+        if (cancel) return
+        setTagChoices(library.map((tag) => ({ id: tag.id, name: tag.name })))
+        setOwnedTags(assigned)
+        setTagId((current) => current || library[0]?.id || '')
+      })
+      .catch((error) => reportError(error))
+    return () => {
+      cancel = true
+    }
+  }, [selected])
   const operation: BulkOperation =
-    kind === 'status' ? { kind, status } : kind === 'role' ? { kind, role } : { kind, text }
+    kind === 'status'
+      ? { kind, status }
+      : kind === 'role'
+        ? { kind, role }
+        : kind === 'add-tag' || kind === 'remove-tag'
+          ? { kind, tagId }
+          : kind === 'set-stage'
+            ? { kind, stageId, state: stageState }
+            : { kind, text }
   const preview = preflightBulk(
     pages.map((page) => ({
       id: page.id,
       notes: page.notes,
       overallStatus: page.overallStatus,
-      role: page.role
+      role: page.role,
+      tagIds: ownedTags.filter((tag) => tag.pageId === page.id).map((tag) => tag.tagId),
+      stages: stageStates
+        .filter((stage) => stage.pageId === page.id)
+        .map((stage) => ({ stageId: stage.stageId, state: stage.state }))
     })),
     selected,
     operation
@@ -54,6 +93,8 @@ export function BulkEditDialog({
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 p-6">
       <form
+        role="dialog"
+        aria-label="Edit selected pages"
         className="w-full max-w-md rounded-xl bg-surface p-4 shadow-xl"
         onSubmit={(event) => {
           event.preventDefault()
@@ -78,6 +119,9 @@ export function BulkEditDialog({
             <option value="append-notes">Append to notes</option>
             <option value="replace-notes">Replace notes</option>
             <option value="role">Role</option>
+            <option value="add-tag">Add tag</option>
+            <option value="remove-tag">Remove tag</option>
+            <option value="set-stage">Production stage</option>
           </select>
         </label>
         {kind === 'status' && (
@@ -107,6 +151,49 @@ export function BulkEditDialog({
               </option>
             ))}
           </select>
+        )}
+        {(kind === 'add-tag' || kind === 'remove-tag') && (
+          <select
+            aria-label="Bulk tag"
+            className="mt-2 w-full rounded border border-line bg-canvas px-2 py-1 text-sm"
+            value={tagId}
+            onChange={(event) => setTagId(event.target.value)}
+          >
+            {tagChoices.length === 0 && <option value="">No tags yet</option>}
+            {tagChoices.map((tag) => (
+              <option key={tag.id} value={tag.id}>
+                {tag.name}
+              </option>
+            ))}
+          </select>
+        )}
+        {kind === 'set-stage' && (
+          <div className="mt-2 flex gap-2">
+            <select
+              aria-label="Bulk stage"
+              className="w-full rounded border border-line bg-canvas px-2 py-1 text-sm"
+              value={stageId}
+              onChange={(event) => setStageId(event.target.value)}
+            >
+              {stages.map((stage) => (
+                <option key={stage.id} value={stage.id}>
+                  {stage.name}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Bulk stage status"
+              className="w-full rounded border border-line bg-canvas px-2 py-1 text-sm"
+              value={stageState}
+              onChange={(event) => setStageState(event.target.value as PageStatus)}
+            >
+              {PAGE_STATUSES.map((item) => (
+                <option key={item} value={item}>
+                  {item.replaceAll('_', ' ')}
+                </option>
+              ))}
+            </select>
+          </div>
         )}
         {(kind === 'append-notes' || kind === 'replace-notes') && (
           <textarea

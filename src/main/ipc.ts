@@ -1,5 +1,5 @@
 import { existsSync, mkdtempSync } from 'node:fs'
-import { copyFile, rm } from 'node:fs/promises'
+import { copyFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, extname, join } from 'node:path'
 import {
@@ -164,6 +164,10 @@ const SAVE_CHANNELS = new Set<string>([
   'collections:commitImport',
   'collections:undoImport',
   'collections:setDisplayed',
+  'collections:addVersion',
+  'collections:relinkVersion',
+  'collections:relinkFile',
+  'collections:applyFolderMatch',
   'collections:setCrop',
   'collections:placePageLink',
   'collections:movePages',
@@ -1374,9 +1378,12 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
     broadcastContent(project)
     return restored
   })
-  handle('collections:updatePage', (event, id, revision, patch, base) =>
-    requireProject(event).collections.updatePage(id, revision, patch, base)
-  )
+  handle('collections:updatePage', (event, id, revision, patch, base) => {
+    const project = requireProject(event)
+    const saved = project.collections.updatePage(id, revision, patch, base)
+    broadcastContent(project)
+    return saved
+  })
   handle('collections:setStage', (event, pageId, stageId, state, note) => {
     requireProject(event).collections.setStage(pageId, stageId, state, note ?? '')
   })
@@ -1470,7 +1477,15 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
         }
       }
       const assetIds = new Map<string, string>()
+      const slideIds = new Map<string, string | null>()
+      for (const file of chosen) {
+        if (file.assetId) {
+          assetIds.set(file.name, file.assetId)
+          slideIds.set(file.name, file.sourceSlideId ?? null)
+        }
+      }
       for (const [name, path] of paths) {
+        if (assetIds.has(name)) continue
         const result = await project.assets.importFiles([path])
         const asset = result.imported[0]
         if (!asset) throw new Error(result.skipped[0]?.reason ?? `${name} was not imported.`)
@@ -1480,7 +1495,7 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
         const assets = action.names.map((name) => {
           const assetId = assetIds.get(name)
           if (!assetId) throw new Error(`${name} was not imported.`)
-          return { assetId, name }
+          return { assetId, name, sourceSlideId: slideIds.get(name) ?? null }
         })
         return action.kind === 'fill'
           ? { kind: 'fill' as const, pageId: action.pageId, assets }
@@ -1501,6 +1516,18 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
   handle('collections:versions', (event, pageId) =>
     requireProject(event).collections.versions(pageId)
   )
+  handle('collections:addVersion', async (event, pageId, filePath) => {
+    const project = requireProject(event)
+    const result = await project.assets.importFiles([filePath])
+    const asset = result.imported[0]
+    if (!asset) throw new Error(result.skipped[0]?.reason ?? 'That file was not imported.')
+    const saved = project.collections.addVersion(pageId, {
+      assetId: asset.id,
+      name: basename(filePath)
+    })
+    broadcastContent(project)
+    return saved
+  })
   handle('collections:setDisplayed', (event, pageId, versionId, revision) => {
     const project = requireProject(event)
     const saved = project.collections.setDisplayed(pageId, versionId, revision)
@@ -1511,6 +1538,60 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
     const project = requireProject(event)
     project.collections.setCrop(versionId, crop)
     broadcastContent(project)
+  })
+  handle('collections:pageTags', (event, pageIds) =>
+    requireProject(event).collections.pageTags(pageIds)
+  )
+  handle('collections:relinkVersion', (event, versionId, assetId) => {
+    const project = requireProject(event)
+    const saved = project.collections.relinkVersion(versionId, assetId)
+    broadcastContent(project)
+    return saved
+  })
+  handle('collections:relinkFile', async (event, versionId, filePath) => {
+    const project = requireProject(event)
+    const result = await project.assets.importFiles([filePath])
+    const asset = result.imported[0]
+    if (!asset) throw new Error(result.skipped[0]?.reason ?? 'That file was not imported.')
+    const saved = project.collections.relinkVersion(versionId, asset.id)
+    broadcastContent(project)
+    return saved
+  })
+  handle('collections:previewFolderMatch', async (event, collectionId, folder) => {
+    const project = requireProject(event)
+    const names = await readdir(folder, { withFileTypes: true })
+    const files = names
+      .filter((entry) => entry.isFile())
+      .filter((entry) =>
+        IMAGE_EXTENSIONS.some((ext) => entry.name.toLowerCase().endsWith(`.${ext}`))
+      )
+      .map((entry) => ({ name: entry.name, filePath: join(folder, entry.name) }))
+    return project.collections.previewFolderMatch(collectionId, files)
+  })
+  handle('collections:applyFolderMatch', async (event, pairs) => {
+    const project = requireProject(event)
+    for (const pair of pairs) {
+      const result = await project.assets.importFiles([pair.filePath])
+      const asset = result.imported[0]
+      if (!asset) throw new Error(result.skipped[0]?.reason ?? 'That file was not imported.')
+      project.collections.relinkVersion(pair.versionId, asset.id)
+    }
+    broadcastContent(project)
+    return { count: pairs.length }
+  })
+  handle('collections:stageBoard', (event, boardId) => {
+    const project = requireProject(event)
+    const board = project.boards.get(boardId)
+    return project.collections.stageBoardArtwork(board.objects)
+  })
+  handle('collections:stageClipboard', async (event) => {
+    requireProject(event)
+    const read = await readExternalClipboard()
+    if (!read) return { files: [], error: 'The clipboard has no image.' }
+    if (read.kind === 'files') return stageCollectionPaths(read.paths)
+    const temp = join(tmpdir(), read.file.name.replace(/[^\w. -]/g, ''))
+    await writeFile(temp, read.file.bytes)
+    return stageCollectionPaths([temp])
   })
   handle('collections:placePageLink', (event, boardId, collectionId, pageId) => {
     const project = requireProject(event)

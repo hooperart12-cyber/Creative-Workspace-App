@@ -51,6 +51,7 @@ export function OverviewView() {
   )
   const stages = stageProgress(detail.stages, detail.stageStates, detail.pages.length)
   const cover = detail.pages.find((page) => page.role === 'cover' && page.sha256)
+  const recent = [...detail.pages].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 5)
   const openPlanner = () => useWorkspaceStore.getState().openPlanner(detail.id, null)
   const openReader = () => useWorkspaceStore.getState().openReader(detail.id, null)
   const first = detail.pages[0]
@@ -119,6 +120,17 @@ export function OverviewView() {
             {stages.map((stage) => (
               <li key={stage.name}>
                 {stage.name}: {stage.done} of {stage.total} done
+              </li>
+            ))}
+          </ul>
+        </details>
+        <details open className="rounded-lg border border-line bg-surface p-3">
+          <summary className="cursor-pointer text-sm font-medium">Recent pages</summary>
+          <ul className="mt-2 space-y-1 text-sm">
+            {recent.length === 0 && <li className="text-muted">No pages yet.</li>}
+            {recent.map((page) => (
+              <li key={page.id}>
+                {page.title || 'Untitled'} · {new Date(page.updatedAt).toLocaleString()}
               </li>
             ))}
           </ul>

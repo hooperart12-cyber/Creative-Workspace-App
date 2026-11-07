@@ -54,7 +54,7 @@ Work through each step, and tick the box if the **Expected** result happens. If 
 
 Use `npm run dev` on `feat/m9-page-collections`. Have two PNG files and a small CBZ whose pages are JPG or PNG. M9 is not finished. A failed step here is a bug. Anything in **Not ready yet** is unfinished work, not a regression.
 
-Playwright already opens a new collection, switches Thumbnail grid and Spread layout, opens the optional overview, and opens the Reader and Artwork Review. It does not import, export, or open a second window. The Windows installer has not been installed from this branch.
+Playwright creates a collection, reopens it, imports a library image, shows its thumbnail, edits a crop, locks a spread, adds a tag, sets a production stage, restores the Reader, changes the displayed version, writes export files, relinks a version, and shows unsupported artwork. A second Electron window checks live titles, a refused stale write, and which Reader is resumed. It does not click the OS file, folder, or save dialogs. The Windows installer has not been installed from this branch.
 
 | # | Do this | Expected | A failure looks like |
 |---|---|---|---|
@@ -68,8 +68,12 @@ Playwright already opens a new collection, switches Thumbnail grid and Spread la
 | 9.8 | Export a PDF, a PNG sequence, and a package. Import the package into the same project. | You get new files. The project images are unchanged. The import is a new collection. | The import replaces the original collection, or the PDF is a picture of the window. |
 | 9.9 | Trash the inner folder from its menu. Restore it from Trashed. | The collection stays. After restore it is in that folder again. | The collection is deleted with the folder, or restore cannot find the folder. |
 | 9.10 | Open the same project in a second window. Edit a page title in one window and a different field in the other. | Both edits can remain. Editing the same field in both windows keeps the saved value and tells you the other change was not saved. | One window silently replaces the other window's title. |
+| 9.11 | Import from Asset library. Drag a rectangle on the artwork thumbnail, or type Crop x, y, width, and height. | The page shows the image. The crop is stored on the version. The original file is unchanged. | The image is stretched, or the crop rewrites the file. |
+| 9.12 | Select two pages. Edit selected: add a tag, then set one production stage to done. | Notes, overall status, and the other stages stay as they were. Undo removes that one change. | The note is replaced, or every stage changes. |
+| 9.13 | Relink this version to another image. Then Match folder, read the list, and cancel. | The version id stays. Cancel changes nothing. Confirm match is the only step that relinks by file name. | The page id changes, or opening the folder relinks immediately. |
+| 9.14 | Open the same collection in a second window. Read and zoom in the first. Turn a page in the second. Close the second and open Read in the first. | The first window stays on its page while the second moves. After the second window is closed, Read resumes the page, layout, zoom, and pan from the Reader that was used last. | The first window jumps as soon as the second one turns a page. |
 
-**Not ready yet.** A visual crop editor, import from the Asset Library, the canvas, the clipboard, or an M7 slide, bulk tag edits, and relinking a missing file from a folder. Do not expect those. A reference panel and a chapter check before the Reader are excluded on purpose.
+**Not ready yet.** Changed-external artwork is not produced, because imported artwork is copied into the library. A command palette is not in this build. A reference panel and a chapter check before the Reader are excluded on purpose. The OS save dialog is not part of the automated export check, so use 9.8 for that click.
 
 ### M8 — Connections, links, and comments (in progress)
 

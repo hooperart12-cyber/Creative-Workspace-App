@@ -36,6 +36,54 @@ afterEach(() => {
 })
 
 describe('collection export', () => {
+  it('keeps a portrait page and a landscape page at their own sizes in one spread', async () => {
+    const created = project.collections.create({ title: 'Mixed', placeholderCount: 2 })
+    const [wide, tall] = created.pageIds
+    const wideFile = join(dir, 'wide.png')
+    const tallFile = join(dir, 'tall.png')
+    writeFileSync(
+      wideFile,
+      await sharp({ create: { width: 8, height: 4, channels: 3, background: 'red' } })
+        .png()
+        .toBuffer()
+    )
+    writeFileSync(
+      tallFile,
+      await sharp({ create: { width: 4, height: 8, channels: 3, background: 'blue' } })
+        .png()
+        .toBuffer()
+    )
+    for (const [pageId, file, name] of [
+      [wide, wideFile, 'wide.png'],
+      [tall, tallFile, 'tall.png']
+    ] as const) {
+      const asset = await project.assets.importFile(file)
+      const version = project.collections.addVersion(pageId, { assetId: asset.id, name })
+      const page = project.collections.pages(created.id).find((item) => item.id === pageId)!
+      project.collections.setDisplayed(pageId, version.id, page.revision)
+    }
+    project.collections.lockSpread(wide!, tall!)
+    const images = await writeCollectionExport({
+      project,
+      collectionId: created.id,
+      destination: join(dir, 'mixed'),
+      format: 'png',
+      spread: 'spread',
+      omitUnavailable: false
+    })
+    const file = images.files.find((item) => item.endsWith('.png'))!
+    const meta = await sharp(file).metadata()
+    expect(meta.width).toBe(8 + 16 + 4)
+    expect(meta.height).toBe(8)
+    const stored = project.db.select().from(assets).all()
+    expect(stored).toHaveLength(2)
+    for (const file of stored) {
+      expect(
+        readFileSync(project.assets.originalPath(file.sha256, file.ext)).length
+      ).toBeGreaterThan(0)
+    }
+  })
+
   it('writes a pdf and a numbered sequence without changing the asset file', async () => {
     const created = project.collections.create({
       title: 'Pages',

@@ -3,7 +3,7 @@
  * A wide page stays one image. Missing artwork is reported, not dropped, unless the
  * person explicitly chooses to omit it.
  */
-import { layoutSpreads } from './collections'
+import { layoutSpreads, type ArtworkState } from './collections'
 import { parseDestination, type Destination } from './destinations'
 
 export type ExportFormat = 'png' | 'jpeg' | 'webp' | 'pdf'
@@ -15,7 +15,7 @@ export interface ExportPageInput {
   spreadId: string | null
   role: string | null
   number: number | null
-  artwork: 'blank' | 'ready' | 'missing' | 'unsupported'
+  artwork: ArtworkState
 }
 
 export interface ExportSlot {
@@ -30,11 +30,14 @@ export interface ExportWarning {
   message: string
 }
 
-const WARNING: Record<ExportPageInput['artwork'], string | null> = {
+const WARNING: Record<ArtworkState, string | null> = {
   ready: null,
   blank: 'This page is blank.',
   missing: 'Displayed artwork is missing.',
-  unsupported: 'Displayed artwork is not a supported image.'
+  unsupported: 'Displayed artwork is not a supported image.',
+  damaged: 'Displayed artwork could not be read.',
+  'changed-external': 'The linked file changed.',
+  transient: 'Displayed artwork could not be loaded.'
 }
 
 export function planCollectionExport(

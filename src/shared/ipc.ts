@@ -1,4 +1,4 @@
-import type { BulkOperation } from './collectionBulk'
+import type { BulkOperation, BulkUndoEntry } from './collectionBulk'
 import type { ExportFormat, ExportSpread, ExportWarning } from './collectionExport'
 import type { ReaderDocument } from './reader'
 import type { ImportAction, StagedSource } from './collectionImport'
@@ -534,6 +534,7 @@ export interface IpcRequests {
         notes?: string
         role?: PageRole | null
         status?: PageStatus
+        tagIds?: string[]
       }
     ]
     result: { pageIds: string[] }
@@ -625,11 +626,11 @@ export interface IpcRequests {
       changed: string[]
       alreadyMatching: string[]
       incompatible: { id: string; reason: string }[]
-      undo: { id: string; revision: number; previous: PagePatch }[]
+      undo: BulkUndoEntry[]
     }
   }
   'collections:undoBulk': {
-    args: [entries: { id: string; revision: number; previous: PagePatch }[]]
+    args: [entries: BulkUndoEntry[]]
     result: void
   }
   'collections:stagePaths': {
@@ -722,6 +723,35 @@ export interface IpcRequests {
   'collections:setDisplayed': {
     args: [pageId: string, versionId: string | null, revision: number]
     result: { revision: number }
+  }
+  'collections:addVersion': {
+    args: [pageId: string, filePath: string]
+    result: { id: string }
+  }
+  'collections:pageTags': {
+    args: [pageIds: string[]]
+    result: { pageId: string; tagId: string }[]
+  }
+  'collections:relinkVersion': {
+    args: [versionId: string, assetId: string]
+    result: { cropCleared: boolean }
+  }
+  'collections:relinkFile': {
+    args: [versionId: string, filePath: string]
+    result: { cropCleared: boolean }
+  }
+  'collections:previewFolderMatch': {
+    args: [collectionId: string, folder: string]
+    result: { versionId: string; filePath: string; fileName: string }[]
+  }
+  'collections:applyFolderMatch': {
+    args: [pairs: { versionId: string; filePath: string }[]]
+    result: { count: number }
+  }
+  'collections:stageBoard': { args: [boardId: string]; result: StagedSource[] }
+  'collections:stageClipboard': {
+    args: []
+    result: { files: StagedSource[]; error: string | null }
   }
   'collections:setCrop': {
     args: [versionId: string, crop: { x: number; y: number; w: number; h: number } | null]
@@ -963,6 +993,14 @@ export const IPC_CHANNELS = [
   'collections:undoImport',
   'collections:versions',
   'collections:setDisplayed',
+  'collections:addVersion',
+  'collections:pageTags',
+  'collections:relinkVersion',
+  'collections:relinkFile',
+  'collections:previewFolderMatch',
+  'collections:applyFolderMatch',
+  'collections:stageBoard',
+  'collections:stageClipboard',
   'collections:setCrop',
   'collections:placePageLink',
   'collections:movePages',

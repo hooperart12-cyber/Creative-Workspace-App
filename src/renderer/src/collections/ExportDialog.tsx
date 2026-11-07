@@ -94,7 +94,11 @@ export function ExportDialog({
   }
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 p-6">
-      <div className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-xl bg-surface p-4 shadow-xl">
+      <div
+        role="dialog"
+        aria-label="Export collection"
+        className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-xl bg-surface p-4 shadow-xl"
+      >
         <h2 className="text-sm font-medium">Export</h2>
         <p className="mt-1 text-xs text-muted">
           Original artwork is not changed. A package import creates a new collection.
