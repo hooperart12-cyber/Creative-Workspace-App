@@ -155,7 +155,7 @@ test('creates, reopens, imports, crops, edits, and exports a collection', async 
   await page.getByLabel('Artwork version').first().selectOption({ label: 'other.png' })
   await page.getByRole('button', { name: 'Set as displayed' }).first().click()
   await page.getByRole('button', { name: 'Planner', exact: true }).click()
-  await expect(page.getByText('other.png')).toBeVisible()
+  await expect(page.locator('#page-planner').getByText('other.png', { exact: true })).toBeVisible()
 
   await page.getByRole('button', { name: 'Lock with the next page' }).click()
   await page.getByRole('button', { name: 'Spread layout' }).click()
