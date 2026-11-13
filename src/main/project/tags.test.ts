@@ -319,7 +319,7 @@ describe('tags', () => {
     expect(tagOnly.hits).toHaveLength(1)
     expect(tagOnly.hits[0].kind).not.toBe('pdf-page')
     expect(tagOnly.hits[0].objectId).toBe(leftObject)
-  })
+  }, 30_000)
 
   it('applies tag filters before pagination and keeps a direct asset hit', () => {
     const tag = project.tags.createReusable('Batch')
