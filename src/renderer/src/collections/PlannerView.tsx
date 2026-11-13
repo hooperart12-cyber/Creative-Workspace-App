@@ -960,6 +960,7 @@ function PageCard({
     <button
       type="button"
       draggable={draggable}
+      data-page-id={page.id}
       aria-pressed={selected}
       onClick={onClick}
       onDragStart={(event) => {
@@ -1114,6 +1115,7 @@ function SpreadSlot({
   return (
     <button
       type="button"
+      data-page-id={page.id}
       aria-pressed={selected}
       onClick={onClick}
       className={`flex h-52 flex-col rounded-lg border p-3 text-left ${wide ? 'w-80' : 'w-40'} ${

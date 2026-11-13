@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { expect, test } from '@playwright/test'
@@ -80,20 +81,6 @@ test('creates, reopens, imports, crops, edits, and exports a collection', async 
     const next = await surface.boundingBox()
     expect(next?.height ?? 0).toBeGreaterThan(20)
   }).toPass()
-  const crop = page.getByLabel('Crop the artwork')
-  await crop.dragTo(crop, {
-    sourcePosition: { x: 8, y: 8 },
-    targetPosition: { x: 70, y: 50 }
-  })
-  if ((await page.getByLabel('Crop width').inputValue()) === '') {
-    await page.getByLabel('Crop x').fill('0')
-    await page.getByLabel('Crop y').fill('0')
-    await page.getByLabel('Crop width').fill('10')
-    await page.getByLabel('Crop height').fill('8')
-    await page.getByLabel('Crop height').blur()
-  }
-  await expect(page.getByLabel('Crop width')).not.toHaveValue('')
-
   const collectionId = await page.evaluate(() =>
     window.api.invoke('collections:outline').then((outline) => outline.collections[0]?.id ?? '')
   )
@@ -103,10 +90,66 @@ test('creates, reopens, imports, crops, edits, and exports a collection', async 
   )
   const filled = pages.find((item) => item.artwork === 'ready')
   if (!filled?.id) throw new Error('The imported page has no artwork.')
+  const [original] = await page.evaluate(
+    (id) => window.api.invoke('collections:versions', id),
+    filled.id
+  )
+  if (!original?.sha256) throw new Error('The imported page has no stored version.')
+  const sourceSha = createHash('sha256').update(readFileSync(art)).digest('hex')
+  const stored = join(
+    t.projectsDir,
+    'Collections.cwproj',
+    'assets',
+    original.sha256.slice(0, 2),
+    `${original.sha256}.png`
+  )
+  expect(original.sha256).toBe(sourceSha)
+
+  // The 40 x 20 image sits centered in the crop frame. Drag from 25% to 75% of the shown image.
+  const crop = page.getByLabel('Crop the artwork')
+  const frame = await crop.boundingBox()
+  if (!frame) throw new Error('The crop frame is not on screen.')
+  const scale = Math.min(frame.width / 40, frame.height / 20)
+  const left = frame.x + (frame.width - 40 * scale) / 2
+  const top = frame.y + (frame.height - 20 * scale) / 2
+  await page.mouse.move(left + 40 * scale * 0.25, top + 20 * scale * 0.25)
+  await page.mouse.down()
+  await page.mouse.move(left + 40 * scale * 0.5, top + 20 * scale * 0.5, { steps: 4 })
+  await page.mouse.move(left + 40 * scale * 0.75, top + 20 * scale * 0.75, { steps: 4 })
+  await page.mouse.up()
+  const near = (value: string, expected: number) =>
+    expect(Math.abs(Number(value) - expected)).toBeLessThanOrEqual(1)
+  await expect(page.getByLabel('Crop width')).not.toHaveValue('')
+  near(await page.getByLabel('Crop x').inputValue(), 10)
+  near(await page.getByLabel('Crop y').inputValue(), 5)
+  near(await page.getByLabel('Crop width').inputValue(), 20)
+  near(await page.getByLabel('Crop height').inputValue(), 10)
+  const drawnCrop = {
+    x: Number(await page.getByLabel('Crop x').inputValue()),
+    y: Number(await page.getByLabel('Crop y').inputValue()),
+    w: Number(await page.getByLabel('Crop width').inputValue()),
+    h: Number(await page.getByLabel('Crop height').inputValue())
+  }
+  await expect
+    .poll(async () => {
+      const rows = await page.evaluate(
+        (id) => window.api.invoke('collections:versions', id),
+        filled.id
+      )
+      return rows.find((row) => row.id === original.id)?.crop ?? null
+    })
+    .toEqual(drawnCrop)
+  expect(createHash('sha256').update(readFileSync(stored)).digest('hex')).toBe(sourceSha)
   await page.evaluate(
     ([pageId, path]) => window.api.invoke('collections:addVersion', pageId, path),
     [filled.id, other] as const
   )
+  const versions = await page.evaluate(
+    (id) => window.api.invoke('collections:versions', id),
+    filled.id
+  )
+  expect(versions.find((row) => row.id === original.id)?.crop).toEqual(drawnCrop)
+  expect(versions.find((row) => row.id !== original.id)?.crop).toBeNull()
   await page.getByRole('button', { name: 'Review', exact: true }).click()
   await expect(page.locator('#artwork-review')).toBeVisible()
   await page.getByLabel('Artwork version').first().selectOption({ label: 'other.png' })
@@ -119,7 +162,29 @@ test('creates, reopens, imports, crops, edits, and exports a collection', async 
   await expect(page.getByText('Locked spread').first()).toBeVisible()
   await page.getByRole('button', { name: 'Thumbnail grid' }).click()
 
-  await page.getByRole('button', { name: /2 Untitled/ }).click({ modifiers: ['Control'] })
+  // Ctrl toggles on Windows and Linux; on macOS Ctrl-click is a right click, so Command toggles.
+  const toggle = process.platform === 'darwin' ? 'Meta' : 'Control'
+  const firstCard = page.getByRole('button', { name: /^1 Untitled/ })
+  const secondCard = page.getByRole('button', { name: /^2 Untitled/ })
+  const selectedIds = () =>
+    page
+      .locator('#page-planner [data-page-id][aria-pressed="true"]')
+      .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-page-id')))
+  const orderedIds = pages.map((item) => item.id)
+  await firstCard.click()
+  await expect(firstCard).toHaveAttribute('aria-pressed', 'true')
+  await expect(secondCard).toHaveAttribute('aria-pressed', 'false')
+  await secondCard.click({ modifiers: ['Shift'] })
+  await expect(secondCard).toHaveAttribute('aria-pressed', 'true')
+  expect(await selectedIds()).toEqual(orderedIds)
+  await secondCard.click({ modifiers: [toggle] })
+  await expect(secondCard).toHaveAttribute('aria-pressed', 'false')
+  await expect(firstCard).toHaveAttribute('aria-pressed', 'true')
+  await secondCard.click({ modifiers: [toggle] })
+  await expect(secondCard).toHaveAttribute('aria-pressed', 'true')
+  await expect(firstCard).toHaveAttribute('aria-pressed', 'true')
+  expect(await selectedIds()).toEqual(orderedIds)
+  await expect(page.getByRole('button', { name: 'Edit selected' })).toBeEnabled()
   await page.evaluate(() => window.api.invoke('tags:create', 'Review'))
   await page.getByRole('button', { name: 'Edit selected' }).click()
   const bulk = page.getByRole('dialog', { name: 'Edit selected pages' })

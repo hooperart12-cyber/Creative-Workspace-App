@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { classifyArtwork, cropFromFractions, planFolderMatch } from './artwork'
+import {
+  classifyArtwork,
+  cropFromFractions,
+  fractionsInContainedImage,
+  planFolderMatch
+} from './artwork'
 import { bulkDecision } from './collectionBulk'
 import { stageKnownAssets } from './collectionImport'
 
@@ -71,6 +76,23 @@ describe('artwork states and crops', () => {
       y: 10,
       w: 50,
       h: 20
+    })
+  })
+
+  it('measures a drag against the shown image, not the empty bands beside it', () => {
+    const frame = { width: 200, height: 100 }
+    const image = { width: 40, height: 40 }
+    expect(fractionsInContainedImage(frame, image, { x: 0.25, y: 0.1, w: 0.25, h: 0.5 })).toEqual({
+      x: 0,
+      y: 0.1,
+      w: 0.5,
+      h: 0.5
+    })
+    expect(fractionsInContainedImage(frame, image, { x: 0, y: 0, w: 1, h: 1 })).toEqual({
+      x: 0,
+      y: 0,
+      w: 1,
+      h: 1
     })
   })
 

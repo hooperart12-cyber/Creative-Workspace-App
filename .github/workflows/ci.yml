@@ -26,15 +26,15 @@ jobs:
       - run: npm test
       - name: End-to-end UI tests (Playwright drives the built app)
         run: npm run test:e2e
-      - name: Upload Playwright report on failure
+      # Screenshots, traces, and error context only. Kept small and short so the installer has room.
+      - name: Upload Playwright failure details
         if: failure()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-${{ matrix.os }}
-          path: |
-            playwright-report
-            test-results
-          retention-days: 7
+          name: playwright-failure-${{ matrix.os }}
+          path: test-results
+          retention-days: 3
 
   build-windows:
     name: Windows installer

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { assetUrl } from '@shared/assets'
-import { cropFromFractions } from '@shared/artwork'
+import { cropFromFractions, fractionsInContainedImage } from '@shared/artwork'
 import {
   PAGE_ROLES,
   PAGE_STATUSES,
@@ -434,7 +434,7 @@ function ArtworkVersions({
             Relink this version
           </button>
           <CropFields
-            key={`${version.id}:${version.crop?.x ?? 'none'}`}
+            key={version.id}
             crop={version.crop}
             sha256={version.sha256}
             width={version.width}
@@ -442,7 +442,10 @@ function ArtworkVersions({
             onSave={(crop) => {
               void window.api
                 .invoke('collections:setCrop', version.id, crop)
-                .then(onChanged)
+                .then(() => {
+                  setLoaded((value) => value + 1)
+                  onChanged()
+                })
                 .catch((error) => reportError(error))
             }}
           />
@@ -485,8 +488,8 @@ function CropFields({
   const draw = (event: PointerEvent<HTMLDivElement>) => {
     if (!drag.current || !width || !height) return
     const rect = event.currentTarget.getBoundingClientRect()
-    const x = (event.clientX - rect.left) / rect.width
-    const y = (event.clientY - rect.top) / rect.height
+    const x = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width))
+    const y = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height))
     const left = Math.min(drag.current.x, x)
     const top = Math.min(drag.current.y, y)
     const next = {
@@ -498,14 +501,21 @@ function CropFields({
     boxRef.current = next
     setBox(next)
   }
+  const stop = () => {
+    drag.current = null
+    boxRef.current = null
+    setBox(null)
+  }
   return (
     <div className="mt-2">
       {projectId && sha256 && width && height && (
         <div
           aria-label="Crop the artwork"
-          className="relative mb-2 overflow-hidden rounded border border-line"
+          className="relative mb-2 touch-none overflow-hidden rounded border border-line select-none"
           style={{ height: 112 }}
+          onDragStart={(event) => event.preventDefault()}
           onPointerDown={(event) => {
+            if (event.button !== 0) return
             const rect = event.currentTarget.getBoundingClientRect()
             drag.current = {
               x: (event.clientX - rect.left) / rect.width,
@@ -520,27 +530,30 @@ function CropFields({
           onPointerMove={draw}
           onPointerUp={(event) => {
             const drawn = boxRef.current
-            if (!drawn || !drag.current || drawn.w < 0.01 || drawn.h < 0.01) {
-              drag.current = null
-              boxRef.current = null
-              setBox(null)
-              return
-            }
-            onSave(cropFromFractions({ width, height }, drawn))
-            drag.current = null
-            boxRef.current = null
-            setBox(null)
+            const frame = event.currentTarget.getBoundingClientRect()
             try {
               event.currentTarget.releasePointerCapture(event.pointerId)
             } catch {
               // The pointer was never captured.
             }
+            stop()
+            if (!drawn || drawn.w < 0.01 || drawn.h < 0.01) return
+            const inImage = fractionsInContainedImage(frame, { width, height }, drawn)
+            if (inImage.w <= 0 || inImage.h <= 0) return
+            const next = cropFromFractions({ width, height }, inImage)
+            setX(String(next.x))
+            setY(String(next.y))
+            setW(String(next.w))
+            setH(String(next.h))
+            onSave(next)
           }}
+          onPointerCancel={stop}
         >
           <img
             src={assetUrl(projectId, sha256, 256)}
             alt=""
-            className="h-full w-full object-contain"
+            draggable={false}
+            className="pointer-events-none h-full w-full object-contain"
           />
           {box && (
             <span

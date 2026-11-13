@@ -13,8 +13,8 @@ A row is Tested only when a unit test asserts that behavior. In Progress means t
 | D01 Hybrid collections | In Progress | A collection survives when one of two canvas cards is deleted. Tested. The sidebar lists the collection separately from its cards. |
 | D02 Page entries | In Progress | Stable page ids, notes, status, and optional artwork. Showing a version leaves status `not_started`. Tested. The Planner and Reader use those page ids. |
 | D03 Sequence and spreads | In Progress | Derived numbers, wide span, locked pairs, and RTL side placement. Tested in `src/shared/collections.test.ts` and the repository reorder/lock tests. The Planner can step a locked pair and set span. |
-| D04 Dual-view Planner | In Progress | Thumbnail grid and Spread layout are in the Planner. The chosen view, size, zoom, and focused page id are stored by `rememberPlanner`. Density is stored. A 1,000-page grid window is tested in D19. Playwright opens both layouts. Drag, selection, and undo are not in that test. |
-| D05 Artwork versions | Implemented | Add a version, show it on purpose, and keep the version id when it is relinked. The old asset bytes stay. A crop that does not fit the new image is cleared. Tested. The inspector draws a crop on the thumbnail and stores whole pixels. `cropFromFractions` is tested. An M7 slide is staged with `sourceSlideId` and that id is stored on the version. Tested. Playwright saves a crop through the crop fields when the pointer drag does not change them. |
+| D04 Dual-view Planner | In Progress | Thumbnail grid and Spread layout are in the Planner. The chosen view, size, zoom, and focused page id are stored by `rememberPlanner`. Density is stored. A 1,000-page grid window is tested in D19. Playwright opens both layouts. The flow test clicks, Shift-clicks, and Ctrl-clicks (Command on macOS) pages and checks the selected ids. Page drag and undo are not in Playwright. |
+| D05 Artwork versions | Implemented | Add a version, show it on purpose, and keep the version id when it is relinked. The old asset bytes stay. A crop that does not fit the new image is cleared. Tested. The inspector draws a crop on the thumbnail and stores whole pixels. `cropFromFractions` is tested. An M7 slide is staged with `sourceSlideId` and that id is stored on the version. Tested. Playwright drags a crop with the mouse. It checks the fields, the crop stored on that version, no crop on the next version, and the original bytes. The drag is measured against the shown image, not the empty bands beside it. Tested. |
 | D06 Production stages | Implemented | Stages are copied from the template at creation. A later template edit does not rewrite them. `setStage` and a bulk stage change do not change overall status or notes. Undo restores the previous stage. Tested. Playwright sets the Thumbnail stage to done on a Manga collection. |
 | D07 Reader | Implemented | Single, spread, and continuous layouts, fit or zoom, pan, a page strip, click zones, and an end card are in `ReaderView`. `readerStep`, click zones, and zoom are tested in `src/shared/reader.test.ts`. Playwright chooses Spread, zooms with `=`, pans, and the saved resume keeps that layout, zoom, and pan. |
 | D08 Reader resume | Implemented | `touchReader` is the only writer. Reading a collection does not write. Closing or refreshing does not write, and remembering the Planner page does not change the Reader resume. Tested. Planner Read opens the saved resume instead of the focused Planner page. A two-window Electron test zooms and pans in one Reader, turns the page in the other, and the resume follows the Reader that was used last. |
@@ -55,12 +55,13 @@ A row is Tested only when a unit test asserts that behavior. In Progress means t
 
 ## Tests actually run
 
-- `npm test` — 37 files, 290 tests, all passed (2026-11-06). Includes tag and stage bulk undo, relink, a slide import, mixed-size spread export, and the earlier conflict and scale tests.
+- `npm ci` — clean install passed (2026-11-13).
+- `npm test` — 37 files, 291 tests, all passed (2026-11-13). Includes tag and stage bulk undo, relink, a slide import, mixed-size spread export, a drag measured against a letterboxed image, and the earlier conflict and scale tests.
 - `npm run lint` — passed.
 - `npm run typecheck` — passed.
-- `npm run format:check` — run again after the commit formatting.
-- `npm run build` — passed locally before the Playwright run. The Windows installer was not built or installed.
-- `npm run test:e2e` — 43 Playwright tests passed (2026-11-06), including `e2e/collections.spec.ts`, `e2e/collections-flow.spec.ts`, and `e2e/collections-windows.spec.ts`. The flow covers creation, reopen, a real thumbnail, crop fields, library import, a locked spread, bulk tag and stage, Review's Set as displayed, export files, relink, and unsupported artwork. The windows spec opens a second Electron window.
+- `npm run format:check` — passed.
+- `npm run build` and `npm run build:win` — passed locally. The installer was built, not installed. CI builds the `windows-installer` artifact.
+- `npm run test:e2e` — 43 Playwright tests passed (2026-11-13), including `e2e/collections.spec.ts`, `e2e/collections-flow.spec.ts`, and `e2e/collections-windows.spec.ts`. The flow covers creation, reopen, a real thumbnail, a mouse-dragged crop, library import, a locked spread, click, Shift-click, and Ctrl-click (Command on macOS) selection, bulk tag and stage, Review's Set as displayed, export files, relink, and unsupported artwork. The windows spec opens a second Electron window.
 
 ## Still open
 

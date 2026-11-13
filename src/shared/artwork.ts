@@ -37,6 +37,27 @@ export function cropFromFractions(
   return { x, y, w, h }
 }
 
+/**
+ * A rectangle in fractions of a frame becomes fractions of the image shown inside it with
+ * object-fit: contain. The empty bands beside the image are clipped away.
+ */
+export function fractionsInContainedImage(
+  frame: { width: number; height: number },
+  image: { width: number; height: number },
+  box: { x: number; y: number; w: number; h: number }
+): { x: number; y: number; w: number; h: number } {
+  const scale = Math.min(frame.width / image.width, frame.height / image.height)
+  const shownWidth = image.width * scale
+  const shownHeight = image.height * scale
+  const left = (frame.width - shownWidth) / 2
+  const top = (frame.height - shownHeight) / 2
+  const across = (value: number) => clamp((value * frame.width - left) / shownWidth, 0, 1)
+  const down = (value: number) => clamp((value * frame.height - top) / shownHeight, 0, 1)
+  const x = across(box.x)
+  const y = down(box.y)
+  return { x, y, w: across(box.x + box.w) - x, h: down(box.y + box.h) - y }
+}
+
 /** Pairs a version's file name with one unused file of the same name. Nothing is written. */
 export function planFolderMatch(
   versions: readonly { versionId: string; fileName: string }[],
