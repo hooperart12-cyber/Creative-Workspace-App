@@ -57,6 +57,13 @@
       "when": 1793500000000,
       "tag": "0007_connections_links_comments",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1793600000000,
+      "tag": "0008_page_collections",
+      "breakpoints": true
     }
   ]
 }

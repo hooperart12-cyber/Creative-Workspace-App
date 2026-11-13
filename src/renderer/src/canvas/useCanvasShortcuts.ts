@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { collectionCard } from '@shared/collections'
 import { useCanvasStore } from '../store/canvasStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import * as actions from './actions'
@@ -15,6 +16,7 @@ export const isSpaceHeld = (): boolean => spaceHeld
 
 /** Typing in a field, using a menu or a dialog: leave the keys alone. */
 function keysBelongElsewhere(e: KeyboardEvent): boolean {
+  if (useWorkspaceStore.getState().surface !== 'canvas') return true
   const target = e.target as HTMLElement | null
   if (
     target?.closest(
@@ -170,6 +172,24 @@ export function useCanvasShortcuts(): void {
       const single = selected.length === 1 ? selected[0] : undefined
       if (e.key === 'Enter' && single?.linkedBoardId) {
         return handled(() => void workspace.openBoard(single.linkedBoardId!))
+      }
+      if (e.key === 'Enter' && single?.type === 'collection') {
+        const card = collectionCard(single.data)
+        if (!card) return
+        return handled(() => {
+          const mode = card.openWith === 'last' ? card.lastOpened : card.openWith
+          if (mode === 'reader') {
+            void window.api
+              .invoke('collections:setAppearance', single.id, { lastOpened: 'reader' })
+              .catch(() => {})
+            workspace.openReader(card.collectionId, null)
+            return
+          }
+          void window.api
+            .invoke('collections:setAppearance', single.id, { lastOpened: 'planner' })
+            .catch(() => {})
+          workspace.openPlanner(card.collectionId, null)
+        })
       }
       if (e.key === 'Enter' && single && isViewable(single)) {
         return handled(() => canvas.setViewerObjectId(single.id))

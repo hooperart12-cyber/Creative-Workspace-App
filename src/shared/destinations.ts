@@ -10,8 +10,20 @@ export type Destination =
   | { kind: 'slide'; boardId: string; objectId: string; slideId: string; title?: string }
   | { kind: 'camera'; boardId: string; x: number; y: number; zoom: number; title?: string }
   | { kind: 'url'; href: string; title?: string }
+  | { kind: 'collection'; collectionId: string; title?: string }
+  | { kind: 'page'; collectionId: string; pageId: string; title?: string }
 
-const KINDS = new Set(['board', 'object', 'pdf', 'stack', 'slide', 'camera', 'url'])
+const KINDS = new Set([
+  'board',
+  'object',
+  'pdf',
+  'stack',
+  'slide',
+  'camera',
+  'url',
+  'collection',
+  'page'
+])
 
 const id = (value: unknown): string | null =>
   typeof value === 'string' && UUID.test(value) ? value.toLowerCase() : null
@@ -28,6 +40,17 @@ export function parseDestination(value: unknown): Destination | null {
   const raw = value as Record<string, unknown>
   if (typeof raw.kind !== 'string' || !KINDS.has(raw.kind)) return null
   const title = titleOf(raw.title)
+  if (raw.kind === 'collection') {
+    const collectionId = id(raw.collectionId)
+    return collectionId ? { kind: 'collection', collectionId, ...(title ? { title } : {}) } : null
+  }
+  if (raw.kind === 'page') {
+    const collectionId = id(raw.collectionId)
+    const pageId = id(raw.pageId)
+    return collectionId && pageId
+      ? { kind: 'page', collectionId, pageId, ...(title ? { title } : {}) }
+      : null
+  }
   if (raw.kind === 'url') {
     const href = normalizePublicUrl(raw.href)
     return href ? { kind: 'url', href, ...(title ? { title } : {}) } : null
@@ -67,6 +90,8 @@ export function parseDestination(value: unknown): Destination | null {
 /** Ids that identify the target. Titles are display-only and are not compared. */
 export function destinationIds(destination: Destination): string[] {
   if (destination.kind === 'url') return []
+  if (destination.kind === 'collection') return [destination.collectionId]
+  if (destination.kind === 'page') return [destination.collectionId, destination.pageId]
   if (destination.kind === 'board' || destination.kind === 'camera') return [destination.boardId]
   if (destination.kind === 'slide')
     return [destination.boardId, destination.objectId, destination.slideId]
@@ -88,6 +113,16 @@ export function remapDestination(
     const next = ids.get(value)
     if (next) return next
     return detachOutside ? null : value
+  }
+  if (destination.kind === 'collection') {
+    const collectionId = mapId(destination.collectionId)
+    return collectionId ? { ...destination, collectionId } : null
+  }
+  if (destination.kind === 'page') {
+    const collectionId = mapId(destination.collectionId)
+    const pageId = mapId(destination.pageId)
+    if (!collectionId || !pageId) return null
+    return { ...destination, collectionId, pageId }
   }
   const boardId = mapId(destination.boardId)
   if (!boardId) return null
@@ -206,6 +241,9 @@ export function readPreviewMeta(html: string): {
 /** `cw:` address for a destination, used inside a note link. External URLs stay http(s). */
 export function destinationHref(destination: Destination): string {
   if (destination.kind === 'url') return destination.href
+  if (destination.kind === 'collection') return `cw://collection/${destination.collectionId}`
+  if (destination.kind === 'page')
+    return `cw://page/${destination.collectionId}/${destination.pageId}`
   if (destination.kind === 'board') return `cw://board/${destination.boardId}`
   if (destination.kind === 'camera')
     return `cw://camera/${destination.boardId}/${destination.x}/${destination.y}/${destination.zoom}`
@@ -229,6 +267,10 @@ export function destinationFromHref(href: string): Destination | null {
   if (url.protocol !== 'cw:') return null
   const parts = url.pathname.split('/').filter(Boolean)
   const host = url.hostname
+  if (host === 'collection' && parts[0])
+    return parseDestination({ kind: 'collection', collectionId: parts[0] })
+  if (host === 'page' && parts.length >= 2)
+    return parseDestination({ kind: 'page', collectionId: parts[0], pageId: parts[1] })
   if (host === 'board' && parts[0]) return parseDestination({ kind: 'board', boardId: parts[0] })
   if (host === 'object' && parts.length >= 2)
     return parseDestination({ kind: 'object', boardId: parts[0], objectId: parts[1] })

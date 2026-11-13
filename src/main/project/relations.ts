@@ -16,7 +16,15 @@ import {
 import { parseDestination, type Destination } from '@shared/destinations'
 import type { CanvasObject } from '@shared/types'
 import type { ProjectDb } from '../db/client'
-import { boardObjects, boards, commentMessages, linkPreviews, stackSlides } from '../db/schema'
+import {
+  boardObjects,
+  boards,
+  collectionPages,
+  collections,
+  commentMessages,
+  linkPreviews,
+  stackSlides
+} from '../db/schema'
 import type { BoardRepository } from './boards'
 
 export const RELATION_CONFLICT = 'Another window changed this item. The change was not saved.'
@@ -365,6 +373,22 @@ export class RelationRepository {
         .all()
         .map((row) => row.id)
     )
+    const collectionIds = new Set(
+      this.db
+        .select({ id: collections.id })
+        .from(collections)
+        .where(isNull(collections.deletedAt))
+        .all()
+        .map((row) => row.id)
+    )
+    const pageIds = new Set(
+      this.db
+        .select({ id: collectionPages.id })
+        .from(collectionPages)
+        .where(isNull(collectionPages.deletedAt))
+        .all()
+        .map((row) => row.id)
+    )
     const issues: { kind: string; id: string; boardId: string; detail: string }[] = []
     for (const row of rows) {
       const data = row.data ?? {}
@@ -392,7 +416,10 @@ export class RelationRepository {
       }
       if (row.type === 'link' && data.referenceHeld !== true) {
         const destination = parseDestination(data.destination)
-        if (destination && destinationMissing(destination, ids, boardIds, slideIds))
+        if (
+          destination &&
+          destinationMissing(destination, ids, boardIds, slideIds, collectionIds, pageIds)
+        )
           issues.push({
             kind: 'link',
             id: row.id,
@@ -459,7 +486,33 @@ export class RelationRepository {
         .all()
         .map((board) => board.id)
     )
-    const next = repairedData(before, row.type, action, live, slides, groups, liveBoards)
+    const collectionIds = new Set(
+      this.db
+        .select({ id: collections.id })
+        .from(collections)
+        .where(isNull(collections.deletedAt))
+        .all()
+        .map((item) => item.id)
+    )
+    const pageIds = new Set(
+      this.db
+        .select({ id: collectionPages.id })
+        .from(collectionPages)
+        .where(isNull(collectionPages.deletedAt))
+        .all()
+        .map((item) => item.id)
+    )
+    const next = repairedData(
+      before,
+      row.type,
+      action,
+      live,
+      slides,
+      groups,
+      liveBoards,
+      collectionIds,
+      pageIds
+    )
     let linkedBoardId: string | null | undefined
     if (typeof next.linkedWait === 'string') {
       linkedBoardId = next.linkedWait
@@ -545,9 +598,14 @@ function destinationMissing(
   destination: Destination,
   liveObjects: Set<string>,
   liveBoards: Set<string>,
-  liveSlides: Set<string>
+  liveSlides: Set<string>,
+  liveCollections: Set<string>,
+  livePages: Set<string>
 ): boolean {
   if (destination.kind === 'url') return false
+  if (destination.kind === 'collection') return !liveCollections.has(destination.collectionId)
+  if (destination.kind === 'page')
+    return !livePages.has(destination.pageId) || !liveCollections.has(destination.collectionId)
   if (destination.kind === 'board' || destination.kind === 'camera')
     return !liveBoards.has(destination.boardId)
   if (destination.kind === 'slide')
@@ -562,7 +620,9 @@ function repairedData(
   liveObjects: Set<string>,
   liveSlides: Set<string>,
   liveGroups: Set<string>,
-  liveBoards: Set<string>
+  liveBoards: Set<string>,
+  liveCollections: Set<string>,
+  livePages: Set<string>
 ): Record<string, unknown> {
   if (type === 'connection') {
     const connection = parseConnection(raw)
@@ -635,7 +695,8 @@ function repairedData(
   }
   const destination = parseDestination(raw.destination)
   const missing =
-    !!destination && destinationMissing(destination, liveObjects, liveBoards, liveSlides)
+    !!destination &&
+    destinationMissing(destination, liveObjects, liveBoards, liveSlides, liveCollections, livePages)
   const held = raw.referenceHeld === true
   if (!missing && !held) throw new Error('Nothing there needs repair.')
   if (held && action !== 'reattach') throw new Error('Nothing there needs repair.')

@@ -1,5 +1,6 @@
-import { existsSync } from 'node:fs'
-import { copyFile } from 'node:fs/promises'
+import { existsSync, mkdtempSync } from 'node:fs'
+import { copyFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { basename, extname, join } from 'node:path'
 import {
   app,
@@ -23,8 +24,12 @@ import { removeDraft, takeDrafts, writeDraft, type NoteDraft } from './project/j
 import { withProjectLock } from './project/lock'
 import { NoteLeases } from './project/noteLeases'
 import { exportBoardPackage, importBoardPackage } from './project/boardPackage'
+import { exportCollectionPackage, importCollectionPackage } from './project/collectionPackage'
+import { writeCollectionExport } from './project/collectionPictures'
 import { writeBoardPicture } from './project/boardPicture'
+import { extractComicEntries } from './project/comicArchive'
 import { exportProjectZip, importProjectZip } from './project/projectZip'
+import { stageCollectionPaths } from './project/stageCollectionImport'
 import { restoreProject } from './project/restore'
 import type { Project } from './project/project'
 import type { ProjectRegistry } from './project/projectRegistry'
@@ -122,7 +127,56 @@ const SAVE_CHANNELS = new Set<string>([
   'relations:repair',
   'relations:restore',
   'relations:fetchPreview',
-  'board:importPackage'
+  'board:importPackage',
+  'collections:create',
+  'collections:rename',
+  'collections:move',
+  'collections:trash',
+  'collections:restore',
+  'collections:reorder',
+  'collections:createFolder',
+  'collections:renameFolder',
+  'collections:moveFolder',
+  'collections:trashFolder',
+  'collections:restoreFolder',
+  'collections:saveTemplate',
+  'collections:renameTemplate',
+  'collections:updateTemplate',
+  'collections:insertPages',
+  'collections:undoPages',
+  'collections:reorderPages',
+  'collections:orderPages',
+  'collections:trashPages',
+  'collections:restorePages',
+  'collections:updatePage',
+  'collections:setStage',
+  'collections:lockSpread',
+  'collections:unlockSpread',
+  'collections:setSpan',
+  'collections:updateSettings',
+  'collections:rememberPlanner',
+  'collections:placeCard',
+  'collections:setAppearance',
+  'collections:addComment',
+  'collections:addLink',
+  'collections:applyBulk',
+  'collections:undoBulk',
+  'collections:commitImport',
+  'collections:undoImport',
+  'collections:setDisplayed',
+  'collections:addVersion',
+  'collections:relinkVersion',
+  'collections:relinkFile',
+  'collections:applyFolderMatch',
+  'collections:setCrop',
+  'collections:placePageLink',
+  'collections:movePages',
+  'collections:copyPages',
+  'collections:touchReader',
+  'collections:addNav',
+  'collections:renameNav',
+  'collections:removeNav',
+  'collections:importPackage'
 ])
 
 function handle<C extends IpcChannel>(channel: C, handler: Handler<C>): void {
@@ -260,7 +314,10 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
   handle('board:get', (event, id) => {
     const project = requireProject(event)
     const board = project.tags.decorateBoard(project.stacks.attach(project.boards.get(id)))
-    return { ...board, objects: project.relations.decorate(board.objects) }
+    return {
+      ...board,
+      objects: project.collections.attach(project.relations.decorate(board.objects))
+    }
   })
 
   handle('board:create', (event, input) => {
@@ -1026,6 +1083,26 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
     })
     return result.canceled ? null : (result.filePath ?? null)
   })
+  handle('dialog:pickSaveCollection', async (event, kind) => {
+    const window = BrowserWindow.fromWebContents(event.sender)!
+    const result = await dialog.showSaveDialog(window, {
+      title: kind === 'pdf' ? 'Export PDF' : 'Export collection package',
+      filters:
+        kind === 'pdf'
+          ? [{ name: 'PDF', extensions: ['pdf'] }]
+          : [{ name: 'Collection package', extensions: ['zip'] }]
+    })
+    return result.canceled ? null : (result.filePath ?? null)
+  })
+  handle('dialog:pickCollectionPackage', async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)!
+    const result = await dialog.showOpenDialog(window, {
+      title: 'Import a collection package',
+      filters: [{ name: 'Collection package', extensions: ['zip'] }],
+      properties: ['openFile']
+    })
+    return result.canceled ? null : (result.filePaths[0] ?? null)
+  })
   handle('dialog:pickSaveBoardPackage', async (event) => {
     const window = BrowserWindow.fromWebContents(event.sender)!
     const result = await dialog.showSaveDialog(window, {
@@ -1186,6 +1263,422 @@ export function registerIpcHandlers(registry: ProjectRegistry, recent: RecentPro
   handle('recovery:clearDraft', (event, objectId) => {
     removeDraft(requireProject(event).path, objectId)
   })
+  handle('collections:outline', (event) => requireProject(event).collections.outline())
+  handle('collections:templates', (event) => requireProject(event).collections.templates())
+  handle('collections:create', (event, input) => {
+    const project = requireProject(event)
+    const created = project.collections.create(input)
+    broadcastContent(project)
+    return created
+  })
+  handle('collections:detail', (event, id) => requireProject(event).collections.detail(id))
+  handle('collections:rename', (event, id, title) => {
+    const project = requireProject(event)
+    project.collections.rename(id, title)
+    broadcastContent(project)
+  })
+  handle('collections:move', (event, id, folderId) => {
+    const project = requireProject(event)
+    project.collections.move(id, folderId)
+    broadcastContent(project)
+  })
+  handle('collections:trash', (event, id) => {
+    const project = requireProject(event)
+    project.collections.trash(id)
+    broadcastContent(project)
+  })
+  handle('collections:restore', (event, id) => {
+    const project = requireProject(event)
+    project.collections.restore(id)
+    broadcastContent(project)
+  })
+  handle('collections:reorder', (event, kind, id, beforeId) => {
+    const project = requireProject(event)
+    project.collections.reorderSibling(kind, id, beforeId)
+    broadcastContent(project)
+  })
+  handle('collections:createFolder', (event, parentId, name) => {
+    const project = requireProject(event)
+    const created = project.collections.createFolder(parentId, name)
+    broadcastContent(project)
+    return created
+  })
+  handle('collections:renameFolder', (event, id, name) => {
+    const project = requireProject(event)
+    project.collections.renameFolder(id, name)
+    broadcastContent(project)
+  })
+  handle('collections:moveFolder', (event, id, parentId) => {
+    const project = requireProject(event)
+    project.collections.moveFolder(id, parentId)
+    broadcastContent(project)
+  })
+  handle('collections:trashFolder', (event, id) => {
+    const project = requireProject(event)
+    project.collections.trashFolder(id)
+    broadcastContent(project)
+  })
+  handle('collections:restoreFolder', (event, id) => {
+    const project = requireProject(event)
+    project.collections.restoreFolder(id)
+    broadcastContent(project)
+  })
+  handle('collections:trashedFolders', (event) => {
+    return requireProject(event).collections.trashedFolders()
+  })
+  handle('collections:trashedCollections', (event) => {
+    return requireProject(event).collections.trashedCollections()
+  })
+  handle('collections:saveTemplate', (event, name, collectionId) => {
+    const project = requireProject(event)
+    const saved = project.collections.saveTemplate(name, collectionId)
+    broadcastContent(project)
+    return saved
+  })
+  handle('collections:renameTemplate', (event, id, name) => {
+    const project = requireProject(event)
+    project.collections.renameTemplate(id, name)
+    broadcastContent(project)
+  })
+  handle('collections:updateTemplate', (event, id, data) => {
+    const project = requireProject(event)
+    project.collections.updateTemplate(id, data)
+    broadcastContent(project)
+  })
+  handle('collections:insertPages', (event, input) => {
+    const project = requireProject(event)
+    const inserted = project.collections.insertPages(input)
+    broadcastContent(project)
+    return inserted
+  })
+  handle('collections:undoPages', (event, pageIds) => {
+    const project = requireProject(event)
+    project.collections.undoPages(pageIds)
+    broadcastContent(project)
+  })
+  handle('collections:reorderPages', (event, collectionId, pageIds, beforeId) => {
+    const project = requireProject(event)
+    project.collections.reorder(collectionId, pageIds, beforeId)
+    broadcastContent(project)
+  })
+  handle('collections:orderPages', (event, collectionId, pageIds) => {
+    const project = requireProject(event)
+    project.collections.orderPages(collectionId, pageIds)
+    broadcastContent(project)
+  })
+  handle('collections:trashPages', (event, pageIds) => {
+    const project = requireProject(event)
+    const trashed = project.collections.trashPages(pageIds)
+    broadcastContent(project)
+    return trashed
+  })
+  handle('collections:restorePages', (event, pageIds) => {
+    const project = requireProject(event)
+    const restored = project.collections.restorePages(pageIds)
+    broadcastContent(project)
+    return restored
+  })
+  handle('collections:updatePage', (event, id, revision, patch, base) => {
+    const project = requireProject(event)
+    const saved = project.collections.updatePage(id, revision, patch, base)
+    broadcastContent(project)
+    return saved
+  })
+  handle('collections:setStage', (event, pageId, stageId, state, note) => {
+    requireProject(event).collections.setStage(pageId, stageId, state, note ?? '')
+  })
+  handle('collections:lockSpread', (event, pageId, partnerId) => {
+    const project = requireProject(event)
+    const locked = project.collections.lockSpread(pageId, partnerId)
+    broadcastContent(project)
+    return locked
+  })
+  handle('collections:unlockSpread', (event, pageId) => {
+    const project = requireProject(event)
+    project.collections.unlockSpread(pageId)
+    broadcastContent(project)
+  })
+  handle('collections:setSpan', (event, pageId, span) => {
+    const project = requireProject(event)
+    project.collections.setSpan(pageId, span)
+    broadcastContent(project)
+  })
+  handle('collections:updateSettings', (event, id, patch) => {
+    const project = requireProject(event)
+    project.collections.updateSettings(id, patch)
+    broadcastContent(project)
+  })
+  handle('collections:rememberPlanner', (event, id, patch) => {
+    requireProject(event).collections.rememberPlanner(id, patch)
+  })
+  handle('collections:placeCard', (event, boardId, collectionId) => {
+    const project = requireProject(event)
+    const card = project.collections.createAppearance(boardId, collectionId)
+    broadcastContent(project)
+    return card
+  })
+  handle('collections:setAppearance', (event, objectId, patch) => {
+    const project = requireProject(event)
+    project.collections.setAppearance(objectId, patch)
+    broadcastContent(project)
+  })
+  handle('collections:comments', (event, pageId) =>
+    requireProject(event).collections.comments(pageId)
+  )
+  handle('collections:addComment', (event, pageId, body) => {
+    const project = requireProject(event)
+    return project.collections.addComment(pageId, body)
+  })
+  handle('collections:links', (event, pageId) => requireProject(event).collections.links(pageId))
+  handle('collections:addLink', (event, pageId, destination) =>
+    requireProject(event).collections.addLink(pageId, destination)
+  )
+  handle('collections:search', (event, collectionId, query) =>
+    requireProject(event).collections.search(collectionId, query)
+  )
+  handle('collections:applyBulk', (event, ids, operation, confirmReplace) => {
+    const project = requireProject(event)
+    const result = project.collections.applyBulk(ids, operation, confirmReplace)
+    broadcastContent(project)
+    return result
+  })
+  handle('collections:undoBulk', (event, entries) => {
+    const project = requireProject(event)
+    project.collections.undoBulk(entries)
+    broadcastContent(project)
+  })
+  handle('collections:stagePaths', (_event, paths) => stageCollectionPaths(paths))
+  handle('collections:commitImport', async (event, collectionId, beforeId, files, actions) => {
+    const project = requireProject(event)
+    const needed = new Set(actions.flatMap((action) => action.names))
+    const chosen = files.filter((file) => file.accepted && needed.has(file.name))
+    const temp = mkdtempSync(join(tmpdir(), 'cw-import-'))
+    try {
+      const paths = new Map<string, string>()
+      const archives = new Map<string, typeof chosen>()
+      for (const file of chosen) {
+        if (file.filePath) paths.set(file.name, file.filePath)
+        else if (file.archive) {
+          const list = archives.get(file.archive.zipPath) ?? []
+          list.push(file)
+          archives.set(file.archive.zipPath, list)
+        }
+      }
+      for (const [zipPath, entries] of archives) {
+        const extracted = await extractComicEntries(
+          zipPath,
+          entries.map((entry) => entry.archive?.entry ?? ''),
+          temp
+        )
+        for (const entry of entries) {
+          const full = entry.archive ? extracted.get(entry.archive.entry) : undefined
+          if (!full) throw new Error('A staged file was not in the archive.')
+          paths.set(entry.name, full)
+        }
+      }
+      const assetIds = new Map<string, string>()
+      const slideIds = new Map<string, string | null>()
+      for (const file of chosen) {
+        if (file.assetId) {
+          assetIds.set(file.name, file.assetId)
+          slideIds.set(file.name, file.sourceSlideId ?? null)
+        }
+      }
+      for (const [name, path] of paths) {
+        if (assetIds.has(name)) continue
+        const result = await project.assets.importFiles([path])
+        const asset = result.imported[0]
+        if (!asset) throw new Error(result.skipped[0]?.reason ?? `${name} was not imported.`)
+        assetIds.set(name, asset.id)
+      }
+      const committed = actions.map((action) => {
+        const assets = action.names.map((name) => {
+          const assetId = assetIds.get(name)
+          if (!assetId) throw new Error(`${name} was not imported.`)
+          return { assetId, name, sourceSlideId: slideIds.get(name) ?? null }
+        })
+        return action.kind === 'fill'
+          ? { kind: 'fill' as const, pageId: action.pageId, assets }
+          : { kind: 'page' as const, assets }
+      })
+      const record = project.collections.commitImport(collectionId, beforeId, committed)
+      broadcastContent(project)
+      return record
+    } finally {
+      await rm(temp, { recursive: true, force: true })
+    }
+  })
+  handle('collections:undoImport', (event, record) => {
+    const project = requireProject(event)
+    project.collections.undoImport(record)
+    broadcastContent(project)
+  })
+  handle('collections:versions', (event, pageId) =>
+    requireProject(event).collections.versions(pageId)
+  )
+  handle('collections:addVersion', async (event, pageId, filePath) => {
+    const project = requireProject(event)
+    const result = await project.assets.importFiles([filePath])
+    const asset = result.imported[0]
+    if (!asset) throw new Error(result.skipped[0]?.reason ?? 'That file was not imported.')
+    const saved = project.collections.addVersion(pageId, {
+      assetId: asset.id,
+      name: basename(filePath)
+    })
+    broadcastContent(project)
+    return saved
+  })
+  handle('collections:setDisplayed', (event, pageId, versionId, revision) => {
+    const project = requireProject(event)
+    const saved = project.collections.setDisplayed(pageId, versionId, revision)
+    broadcastContent(project)
+    return saved
+  })
+  handle('collections:setCrop', (event, versionId, crop) => {
+    const project = requireProject(event)
+    project.collections.setCrop(versionId, crop)
+    broadcastContent(project)
+  })
+  handle('collections:pageTags', (event, pageIds) =>
+    requireProject(event).collections.pageTags(pageIds)
+  )
+  handle('collections:relinkVersion', (event, versionId, assetId) => {
+    const project = requireProject(event)
+    const saved = project.collections.relinkVersion(versionId, assetId)
+    broadcastContent(project)
+    return saved
+  })
+  handle('collections:relinkFile', async (event, versionId, filePath) => {
+    const project = requireProject(event)
+    const result = await project.assets.importFiles([filePath])
+    const asset = result.imported[0]
+    if (!asset) throw new Error(result.skipped[0]?.reason ?? 'That file was not imported.')
+    const saved = project.collections.relinkVersion(versionId, asset.id)
+    broadcastContent(project)
+    return saved
+  })
+  handle('collections:previewFolderMatch', async (event, collectionId, folder) => {
+    const project = requireProject(event)
+    const names = await readdir(folder, { withFileTypes: true })
+    const files = names
+      .filter((entry) => entry.isFile())
+      .filter((entry) =>
+        IMAGE_EXTENSIONS.some((ext) => entry.name.toLowerCase().endsWith(`.${ext}`))
+      )
+      .map((entry) => ({ name: entry.name, filePath: join(folder, entry.name) }))
+    return project.collections.previewFolderMatch(collectionId, files)
+  })
+  handle('collections:applyFolderMatch', async (event, pairs) => {
+    const project = requireProject(event)
+    for (const pair of pairs) {
+      const result = await project.assets.importFiles([pair.filePath])
+      const asset = result.imported[0]
+      if (!asset) throw new Error(result.skipped[0]?.reason ?? 'That file was not imported.')
+      project.collections.relinkVersion(pair.versionId, asset.id)
+    }
+    broadcastContent(project)
+    return { count: pairs.length }
+  })
+  handle('collections:stageBoard', (event, boardId) => {
+    const project = requireProject(event)
+    const board = project.boards.get(boardId)
+    return project.collections.stageBoardArtwork(board.objects)
+  })
+  handle('collections:stageClipboard', async (event) => {
+    requireProject(event)
+    const read = await readExternalClipboard()
+    if (!read) return { files: [], error: 'The clipboard has no image.' }
+    if (read.kind === 'files') return stageCollectionPaths(read.paths)
+    const temp = join(tmpdir(), read.file.name.replace(/[^\w. -]/g, ''))
+    await writeFile(temp, read.file.bytes)
+    return stageCollectionPaths([temp])
+  })
+  handle('collections:placePageLink', (event, boardId, collectionId, pageId) => {
+    const project = requireProject(event)
+    const page = project.collections.pages(collectionId).find((item) => item.id === pageId)
+    if (!page) throw new Error('That page is not in this collection.')
+    const link = project.relations.createLink(
+      boardId,
+      { x: 80, y: 80 },
+      {
+        version: 1,
+        title: page.title || 'Page',
+        destination: { kind: 'page', collectionId, pageId, title: page.title || 'Page' }
+      }
+    )
+    broadcastContent(project)
+    return { id: link.id }
+  })
+  handle('collections:movePages', (event, pageIds, toCollectionId, beforeId) => {
+    const project = requireProject(event)
+    const moved = project.collections.movePages(pageIds, toCollectionId, beforeId)
+    broadcastContent(project)
+    return {
+      unmapped: moved.unmapped.map((stage) => ({
+        pageId: stage.pageId,
+        stageName: stage.stageName,
+        note: stage.note
+      }))
+    }
+  })
+  handle('collections:copyPages', (event, pageIds, toCollectionId, beforeId) => {
+    const project = requireProject(event)
+    const copied = project.collections.copyPages(pageIds, toCollectionId, beforeId)
+    broadcastContent(project)
+    return { pageIds: copied.pageIds }
+  })
+  handle('collections:reader', (event, collectionId) =>
+    requireProject(event).collections.reader(collectionId)
+  )
+  handle('collections:touchReader', (event, collectionId, state) => {
+    requireProject(event).collections.touchReader(collectionId, state)
+  })
+  handle('collections:nav', (event, collectionId) =>
+    requireProject(event).collections.nav(collectionId)
+  )
+  handle('collections:addNav', (event, collectionId, pageId, kind, title) => {
+    const project = requireProject(event)
+    const created = project.collections.addNav(collectionId, pageId, kind, title)
+    broadcastContent(project)
+    return created
+  })
+  handle('collections:renameNav', (event, id, title) => {
+    const project = requireProject(event)
+    project.collections.renameNav(id, title)
+    broadcastContent(project)
+  })
+  handle('collections:removeNav', (event, id) => {
+    const project = requireProject(event)
+    project.collections.removeNav(id)
+    broadcastContent(project)
+  })
+  handle(
+    'collections:exportSequence',
+    (event, collectionId, destination, format, spread, omitUnavailable) =>
+      writeCollectionExport({
+        project: requireProject(event),
+        collectionId,
+        destination,
+        format,
+        spread,
+        omitUnavailable
+      })
+  )
+  handle('collections:exportPackage', (event, collectionId, destination, includeComments) =>
+    exportCollectionPackage({
+      project: requireProject(event),
+      collectionId,
+      destination,
+      includeComments
+    })
+  )
+  handle('collections:importPackage', async (event, zipPath) => {
+    const project = requireProject(event)
+    const imported = await importCollectionPackage(project, zipPath)
+    broadcastContent(project)
+    return imported
+  })
+
   handle('recovery:list', (event) => {
     const project = requireProject(event)
     return takeDrafts(project.path, (objectId) => {

@@ -241,7 +241,7 @@ export const linkPreviews = sqliteTable('link_previews', {
   error: text('error')
 })
 
-/** One reusable tag on one asset, library entry, canvas object (including a board card), or board. */
+/** One reusable tag on an asset, library entry, canvas object, board, slide, or collection page. */
 export const taggings = sqliteTable(
   'taggings',
   {
@@ -254,4 +254,211 @@ export const taggings = sqliteTable(
     createdAt: timestamps.createdAt
   },
   (t) => [index('taggings_target_idx').on(t.targetType, t.targetId)]
+)
+
+/** Nested folders for collections. These are not library folders and not boards. */
+export const collectionFolders = sqliteTable(
+  'collection_folders',
+  {
+    id: text('id').primaryKey(),
+    parentId: text('parent_id').references((): AnySQLiteColumn => collectionFolders.id),
+    name: text('name').notNull(),
+    sortOrder: real('sort_order').notNull().default(0),
+    ...timestamps,
+    ...softDelete
+  },
+  (t) => [index('collection_folders_parent_idx').on(t.parentId)]
+)
+
+/** Starting settings for a new collection. Later edits are not applied to existing collections. */
+export const collectionTemplates = sqliteTable('collection_templates', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  builtin: integer('builtin', { mode: 'boolean' }).notNull().default(false),
+  data: text('data', { mode: 'json' }).$type<Record<string, unknown>>().notNull().default({}),
+  ...timestamps,
+  ...softDelete
+})
+
+/** A page collection. Canvas cards point at this id; deleting a card does not delete the collection. */
+export const collections = sqliteTable(
+  'collections',
+  {
+    id: text('id').primaryKey(),
+    folderId: text('folder_id').references(() => collectionFolders.id),
+    templateId: text('template_id'),
+    title: text('title').notNull(),
+    description: text('description').notNull().default(''),
+    coverAssetId: text('cover_asset_id').references(() => assets.id),
+    direction: text('direction').notNull().default('ltr'),
+    firstPageSide: text('first_page_side').notNull().default('right'),
+    numberStart: integer('number_start').notNull().default(1),
+    plannerView: text('planner_view').notNull().default('grid'),
+    gridDensity: text('grid_density').notNull().default('balanced'),
+    gridSize: real('grid_size').notNull().default(160),
+    spreadZoom: real('spread_zoom').notNull().default(1),
+    overallStatus: text('overall_status').notNull().default('not_started'),
+    sortOrder: real('sort_order').notNull().default(0),
+    revision: integer('revision').notNull().default(0),
+    nextCollectionId: text('next_collection_id'),
+    readerPageId: text('reader_page_id'),
+    readerLayout: text('reader_layout').notNull().default('single'),
+    readerZoom: real('reader_zoom').notNull().default(1),
+    readerX: real('reader_x').notNull().default(0),
+    readerY: real('reader_y').notNull().default(0),
+    readerInteractedAt: integer('reader_interacted_at', { mode: 'timestamp_ms' }),
+    plannerPageId: text('planner_page_id'),
+    plannerAnchor: real('planner_anchor').notNull().default(0),
+    ...timestamps,
+    ...softDelete
+  },
+  (t) => [index('collections_folder_idx').on(t.folderId)]
+)
+
+/** Named production stages for one collection. Removing a stage keeps the row for its notes. */
+export const collectionStages = sqliteTable(
+  'collection_stages',
+  {
+    id: text('id').primaryKey(),
+    collectionId: text('collection_id')
+      .notNull()
+      .references(() => collections.id),
+    name: text('name').notNull(),
+    position: real('position').notNull().default(0),
+    removedAt: integer('removed_at', { mode: 'timestamp_ms' }),
+    ...timestamps
+  },
+  (t) => [index('collection_stages_collection_idx').on(t.collectionId, t.position)]
+)
+
+/** One page identity. Its number is derived from position and role, never stored as its id. */
+export const collectionPages = sqliteTable(
+  'collection_pages',
+  {
+    id: text('id').primaryKey(),
+    collectionId: text('collection_id')
+      .notNull()
+      .references(() => collections.id),
+    position: real('position').notNull().default(0),
+    title: text('title').notNull().default(''),
+    label: text('label').notNull().default(''),
+    unnumbered: integer('unnumbered', { mode: 'boolean' }),
+    role: text('role'),
+    notes: text('notes').notNull().default(''),
+    overallStatus: text('overall_status').notNull().default('not_started'),
+    displayedVersionId: text('displayed_version_id'),
+    span: integer('span').notNull().default(1),
+    spreadId: text('spread_id'),
+    revision: integer('revision').notNull().default(0),
+    ...timestamps,
+    ...softDelete
+  },
+  (t) => [index('collection_pages_collection_idx').on(t.collectionId, t.position)]
+)
+
+/** One named artwork choice for a page. The asset file is not modified. */
+export const pageVersions = sqliteTable(
+  'page_versions',
+  {
+    id: text('id').primaryKey(),
+    pageId: text('page_id')
+      .notNull()
+      .references(() => collectionPages.id),
+    name: text('name').notNull().default(''),
+    assetId: text('asset_id')
+      .notNull()
+      .references(() => assets.id),
+    position: real('position').notNull().default(0),
+    cropX: integer('crop_x'),
+    cropY: integer('crop_y'),
+    cropW: integer('crop_w'),
+    cropH: integer('crop_h'),
+    sourceSlideId: text('source_slide_id'),
+    ...timestamps
+  },
+  (t) => [index('page_versions_page_idx').on(t.pageId, t.position)]
+)
+
+/** Progress for one page on one stage. A stage from another collection can remain after a move. */
+export const pageStageStates = sqliteTable(
+  'page_stage_states',
+  {
+    pageId: text('page_id')
+      .notNull()
+      .references(() => collectionPages.id),
+    stageId: text('stage_id')
+      .notNull()
+      .references(() => collectionStages.id),
+    state: text('state').notNull().default('not_started'),
+    note: text('note').notNull().default('')
+  },
+  (t) => [index('page_stage_states_page_idx').on(t.pageId)]
+)
+
+/** A flat contents entry or a simple page bookmark. Neither stores a camera. */
+export const collectionNav = sqliteTable(
+  'collection_nav',
+  {
+    id: text('id').primaryKey(),
+    collectionId: text('collection_id')
+      .notNull()
+      .references(() => collections.id),
+    pageId: text('page_id')
+      .notNull()
+      .references(() => collectionPages.id),
+    kind: text('kind').notNull(),
+    title: text('title').notNull().default(''),
+    position: real('position').notNull().default(0),
+    ...timestamps,
+    ...softDelete
+  },
+  (t) => [index('collection_nav_collection_idx').on(t.collectionId, t.position)]
+)
+
+/** An outgoing link on a page. Identity is the destination id, not its title. */
+export const pageLinks = sqliteTable(
+  'page_links',
+  {
+    id: text('id').primaryKey(),
+    pageId: text('page_id')
+      .notNull()
+      .references(() => collectionPages.id),
+    destination: text('destination', { mode: 'json' })
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    ...timestamps,
+    ...softDelete
+  },
+  (t) => [index('page_links_page_idx').on(t.pageId)]
+)
+
+/** A threaded comment on a page. It is not a canvas connection. */
+export const pageComments = sqliteTable(
+  'page_comments',
+  {
+    id: text('id').primaryKey(),
+    pageId: text('page_id')
+      .notNull()
+      .references(() => collectionPages.id),
+    status: text('status').notNull().default('open'),
+    revision: integer('revision').notNull().default(0),
+    ...timestamps,
+    ...softDelete
+  },
+  (t) => [index('page_comments_page_idx').on(t.pageId)]
+)
+
+export const pageCommentMessages = sqliteTable(
+  'page_comment_messages',
+  {
+    id: text('id').primaryKey(),
+    commentId: text('comment_id')
+      .notNull()
+      .references(() => pageComments.id, { onDelete: 'cascade' }),
+    body: text('body').notNull(),
+    ...timestamps,
+    ...softDelete
+  },
+  (t) => [index('page_comment_messages_comment_idx').on(t.commentId, t.createdAt)]
 )

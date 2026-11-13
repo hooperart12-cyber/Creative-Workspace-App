@@ -20,6 +20,7 @@ import { LibraryRepository } from './library'
 import { NoteRepository } from './notes'
 import { ObjectRepository } from './objects'
 import { pendingMigrationTags, readChangeRevision, readProjectIdentity } from './schemaInfo'
+import { CollectionRepository } from './collections'
 import { RelationRepository } from './relations'
 import { SearchRepository } from './search'
 import { StackRepository } from './stacks'
@@ -48,6 +49,7 @@ export class Project {
   readonly tags: TagRepository
   readonly stacks: StackRepository
   readonly relations: RelationRepository
+  readonly collections: CollectionRepository
 
   private constructor(
     readonly path: string,
@@ -71,6 +73,7 @@ export class Project {
     this.tags = new TagRepository(db)
     this.stacks = new StackRepository(db, this.boards)
     this.relations = new RelationRepository(db, this.boards)
+    this.collections = new CollectionRepository(db)
     this.stacks.normalizeDisplayed()
   }
 

@@ -619,9 +619,13 @@ export class TagRepository {
             ? this.db.get(sql`SELECT id FROM boards WHERE id = ${id}`)
             : type === 'slide'
               ? this.db.get(sql`SELECT id FROM stack_slides WHERE id = ${id}`)
-              : this.db.get(sql`SELECT id FROM board_objects WHERE id = ${id}`)
+              : type === 'page'
+                ? this.db.get(
+                    sql`SELECT id FROM collection_pages WHERE id = ${id} AND deleted_at IS NULL`
+                  )
+                : this.db.get(sql`SELECT id FROM board_objects WHERE id = ${id}`)
     if (!row) throw new Error('That item no longer exists.')
-    if (!['asset', 'entry', 'object', 'board', 'slide'].includes(type)) {
+    if (!['asset', 'entry', 'object', 'board', 'slide', 'page'].includes(type)) {
       throw new Error('That item cannot be tagged.')
     }
   }

@@ -20,7 +20,7 @@ export function lockedAspectRatio(o: CanvasObject): number | null {
 
 /** Images, stacks, and notes rotate. PDF and file cards do not. */
 export const canRotate = (o: CanvasObject): boolean =>
-  o.type === 'image' || o.type === 'text' || o.type === 'stack'
+  o.type === 'image' || o.type === 'text' || o.type === 'stack' || o.type === 'collection'
 
 /** Objects that open in the full-size viewer. */
 export const isViewable = (o: CanvasObject): boolean => o.type === 'image' && !!o.asset

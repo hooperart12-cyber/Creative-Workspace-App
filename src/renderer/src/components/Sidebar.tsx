@@ -6,6 +6,7 @@ import { useCanvasStore } from '../store/canvasStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { EditableTitle } from './EditableTitle'
 import { BoardIcon, ChevronRight, FolderIcon, Plus } from './icons'
+import { CollectionSidebar } from '../collections/CollectionSidebar'
 import { ItemMenu } from './ItemMenu'
 
 const BOARD_MIME = 'application/x-cw-board'
@@ -102,6 +103,8 @@ export function Sidebar() {
           <BoardRow key={node.item.id} node={node} depth={0} />
         ))}
       </Section>
+
+      <CollectionSidebar />
 
       <Section
         title="Library folders"

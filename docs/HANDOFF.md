@@ -54,9 +54,9 @@ RULES:
 
 > Outgoing agent: replace this section each session. Keep it short and factual.
 
-**Last updated:** 2026-11-01
-**Branches:** M0–M5 are on `main` (PR #10 merge `169a7b5`). M6 is `feat/m6-tags-search` ([PR #11](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/11) → `main`). Do not merge it automatically.
-**Phase:** M6 tags and tag search are implemented (ADR-018). Board covers stay Later. The packaged Windows install (TESTING 5.13–5.14) has not been done by hand.
+**Last updated:** 2026-11-05
+**Branches:** M0–M5 are on `main` (PR #10 merge `169a7b5`). M6 is `feat/m6-tags-search` ([PR #11](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/11) → `main`). M7 is `feat/m7-image-stacks` ([PR #12](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/12)). M8 is `feat/m8-connections-links-comments` ([PR #13](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/13)). M9 is `feat/m9-page-collections` ([PR #14](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/14) → M8). Do not merge, retarget, or rebase #11, #12, #13, or #14.
+**Phase:** M9 Phases 1 through 6 are on `feat/m9-page-collections`. Phase 1 is `f535887` and `5f3ac9a`. Phases 2 through 6 are `9d2b66e`. The optional overview, planner thumbnails, inspector width, and folder restore are in `2524138`. Crop, library and slide import, bulk tags and stages, relink, folder-match confirmation, and a two-window Reader test are on this branch after `3246e31`. `npm test` is 290 tests. `npm run test:e2e` is 43 Playwright tests. The Windows installer was not built. M8 hand checks 8.14–8.21 are still undone. Board covers stay Later. Do not start M10.
 **Stack integration:** `feat/m3a-images` commits `62fec97` and `73993d4` (network-link paste safety, imports outside the edit queue, and the `file:////server` check) were merged into `feat/m3b-text-notes` and then into M3C, M4, and M5. The original commits are unchanged. Image and file pickers use `importThenPlace`.
 
 **Done**
@@ -120,9 +120,17 @@ RULES:
 - Export this board writes a PNG or a one-page PDF from the canvas layer, and a zip package of that board. Comments are omitted from the package unless Include comments and replies is on. A link to something outside the package keeps its id. Project integrity lists it when that id is not in the destination project. Slide comments follow combine, extract, remove, and separate.
 - Playwright covers the connection end, bend, label, and overlap checks. It does not open the save dialog. The Windows installer has not been installed by hand.
 
+**In progress (M9, ADR-021)**
+- Branch `feat/m9-page-collections`, from M8 `5563b9d`. [PR #14](https://github.com/hooperart12-cyber/Creative-Workspace-App/pull/14) targets `feat/m8-connections-links-comments`. Not merged.
+- Migration `0008_page_collections`. Collections, folders, templates, pages, versions, stage state, flat contents, page links, and page comments are their own tables. A page can be tagged. The tag tables are rebuilt and existing rows are copied.
+- `CollectionRepository` (`src/main/project/collections.ts`) and `src/shared/collections.ts`. Status of D01–D42 is in `docs/M9_IMPLEMENTATION_TRACKER.md`.
+- The Planner can search one collection, preview a bulk edit of status, notes, role, tags, or one production stage, and stage files, a CBZ, the Asset Library, this board, or the clipboard. A slide keeps `sourceSlideId`. The inspector can drag a crop or type one, and relink one version. Match folder lists name matches and writes nothing until Confirm match. The Reader, Artwork Review, PDF export, numbered image export, and collection package import are on the branch.
+- Playwright covers creation, a real thumbnail, library import, crop fields, a locked spread, bulk tag and stage, Reader layout, zoom, and pan, Set as displayed, export files, relink, unsupported artwork, and a second Electron window. The OS file, folder, and save dialogs are not clicked. The overview is optional. Inspector width is per open window in `sessionStorage`, and a new window can start from `localStorage`. It is not in the project file.
+
 **Next steps**
-1. Hand-check TESTING 8.14–8.19, then the Windows installer (5.13–5.14 and 7.17).
-2. Leave M6, M7, and M8 unmerged until that review. Do not retarget PR #11 or #12.
+1. Hand-check TESTING.md 9.1–9.14 on Windows, including the OS save dialog in 9.8 and Match folder in 9.13. The automated two-window test already passed. The installer has not been built: the macOS check was cancelled before it started, so the installer job never ran.
+2. Hand-check TESTING 8.14–8.21, then the Windows installer (5.13–5.14 and 7.17).
+3. Leave M6, M7, M8, and M9 unmerged. Do not retarget PR #11, #12, #13, or #14.
 
 **Known issues / open questions**
 - Undo history is per window and not saved across restarts (by design for now).
